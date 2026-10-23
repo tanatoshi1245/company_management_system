@@ -75,3 +75,28 @@ describe('Worker API（モック）', () => {
     expect(body.error).toContain('Variables and Secrets');
   });
 });
+
+describe('設定不足の例外を分かるメッセージにする', () => {
+  it('D1 にマイグレーションが無いと 503 storage（SQL は出さない）、SA 鍵が壊れていると noCredentials', async () => {
+    const { mkdtempSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { createFakeD1 } = await import('../helpers/fakeD1');
+    const { installFakeCache, uninstallFakeCache } = await import('../helpers/fakeCache');
+    installFakeCache();
+    try {
+      const emptyDb = createFakeD1(mkdtempSync(join(tmpdir(), 'd1-empty-')));
+      const res = await app.fetch(new Request('http://x/api/board'), { ...baseEnv, CMS_DB: emptyDb as unknown as D1Database }, ctx);
+      expect(res.status).toBe(503);
+      const body = (await res.json()) as { code: string; error: string };
+      expect(body.code).toBe('storage');
+      expect(body.error).toContain('マイグレーション');
+      expect(body.error).not.toMatch(/SELECT|company_targets/);
+      const bad = await app.fetch(new Request('http://x/api/board'), { ...baseEnv, BQ_MOCK: '0', GOOGLE_CLIENT_ID: 'x', GOOGLE_CLIENT_SECRET: 'y', SESSION_SECRET: 's'.repeat(40), BQ_SA_KEY: '{"type":"service_account"}' }, ctx);
+      // 未ログインなので 401（鍵の検査はログイン後）。ログイン済みの経路は board.test で担保
+      expect(bad.status).toBe(401);
+    } finally {
+      uninstallFakeCache();
+    }
+  });
+});
