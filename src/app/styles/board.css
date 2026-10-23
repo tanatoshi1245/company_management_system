@@ -80,6 +80,10 @@ td.heat-n2 .heat-v, td.heat-p2 .heat-v, td.heat-n2 .heat-s, td.heat-p2 .heat-s, 
 td.heat-na .heat-v { color: var(--muted); font-weight: 400; }
 table.board td.why { font-size: var(--fs-11); color: var(--muted); padding: 0 10px; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 table.board td.info { min-width: 60px; text-align: right; }
+/* 列の区切り線: 各列は薄いグレー、列グループの先頭はやや濃いグレー */
+table.board td.info, table.board thead tr.metrics th.num { border-left: 1px solid var(--rule); }
+table.board td.info.gs, table.board thead tr.metrics th.num.gs, table.board thead tr.groups th:not(.first) { border-left: 1px solid var(--rule-strong); }
+table.board td.col-owner, table.board th.col-owner, table.board td.company, table.board th.company { border-left: 1px solid var(--rule); }
 table.board td.info.soon .heat-v { color: var(--warn); }
 /* 0 件・30 日以上ログインなし */
 table.board td.info.zero { background: var(--heat-n1); }

@@ -34,8 +34,8 @@ status: active
 | sf_active_contract / sf_live_won_opp / sf_last_won_close_date / da_active_profile / contracted_signal_count | BOOL / DATE / INT64 | 用語集の 3 シグナル（有効契約 / 成立商談 + 契約月数 / DA プロファイル掲載中）と、Daijob 契約中を含めた成立数 |
 | sf_notice_check | BOOL | sf_accounts.notice_check_company__c（接触中） |
 | sf_account_owner_* / sf_contract_owner_* | STRING / BOOL | 取引先 / 契約の所有者（sf_users: 名前・メール・Position__c・IsActive） |
-| sales_staff | STRING | active_companies.sales_staff（参考） |
-| cs_owner_email_default / cs_owner_name_default / owner_source | STRING | 既定の CS 担当（owner_source = sf_account_owner）。アプリの上書き（D1）が優先 |
+| sales_staff | STRING | active_companies.sales_staff（企業管理ツールの担当。ローマ字「姓 名」） |
+| cs_owner_email_default / cs_owner_name_default / owner_source | STRING | 既定の CS 担当（owner_source = sales_staff。名前は sales_staff そのまま、メールは「名の頭文字-姓@daijob.com」の規則で導出。姓だけの値は NULL）。アプリの上書き（D1）が優先 |
 | active_jobs_now | INT64 | 当日の掲載求人（企業単位で set_id 重複排除） |
 | run_date / refreshed_at | DATE / TIMESTAMP | 生成日 |
 

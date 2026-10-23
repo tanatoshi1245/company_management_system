@@ -25,7 +25,7 @@ metaRoutes.get('/meta', async (c) => {
     asOf: today,
     month,
     bizDays: monthProgress(month, meta.dataDate < `${month}-01` ? `${month}-01` : meta.dataDate),
-    ownerSource: c.env.OWNER_SOURCE?.trim() || 'sf_account_owner',
+    ownerSource: c.env.OWNER_SOURCE?.trim() || 'sales_staff',
     scoutLimitPeriodDefault: 'month',
     benchMinN: intVar(c.env.BENCH_MIN_N, 5),
     login: { availableFrom: '2026-05-15' },

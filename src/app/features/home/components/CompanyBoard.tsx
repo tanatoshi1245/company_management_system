@@ -28,15 +28,15 @@ function cellText(col: BoardColumn, s: ScoredCompany): { value: string; secondar
     case 'sent':
       return { value: `${fmtInt(c.m.sent)} / ${c.limits.scout === null ? '–' : fmtInt(c.limits.scout)}`, secondary: null };
     case 'intReply':
-      return { value: fmtInt(c.m.intReply), secondary: c.m.int !== c.m.intReply ? `送信月基準 ${fmtInt(c.m.int)}` : null };
+      return { value: fmtInt(c.m.intReply), secondary: null };
     case 'inSel':
       return { value: fmtInt(c.m.inSel), secondary: null };
     case 'hires':
       return { value: fmtInt(c.m.hires), secondary: null };
     case 'login':
-      return c.login.last ? { value: fmtMd(c.login.last), secondary: c.login.daysSince === null ? null : c.login.daysSince === 0 ? '今日' : `${c.login.daysSince} 日前` } : { value: '記録なし', secondary: null };
+      return { value: c.login.last ? fmtMd(c.login.last) : '記録なし', secondary: null };
     case 'daysToEnd':
-      return { value: c.contract.daysToEnd === null ? '無期限' : c.contract.daysToEnd < 0 ? (CONTRACT_STATE_LABEL[c.state as ContractState] ?? '終了') : `${fmtInt(c.contract.daysToEnd)} 日`, secondary: c.contract.to ? fmtMd(c.contract.to) : null };
+      return { value: c.contract.daysToEnd === null ? '無期限' : c.contract.daysToEnd < 0 ? (CONTRACT_STATE_LABEL[c.state as ContractState] ?? '終了') : `${fmtInt(c.contract.daysToEnd)} 日`, secondary: null };
     default:
       return { value: '–', secondary: null };
   }
@@ -78,6 +78,8 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
     if (last && last.label === col.group) last.span += 1;
     else groups.push({ label: col.group, span: 1 });
   }
+  /** 列グループの先頭列（やや濃い区切り線を引く） */
+  const groupStart = new Set(BOARD_COLUMNS.filter((col, i) => i === 0 || BOARD_COLUMNS[i - 1].group !== col.group).map((col) => col.key));
   const open = (id: string) => navigate(`/companies/${id}?month=${meta.month}`);
   const onRowKey = (e: KeyboardEvent<HTMLTableRowElement>, id: string) => {
     if (e.key === 'Enter') open(id);
@@ -118,7 +120,7 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
               企業名{sortInd('name')}
             </th>
             {BOARD_COLUMNS.map((col) => (
-              <th key={col.key} className="num sortable" scope="col" aria-sort={ariaSort(col.key)} onClick={() => toggleSort(col.key)} title={col.key === 'login' ? `${col.label}\n${loginNote}` : col.metric ? `${col.label}\n参考: ${METRIC_BY_KEY[col.metric].label}（${METRIC_BY_KEY[col.metric].formula}）` : col.label}>
+              <th key={col.key} className={`num sortable${groupStart.has(col.key) ? ' gs' : ''}`} scope="col" aria-sort={ariaSort(col.key)} onClick={() => toggleSort(col.key)} title={col.key === 'login' ? `${col.label}\n${loginNote}` : col.metric ? `${col.label}\n参考: ${METRIC_BY_KEY[col.metric].label}（${METRIC_BY_KEY[col.metric].formula}）` : col.label}>
                 {col.label}
                 {sortInd(col.key)}
               </th>
@@ -148,7 +150,7 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
                   const alert = isAlert(col, s);
                   const soon = col.key === 'daysToEnd' && c.contract.daysToEnd !== null && c.contract.daysToEnd >= 0 && c.contract.daysToEnd <= 60;
                   return (
-                    <td key={col.key} className={`info ${alert ? 'zero' : ''} ${soon ? 'soon' : ''}`} title={titleOf(col, s)} data-col={col.key} data-alert={alert ? '1' : undefined}>
+                    <td key={col.key} className={`info ${alert ? 'zero' : ''} ${soon ? 'soon' : ''}${groupStart.has(col.key) ? ' gs' : ''}`} title={titleOf(col, s)} data-col={col.key} data-alert={alert ? '1' : undefined}>
                       <div className="heat-in">
                         <span className="heat-v num">{value}</span>
                         {secondary ? <span className="heat-s">{secondary}</span> : null}

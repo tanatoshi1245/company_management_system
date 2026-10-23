@@ -65,9 +65,9 @@ export interface BoardColumn {
   metric?: string;
 }
 export const BOARD_COLUMNS: BoardColumn[] = [
-  { key: 'jobs', label: '掲載 / 枠', group: '求人', metric: 'job_utilization' },
-  { key: 'views', label: '閲覧', group: '反応', metric: 'views_per_active_job' },
-  { key: 'apps', label: '応募', group: '反応', metric: 'apps_per_active_job' },
+  { key: 'jobs', label: '掲載 / 枠', group: '応募', metric: 'job_utilization' },
+  { key: 'views', label: '閲覧', group: '応募', metric: 'views_per_active_job' },
+  { key: 'apps', label: '応募', group: '応募', metric: 'apps_per_active_job' },
   { key: 'sent', label: '送信 / 枠', group: 'スカウト', metric: 'scout_utilization' },
   { key: 'intReply', label: '返信（当月）', group: 'スカウト' },
   { key: 'inSel', label: '選考中', group: '選考' },

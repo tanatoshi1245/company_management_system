@@ -18,7 +18,7 @@ async function fixtures(viewer = 'preview@daijob.com') {
   const core = await loadBoardCore(new MockBqClient(), month, refresh);
   const board = mergeBoard(core, new Map(), new Map(), viewer, 5);
   const me = { email: viewer, name: 'テスト', verified: false, authMode: 'mock', mock: true, ownerUserId: null, overrideCompanyIds: [], canEdit: false };
-  const meta = { dataVersion: refresh.dataVersion, dataDate: refresh.dataDate, refreshedAt: refresh.refreshedAt, refreshStatus: 'ok', asOf: today, month, bizDays: monthProgress(month, refresh.dataDate), ownerSource: 'sf_account_owner', scoutLimitPeriodDefault: 'month', benchMinN: 5, login: { availableFrom: '2026-05-15' }, caveats: CAVEATS, holidaysVersion: '2026-10', dataSchemaVersion: 1, mock: true };
+  const meta = { dataVersion: refresh.dataVersion, dataDate: refresh.dataDate, refreshedAt: refresh.refreshedAt, refreshStatus: 'ok', asOf: today, month, bizDays: monthProgress(month, refresh.dataDate), ownerSource: 'sales_staff', scoutLimitPeriodDefault: 'month', benchMinN: 5, login: { availableFrom: '2026-05-15' }, caveats: CAVEATS, holidaysVersion: '2026-10', dataSchemaVersion: 1, mock: true };
   return { board, me, meta, month };
 }
 
@@ -79,11 +79,11 @@ describe('ホーム（ボード）', () => {
     expect(reds.length).toBeGreaterThan(0);
     for (const td of reds) {
       const col = td.getAttribute('data-col');
-      if (col === 'login') expect(td.textContent).toMatch(/記録なし|\d+ 日前/);
+      if (col === 'login') expect(td.textContent).toMatch(/記録なし|^\d{1,2}\/\d{1,2}$/);
       else expect(['jobs', 'views', 'apps', 'sent']).toContain(col);
       if (col !== 'login') expect(td.querySelector('.heat-v')!.textContent).toMatch(/^0( \/|$)/);
     }
-    for (const td of table.querySelectorAll('td[data-col="login"]:not(.zero)')) expect(td.textContent).toMatch(/^\d{1,2}\/\d{1,2}([0-9]|今日|[0-2]?\d 日前)/);
+    for (const td of table.querySelectorAll('td[data-col="login"]:not(.zero)')) expect(td.textContent).toMatch(/^\d{1,2}\/\d{1,2}$/);
     const boardCalls = () => calls.filter((u) => u.startsWith('/api/board')).length;
     expect(boardCalls()).toBe(1);
     // 担当=自分
@@ -106,17 +106,28 @@ describe('ホーム（ボード）', () => {
   it('「接点」グループと最終ログイン列の見出しに、ログイン計測開始日の注釈がマウスオーバーで出る', async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByRole('table', { name: '契約企業の実績一覧' })).toBeTruthy());
+    const table = screen.getByRole('table', { name: '契約企業の実績一覧' });
     const group = screen.getByRole('columnheader', { name: '接点' });
     expect(group.getAttribute('title')).toContain('2026-05-15');
     expect(group.classList.contains('note')).toBe(true);
     expect(screen.getByRole('columnheader', { name: /最終ログイン/ }).getAttribute('title')).toContain('2026-05-15');
-    expect(screen.getByRole('columnheader', { name: '反応' }).getAttribute('title')).toBeNull();
+    expect(screen.getByRole('columnheader', { name: 'スカウト' }).getAttribute('title')).toBeNull();
+    // 求人・反応は「応募」の 1 グループ（掲載 / 枠・閲覧・応募）
+    expect(screen.queryByRole('columnheader', { name: '反応' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: '求人' })).toBeNull();
+    expect(table.querySelector('thead tr.groups th[colspan="3"]:not(.first)')?.textContent).toBe('応募');
+    // 列グループの先頭列に区切り線用の gs クラス（応募 / スカウト / 選考 / 接点 / 契約 = 5 列）
+    expect(table.querySelectorAll('thead tr.metrics th.num.gs').length).toBe(5);
+    expect(table.querySelector('tbody tr td[data-col=jobs]')?.classList.contains('gs')).toBe(true);
+    expect(table.querySelector('tbody tr td[data-col=views]')?.classList.contains('gs')).toBe(false);
+    // 返信・最終ログイン・契約残にも副情報（送信月基準・n 日前・終了日）は出さない
+    expect(table.querySelectorAll('td[data-col=intReply] .heat-s, td[data-col=login] .heat-s, td[data-col=daysToEnd] .heat-s').length).toBe(0);
   });
 
   it('列見出しの並べ替え、企業種別（複数選択）・契約終了（単数）のプルダウン、検索、クリア', async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByRole('table', { name: '契約企業の実績一覧' })).toBeTruthy());
-    fireEvent.click(screen.getByRole('columnheader', { name: /応募/ }));
+    fireEvent.click(screen.getAllByRole('columnheader', { name: '応募' }).find((th) => th.closest('tr')?.classList.contains('metrics'))!);
     await waitFor(() => expect(window.location.search).toContain('sort=-apps'));
     const table0 = screen.getByRole('table', { name: '契約企業の実績一覧' });
     const total = table0.querySelectorAll('tbody tr').length;

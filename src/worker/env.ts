@@ -22,7 +22,7 @@ export interface Env {
   ALLOWED_EMAIL_DOMAINS?: string;
   /** マート応答のキャッシュ上限（秒）。既定は次回 08:30 JST まで */
   CACHE_TTL_SEC?: string;
-  /** CS 担当の既定の出所: sf_account_owner（既定）/ sf_contract_owner / sales_staff。マートの owner_source と合わせる */
+  /** CS 担当の既定の出所: sales_staff（既定。企業管理ツール active_companies）/ sf_account_owner / sf_contract_owner。マートの owner_source と合わせる */
   OWNER_SOURCE?: string;
   /** 業界ベンチマークを使う最小企業数（既定 5） */
   BENCH_MIN_N?: string;

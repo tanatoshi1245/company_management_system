@@ -72,7 +72,7 @@ export const OWNER_SOURCE_LABEL: Record<string, string> = {
   override: '画面で上書き',
   sf_account_owner: 'Salesforce 取引先の所有者',
   sf_contract_owner: 'Salesforce 契約の所有者',
-  sales_staff: 'Daijob 営業担当（active_companies）',
+  sales_staff: '企業管理ツールの担当（active_companies）',
   none: '未設定',
 };
 

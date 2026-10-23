@@ -160,7 +160,7 @@ export default function TargetFormPage({ params }: PageProps) {
           ) : null}
         </div>
       </section>
-      <CompanySettingsForm companyId={id} settings={detail.data.settings} defaults={{ ownerName: c.sfOwnerName ?? c.owner.name, ownerSrc: OWNER_SOURCE_LABEL[meta.ownerSource] ?? meta.ownerSource, scoutLimit: c.limits.scout, jobLimit: c.limits.job }} canEdit={canEdit} onSaved={() => history.refetch()} />
+      <CompanySettingsForm companyId={id} settings={detail.data.settings} defaults={{ ownerName: c.salesStaff ?? c.sfOwnerName, ownerSrc: OWNER_SOURCE_LABEL[meta.ownerSource] ?? meta.ownerSource, scoutLimit: c.limits.scout, jobLimit: c.limits.job }} canEdit={canEdit} onSaved={() => history.refetch()} />
       <section className="card">
         <div className="card-head">
           <h2>変更履歴</h2>
