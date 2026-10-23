@@ -103,6 +103,16 @@ describe('ホーム（ボード）', () => {
     expect(boardCalls()).toBe(1);
   });
 
+  it('「接点」グループと最終ログイン列の見出しに、ログイン計測開始日の注釈がマウスオーバーで出る', async () => {
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('table', { name: '契約企業の実績一覧' })).toBeTruthy());
+    const group = screen.getByRole('columnheader', { name: '接点' });
+    expect(group.getAttribute('title')).toContain('2026-05-15');
+    expect(group.classList.contains('note')).toBe(true);
+    expect(screen.getByRole('columnheader', { name: /最終ログイン/ }).getAttribute('title')).toContain('2026-05-15');
+    expect(screen.getByRole('columnheader', { name: '反応' }).getAttribute('title')).toBeNull();
+  });
+
   it('列見出しの並べ替え、企業種別（複数選択）・契約終了（単数）のプルダウン、検索、クリア', async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByRole('table', { name: '契約企業の実績一覧' })).toBeTruthy());

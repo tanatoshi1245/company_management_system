@@ -92,6 +92,7 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
   const sortInd = (k: string) => (sortKey === k ? <span className="sort-ind">{sortDesc ? '▼' : '▲'}</span> : null);
   const ariaSort = (k: string) => (sortKey === k ? (sortDesc ? 'descending' : 'ascending') : undefined);
   const shown = rows.slice(0, limit);
+  const loginNote = `CT 画面へのログイン（GA4）。データは ${meta.loginAvailableFrom} 以降のみ。それ以前のログインは「記録なし」になる`;
   return (
     <div className="board-wrap" id="board">
       <table className="board" aria-label="契約企業の実績一覧">
@@ -101,7 +102,7 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
               企業（{fmtInt(rows.length)} 社）
             </th>
             {groups.map((g) => (
-              <th key={g.label} colSpan={g.span} scope="colgroup">
+              <th key={g.label} colSpan={g.span} scope="colgroup" className={g.label === '接点' ? 'note' : undefined} title={g.label === '接点' ? loginNote : undefined}>
                 {g.label}
               </th>
             ))}
@@ -117,7 +118,7 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
               企業名{sortInd('name')}
             </th>
             {BOARD_COLUMNS.map((col) => (
-              <th key={col.key} className="num sortable" scope="col" aria-sort={ariaSort(col.key)} onClick={() => toggleSort(col.key)} title={col.metric ? `${col.label}\n参考: ${METRIC_BY_KEY[col.metric].label}（${METRIC_BY_KEY[col.metric].formula}）` : col.label}>
+              <th key={col.key} className="num sortable" scope="col" aria-sort={ariaSort(col.key)} onClick={() => toggleSort(col.key)} title={col.key === 'login' ? `${col.label}\n${loginNote}` : col.metric ? `${col.label}\n参考: ${METRIC_BY_KEY[col.metric].label}（${METRIC_BY_KEY[col.metric].formula}）` : col.label}>
                 {col.label}
                 {sortInd(col.key)}
               </th>
