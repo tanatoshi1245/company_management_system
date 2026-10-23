@@ -22,7 +22,7 @@ status: active
 | BQ に再同期 | `POST /api/scout-unused/sync` | D1 の `bq_synced_at` が無い / 古い行 | — |
 
 ## URL 状態
-`month=YYYY-MM`（既定は前月）、`mine=1`（担当 = 自分）、`q`（企業名・担当）。
+`month=YYYY-MM`（既定は前月）、`mine=1`（担当 = 自分）、`owner=a,b`（CS 担当のプルダウン。複数選択）、`q`（企業名・担当）。登録済みの行も同じ欄で編集でき、変更すると保存ボタンが有効になって PUT で更新する。
 
 ## 編集するときの入口
 ScoutUnusedPage.tsx（一覧・行ごとの保存）→ `src/shared/schema/scoutUnused.ts`（入力・応答）→ Worker `routes/scoutUnused.ts` → `d1/scoutUnusedRepo.ts` / `services/scoutUnusedService.ts`（BQ MERGE・企業ページへの重ね合わせ）→ `sql/scoutUnused.ts`。理由の文言は `src/shared/labels.ts` の `SCOUT_UNUSED_REASONS`（シート取込と同じ文言を保つ）。

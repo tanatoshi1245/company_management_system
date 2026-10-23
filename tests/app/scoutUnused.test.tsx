@@ -10,6 +10,7 @@ import { monthProgress } from '../../src/shared/calendar/businessDays';
 import { CAVEATS } from '../../src/shared/caveats';
 import { SCOUT_UNUSED_REASONS } from '../../src/shared/labels';
 import { isScoutUnused } from '../../src/app/features/scoutUnused/ScoutUnusedPage';
+import { ownerKey } from '../../src/shared/metrics/board';
 import type { ScoutUnusedEntry } from '../../src/shared/schema/scoutUnused';
 import type { BoardResponse } from '../../src/shared/schema/board';
 
@@ -104,6 +105,48 @@ describe('スカウト未利用の登録ページ', () => {
     fireEvent.click(within(first as HTMLElement).getByRole('button', { name: '削除' }));
     await waitFor(() => expect(f.calls).toContain(`DELETE /api/scout-unused/${id}/${f.prev}`));
     await waitFor(() => expect(within(first as HTMLElement).getByText('未登録')).toBeTruthy());
+  });
+
+  it('登録済みの行をもう一度編集して保存すると更新（PUT）される', async () => {
+    const f = await setup();
+    window.history.replaceState(null, '', '/scout-unused');
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('table', { name: 'スカウト未使用の企業と理由の登録' })).toBeTruthy(), { timeout: 8000 });
+    const first = screen.getByRole('table', { name: 'スカウト未使用の企業と理由の登録' }).querySelector('tbody tr')!;
+    const id = first.getAttribute('data-company')!;
+    const sel = within(first as HTMLElement).getByRole('combobox') as HTMLSelectElement;
+    fireEvent.change(sel, { target: { value: SCOUT_UNUSED_REASONS[0] } });
+    fireEvent.click(within(first as HTMLElement).getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(within(first as HTMLElement).getByText('BQ 反映済み')).toBeTruthy());
+    // 保存後も入力欄は有効で、値を変えると保存ボタンが再び有効になる
+    expect(sel.disabled).toBe(false);
+    expect((within(first as HTMLElement).getByRole('button', { name: '保存' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(sel, { target: { value: SCOUT_UNUSED_REASONS[2] } });
+    fireEvent.change(within(first as HTMLElement).getByRole('textbox'), { target: { value: '更新後の補足' } });
+    fireEvent.click(within(first as HTMLElement).getByRole('button', { name: '保存' }));
+    await waitFor(() => expect(f.calls.filter((c) => c === `PUT /api/scout-unused/${id}/${f.prev}`).length).toBe(2));
+    expect(f.bodies[1]).toEqual({ reason: '6. 既に採用でき、案件クローズ', remarks: '更新後の補足' });
+    expect(f.entries.get(`${id}|${f.prev}`)?.reason).toBe('6. 既に採用でき、案件クローズ');
+  });
+
+  it('CS 担当のプルダウンで絞り込める（URL に owner=）', async () => {
+    const f = await setup();
+    window.history.replaceState(null, '', '/scout-unused');
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('table', { name: 'スカウト未使用の企業と理由の登録' })).toBeTruthy(), { timeout: 8000 });
+    const group = screen.getByRole('group', { name: 'CS 担当' });
+    const boxes = group.querySelectorAll('input[type=checkbox]');
+    expect(boxes.length).toBeGreaterThan(1);
+    const details = group.closest('details') ?? group.querySelector('details') ?? (group as HTMLElement);
+    if (details instanceof HTMLDetailsElement) details.open = true;
+    fireEvent.click(boxes[0]);
+    await waitFor(() => expect(window.location.search).toContain('owner='));
+    const key = decodeURIComponent(window.location.search.match(/owner=([^&]+)/)![1]);
+    const board = await f.boardFor(f.prev);
+    const expected = board.companies.filter((c) => isScoutUnused(c, board.meta) && ownerKey(c) === key).length;
+    await waitFor(() => expect(screen.getByRole('table', { name: 'スカウト未使用の企業と理由の登録' }).querySelectorAll('tbody tr').length).toBe(expected));
+    fireEvent.click(screen.getByRole('button', { name: /クリア/ }));
+    await waitFor(() => expect(window.location.search).not.toContain('owner='));
   });
 
   it('担当=自分 で絞り込み、月を切り替えると URL と一覧が変わる', async () => {

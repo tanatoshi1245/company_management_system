@@ -15,8 +15,8 @@ interface Props {
   onClear: () => void;
 }
 
-/** 複数選択のプルダウン（チェックボックス付き）。外側のクリック・Esc で閉じる */
-function MultiPick({ label, ariaLabel, options, value, onChange }: { label: string; ariaLabel: string; options: { key: string; label: string; title?: string; count: number }[]; value: string[]; onChange: (v: string[]) => void }) {
+/** 複数選択のプルダウン（チェックボックス付き）。外側のクリック・Esc で閉じる。スカウト未利用の登録ページでも使う */
+export function MultiPick({ label, ariaLabel, options, value, onChange }: { label: string; ariaLabel: string; options: { key: string; label: string; title?: string; count: number }[]; value: string[]; onChange: (v: string[]) => void }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const [open, setOpen] = useState(false);
   useEffect(() => {

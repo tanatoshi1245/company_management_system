@@ -18,12 +18,15 @@ import { BoardResponseSchema, type BoardCompany } from '../../../shared/schema/b
 import { ScoutUnusedMonthResponseSchema, ScoutUnusedSaveResponseSchema, ScoutUnusedSyncResponseSchema, type ScoutUnusedEntry, type ScoutUnusedSheetRow } from '../../../shared/schema/scoutUnused';
 import { COMPANY_TYPE_SHORT, SCOUT_UNUSED_REASONS, surname } from '../../../shared/labels';
 import { addMonths, fmtMonthJa, isoToJstDisplay, lastNMonths } from '../../../shared/calendar/periods';
-import { isContracted, normalizeQuery } from '../../../shared/metrics/board';
+import { isContracted, normalizeQuery, ownerKey } from '../../../shared/metrics/board';
+import { MultiPick } from '../home/components/BoardFilterBar';
 import { fmtInt } from '../../lib/format';
 
 const UrlSchema = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).or(z.literal('')).default(''),
   mine: z.enum(['0', '1']).default('0'),
+  /** CS 担当（ownerKey をカンマ区切り） */
+  owner: z.string().max(2000).default(''),
   q: z.string().max(100).default(''),
 });
 
@@ -39,7 +42,8 @@ const same = (a: Draft, b: Draft) => a.reason === b.reason && a.remarks.trim() =
 /** スカウト未利用の理由・補足の登録。既定は前月。保存は行ごと（D1 に保存 → BigQuery に反映） */
 export default function ScoutUnusedPage(_props: PageProps) {
   const { meta, me } = useSession();
-  const [url, setUrl] = useUrlState(UrlSchema, { month: '', mine: '0', q: '' });
+  const [url, setUrl] = useUrlState(UrlSchema, { month: '', mine: '0', owner: '', q: '' });
+  const ownerFilter = useMemo(() => (url.owner ? url.owner.split(',').filter(Boolean) : []), [url.owner]);
   const defaultMonth = meta ? addMonths(meta.month, -1) : null;
   const month = url.month || defaultMonth;
   const months = meta ? lastNMonths(meta.month, 14) : [];
@@ -56,16 +60,30 @@ export default function ScoutUnusedPage(_props: PageProps) {
     setDrafts(new Map());
     setErrors(new Map());
   }, [month]);
+  /** その月のスカウト未使用の企業（絞り込み前） */
+  const unusedAll = useMemo(() => (board.data ? board.data.companies.filter((c) => isScoutUnused(c, board.data!.meta)) : null), [board.data]);
+  /** CS 担当の選択肢（未使用の企業に出てくる担当と件数。未設定は末尾） */
+  const owners = useMemo(() => {
+    const m = new Map<string, { key: string; label: string; title: string; count: number }>();
+    for (const c of unusedAll ?? []) {
+      const key = ownerKey(c);
+      const cur = m.get(key);
+      if (cur) cur.count += 1;
+      else m.set(key, { key, label: c.owner.name ? (surname(c.owner.name) ?? c.owner.name) : '未設定', title: c.owner.name ?? '担当未設定', count: 1 });
+    }
+    return Array.from(m.values()).sort((a, b) => (a.label === '未設定' ? 1 : b.label === '未設定' ? -1 : b.count - a.count || a.label.localeCompare(b.label, 'ja')));
+  }, [unusedAll]);
   const rows = useMemo(() => {
-    if (!board.data) return null;
+    if (!unusedAll) return null;
     const q = normalizeQuery(url.q);
-    return board.data.companies
-      .filter((c) => isScoutUnused(c, board.data!.meta))
+    return unusedAll
       .filter((c) => (url.mine === '1' ? c.isMine : true))
+      .filter((c) => (ownerFilter.length ? ownerFilter.includes(ownerKey(c)) : true))
       .filter((c) => (q ? normalizeQuery(c.name).includes(q) || (c.owner.name ? normalizeQuery(c.owner.name).includes(q) : false) : true))
       .sort((a, b) => (a.owner.name ?? '～').localeCompare(b.owner.name ?? '～', 'ja') || a.name.localeCompare(b.name, 'ja'));
-  }, [board.data, url.mine, url.q]);
+  }, [unusedAll, url.mine, url.q, ownerFilter]);
   const unsynced = (reg.data?.entries ?? []).filter((e) => e.bqSyncedAt === null || e.bqSyncedAt < e.updatedAt).length;
+  // 登録済みの行も同じ欄で編集できる（変更すると保存ボタンが有効になり、PUT で更新する）
   const draft = (id: string): Draft => drafts.get(id) ?? draftOf(entries.get(id) ?? null);
   const setDraft = (id: string, d: Draft) => setDrafts((m) => new Map(m).set(id, d));
   const save = async (id: string) => {
@@ -147,6 +165,12 @@ export default function ScoutUnusedPage(_props: PageProps) {
       {syncMsg ? <Notice tone="info">{syncMsg}</Notice> : null}
       <div className="sticky-bar" role="search" aria-label="絞り込み">
         <Chip label="担当 = 自分" on={url.mine === '1'} onClick={() => setUrl({ mine: url.mine === '1' ? '0' : '1' })} icon={<Icon name="filter" size={14} />} />
+        <MultiPick label="CS 担当" ariaLabel="CS 担当" options={owners} value={ownerFilter} onChange={(owner) => setUrl({ owner: owner.join(',') })} />
+        {ownerFilter.length || url.mine === '1' || url.q ? (
+          <button type="button" className="btn ghost sm" onClick={() => setUrl({ mine: '0', owner: '', q: '' })}>
+            <Icon name="close" size={14} /> クリア
+          </button>
+        ) : null}
         <input type="search" className="ctl" placeholder="企業名・担当で検索" aria-label="企業名・担当で検索" value={url.q} onChange={(e) => setUrl({ q: e.target.value })} />
         <span className="spacer" />
         <span className="muted small">
@@ -158,7 +182,7 @@ export default function ScoutUnusedPage(_props: PageProps) {
       ) : rows.length === 0 ? (
         <div className="empty">
           <b>該当する企業がありません</b>
-          {fmtMonthJa(bm.month)} はスカウト枠のある契約中の企業がすべて 1 件以上送信しています
+          {unusedAll && unusedAll.length ? '絞り込みを変えてください（担当 = 自分 / CS 担当 / 検索）' : `${fmtMonthJa(bm.month)} はスカウト枠のある契約中の企業がすべて 1 件以上送信しています`}
         </div>
       ) : (
         <div className="table-wrap card">
