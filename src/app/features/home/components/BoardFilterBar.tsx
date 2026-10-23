@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { BoardColumn, BoardFilters, EndingDays } from '../../../../shared/metrics/board';
 import { ENDING_OPTIONS } from '../../../../shared/metrics/board';
-import type { BenchMode } from '../../../../shared/metrics/score';
-import type { HealthLevel } from '../../../../shared/metrics/health';
 import { COMPANY_TYPES, COMPANY_TYPE_SHORT } from '../../../../shared/labels';
 import { fmtMonthJa } from '../../../../shared/calendar/periods';
 import { Chip } from '../../../components/ui/Chip';
@@ -14,13 +12,14 @@ export interface SortOption {
   label: string;
 }
 
-export function sortOptions(mode: BenchMode, columns: BoardColumn[]): SortOption[] {
+export function sortOptions(columns: BoardColumn[]): SortOption[] {
   return [
-    { key: 'health', label: mode === 'industry' ? '状態（悪い順）' : '目標比（悪い順）' },
+    { key: 'name', label: '企業名' },
+    { key: 'type', label: '種別' },
+    { key: 'owner', label: 'CS 担当' },
     { key: 'pace', label: 'スカウトのペース（遅い順）' },
     { key: 'contractEnd', label: '契約終了が近い順' },
     { key: 'login', label: 'ログインが古い順' },
-    { key: 'name', label: '企業名' },
     ...columns.filter((c) => !['login', 'daysToEnd'].includes(c.key)).map((c) => ({ key: `-${c.key}`, label: `${c.label}（多い順）` })),
   ];
 }
@@ -28,7 +27,6 @@ export function sortOptions(mode: BenchMode, columns: BoardColumn[]): SortOption
 interface Props {
   filters: BoardFilters;
   onChange: (patch: Partial<BoardFilters>) => void;
-  mode: BenchMode;
   month: string;
   months: string[];
   onMonth: (m: string) => void;
@@ -108,20 +106,6 @@ export function BoardFilterBar(p: Props) {
           options={[{ key: '', label: 'すべて' }, ...ENDING_OPTIONS.map((d) => ({ key: String(d), label: `${d} 日以内` }))]}
           value={p.filters.ending === null ? '' : String(p.filters.ending)}
           onChange={(v) => p.onChange({ ending: v ? (Number(v) as EndingDays) : null })}
-        />
-      </div>
-      <div className="field">
-        <label>状態</label>
-        <Segmented<string>
-          ariaLabel="状態"
-          options={[
-            { key: '', label: 'すべて' },
-            { key: 'alert', label: '要注意' },
-            { key: 'watch', label: '注意' },
-            { key: 'good', label: '順調' },
-          ]}
-          value={p.filters.status ?? ''}
-          onChange={(v) => p.onChange({ status: (v || null) as HealthLevel | null })}
         />
       </div>
       <input id="f-q" type="search" className="ctl" placeholder="企業名で検索" aria-label="企業名で検索" value={q} onChange={(e) => setQ(e.target.value)} />

@@ -6,13 +6,11 @@ import { useUrlState } from '../../lib/urlState';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { Notice } from '../../components/ui/Notice';
-import { Segmented } from '../../components/ui/Segmented';
 import { Icon } from '../../components/ui/Icon';
 import { BoardResponseSchema } from '../../../shared/schema/board';
 import { fmtMonthJa, isoToJstDisplay } from '../../../shared/calendar/periods';
 import { BOARD_COLUMNS, type BoardFilters, type KpiTile } from '../../../shared/metrics/board';
-import type { BenchMode } from '../../../shared/metrics/score';
-import { activeFilterCount, fromFilters, HOME_URL_DEFAULTS, HomeUrlSchema, modeOf, toFilters } from './homeFilters';
+import { activeFilterCount, fromFilters, HOME_URL_DEFAULTS, HomeUrlSchema, toFilters } from './homeFilters';
 import { useHomeModel } from './homeModel';
 import { KpiStrip } from './components/KpiStrip';
 import { BoardFilterBar, sortOptions } from './components/BoardFilterBar';
@@ -21,23 +19,26 @@ import { BoardLegend } from './components/BoardLegend';
 import { EmptyBoard } from './components/EmptyBoard';
 import { fmtInt } from '../../lib/format';
 
-/** ホーム: KPI タイル → 注目レーン → 固定フィルタ → マトリクス・ヒートマップ。状態は URL、計算はブラウザ側 */
+/** ホーム: KPI タイル → 固定フィルタ → 契約中の企業 × 実績の表（0 件と 30 日以上ログインなしだけ赤）。状態は URL、計算はブラウザ側 */
 export default function HomePage(_props: PageProps) {
   const { meta } = useSession();
   const [url, setUrl] = useUrlState(HomeUrlSchema, HOME_URL_DEFAULTS);
   const month = url.month || meta?.month || null;
   const board = useResource(month ? `/api/board?month=${month}` : null, BoardResponseSchema, { ttlMs: 5 * 60_000 });
   const filters = useMemo(() => toFilters(url), [url]);
-  const mode: BenchMode = modeOf(url);
-  const model = useHomeModel(board.data, filters, mode, url.sort);
+  const model = useHomeModel(board.data, filters, url.sort);
   const setFilters = useCallback((patch: Partial<BoardFilters>) => setUrl(fromFilters(patch)), [setUrl]);
-  const clear = useCallback(() => setUrl({ ...HOME_URL_DEFAULTS, month: url.month, bench: url.bench, sort: url.sort }), [setUrl, url.month, url.bench, url.sort]);
+  const clear = useCallback(() => setUrl({ ...HOME_URL_DEFAULTS, month: url.month, sort: url.sort }), [setUrl, url.month, url.sort]);
   const onKpi = (t: KpiTile) => {
-    if (!t.filter) return;
     if (t.key === 'noLogin') {
       setUrl({ sort: 'login' });
       return;
     }
+    if (t.key === 'behind') {
+      setUrl({ sort: 'pace' });
+      return;
+    }
+    if (!t.filter) return;
     setFilters(t.filter);
   };
   const refresh = async () => {
@@ -63,7 +64,6 @@ export default function HomePage(_props: PageProps) {
         context={context}
         actions={
           <>
-            <Segmented<BenchMode> ariaLabel="比較の基準" options={[{ key: 'industry', label: '業界比', title: '同業種・同種別の中央値との比' }, { key: 'target', label: '目標比', title: '契約時に登録した目標との比' }]} value={mode} onChange={(b) => setUrl({ bench: b })} />
             <button type="button" className="btn ghost sm" onClick={refresh} title="キャッシュを捨てて取り直す" disabled={board.refreshing}>
               <Icon name="refresh" size={14} /> 最新に更新
             </button>
@@ -85,17 +85,16 @@ export default function HomePage(_props: PageProps) {
         </>
       ) : (
         <div className={board.refreshing ? 'visually-dim' : ''}>
-          <KpiStrip tiles={model.kpis} onPick={onKpi} active={filters.status === 'alert' ? 'behind' : filters.ending === 60 ? 'ending' : null} />
+          <KpiStrip tiles={model.kpis} onPick={onKpi} active={filters.ending === 60 ? 'ending' : url.sort === 'login' ? 'noLogin' : url.sort === 'pace' ? 'behind' : null} />
           <BoardFilterBar
             filters={filters}
             onChange={setFilters}
-            mode={mode}
             month={bm?.month ?? month ?? ''}
             months={bm?.months ?? []}
             onMonth={(m) => setUrl({ month: m === (meta?.month ?? '') ? '' : m })}
             sort={url.sort}
             onSort={(s) => setUrl({ sort: s })}
-            sorts={sortOptions(mode, BOARD_COLUMNS)}
+            sorts={sortOptions(BOARD_COLUMNS)}
             owners={model.owners}
             industries={model.industries}
             types={model.types}
@@ -107,12 +106,12 @@ export default function HomePage(_props: PageProps) {
             <EmptyBoard onClear={clear} hasFilters={activeFilterCount(filters) > 0} />
           ) : (
             <>
-              <CompanyBoard rows={model.sorted} mode={mode} meta={bm!} sort={url.sort} onSort={(s) => setUrl({ sort: s })} />
-              <BoardLegend mode={mode} meta={bm!} />
+              <CompanyBoard rows={model.sorted} meta={bm!} sort={url.sort} onSort={(s) => setUrl({ sort: s })} />
+              <BoardLegend meta={bm!} />
             </>
           )}
           <p className="footer">
-            {fmtInt(model.filtered.length)} / {fmtInt(model.scored.length)} 社を表示。行をクリックすると企業の詳細（契約・推移・スカウト対象・選考状況）へ。
+            {fmtInt(model.filtered.length)} 社を表示（契約中の企業のみ）。行をクリックすると企業の詳細（契約・推移・スカウト対象・選考状況）へ。
           </p>
         </div>
       )}

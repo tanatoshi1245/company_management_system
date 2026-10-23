@@ -14,7 +14,7 @@ import { Icon } from '../../components/ui/Icon';
 import { BoardResponseSchema } from '../../../shared/schema/board';
 import { hasAnyTarget, PlanDefaultsResponseSchema, TARGET_METRIC_LABEL, TARGET_METRICS, TargetsByMonthResponseSchema } from '../../../shared/schema/targets';
 import { fmtMonthJa, isoToJstDisplay } from '../../../shared/calendar/periods';
-import { CURRENT_STATES } from '../../../shared/metrics/board';
+import { isContracted } from '../../../shared/metrics/board';
 import { TargetProgressBar } from './components/TargetProgressBar';
 import { BulkDefaultsDialog } from './components/BulkDefaultsDialog';
 import { fmtInt } from '../../lib/format';
@@ -42,7 +42,7 @@ export default function TargetsListPage(_props: PageProps) {
     const rec = new Map((targets.data?.rows ?? []).map((r) => [r.companyId, r]));
     const q = url.q.trim().toLowerCase();
     const list = board.data.companies
-      .filter((c) => CURRENT_STATES.has(c.state) || c.m.contracted)
+      .filter((c) => isContracted(c, board.data!.meta))
       .filter((c) => (url.mine === '1' ? c.isMine : true))
       .filter((c) => (url.missing === '1' ? !hasAnyTarget(c.targets) : true))
       .filter((c) => (q ? c.name.toLowerCase().includes(q) || (c.plan ?? '').toLowerCase().includes(q) : true))
@@ -57,8 +57,8 @@ export default function TargetsListPage(_props: PageProps) {
   const bm = board.data?.meta;
   const rate = bm?.bizDays.rate ?? 0;
   const mineIds = (board.data?.companies ?? []).filter((c) => c.isMine).map((c) => c.id);
-  const withTarget = (board.data?.companies ?? []).filter((c) => (CURRENT_STATES.has(c.state) || c.m.contracted) && hasAnyTarget(c.targets)).length;
-  const total = (board.data?.companies ?? []).filter((c) => CURRENT_STATES.has(c.state) || c.m.contracted).length;
+  const withTarget = (board.data?.companies ?? []).filter((c) => isContracted(c, board.data!.meta) && hasAnyTarget(c.targets)).length;
+  const total = (board.data?.companies ?? []).filter((c) => isContracted(c, board.data!.meta)).length;
   return (
     <>
       <PageHeader

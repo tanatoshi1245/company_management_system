@@ -130,8 +130,8 @@ describe('企業詳細', () => {
     render(<App />);
     await waitFor(() => expect(screen.getByText('企業が見つかりません')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'ボードへ戻る' }));
-    await waitFor(() => expect(screen.getByRole('table', { name: '契約企業のヒートマップ' })).toBeTruthy());
-    const row = screen.getByRole('table', { name: '契約企業のヒートマップ' }).querySelector('tbody tr')!;
+    await waitFor(() => expect(screen.getByRole('table', { name: '契約企業の実績一覧' })).toBeTruthy());
+    const row = screen.getByRole('table', { name: '契約企業の実績一覧' }).querySelector('tbody tr')!;
     const before = calls.filter((u) => u.startsWith('/api/companies/')).length;
     fireEvent.mouseEnter(row);
     await waitFor(() => expect(calls.filter((u) => u.startsWith('/api/companies/')).length).toBe(before + 1));

@@ -9,7 +9,7 @@ status: active
 # features/home — ホーム（契約企業ボード）
 
 ## 役割
-ログイン直後の全体図。契約企業を KPI タイル（契約企業数・スカウト消化率・スカウト利用率・ペース遅れ・ログインなし・契約終了間近）→ 企業 × 実績の表（基準がある列はヒートマップの色）で一覧し、`担当=自分`・CS 担当・業種・種別などの絞り込みと「業界比 / 目標比」の切替をクライアント側で行う。
+ログイン直後の全体図。**契約中の企業だけ**を KPI タイル（契約企業数・スカウト消化率・スカウト利用率・ペース遅れ・30 日以上ログインなし・契約終了間近）→ 種別 / CS 担当 / 企業名 × 実績の表で一覧する。色は「0 件」と「30 日以上ログインなし」の赤だけ（業界比 / 目標比の色は企業詳細で見る）。`担当=自分`・CS 担当・業種・種別などの絞り込みはクライアント側。
 
 ## 依存するデータ（画面要素 → API → マート列 → BQ 元テーブル）
 | 画面要素 | API | マート.列 | BQ 元テーブル |
@@ -19,7 +19,8 @@ status: active
 | 掲載 / 枠、送信 / 枠（分数） | 同上 | `cms_company_monthly.active_jobs_eom / scout_sent`, `cms_company_master.job_posting_limit / scout_limit` | job_publish_history, jobs_all, scouts, companies |
 | 閲覧・応募・返信（当月、返信月軸） | 同上 | `job_views / applications / interested_by_reply_month` | member_job_detail_views, member_applications, scouts × scout_histories |
 | 選考中・採用 | 同上 | `in_selection / hires` | member_applications.status, scouts |
-| 最終ログイン・契約残 | 同上 | `cms_company_login.last_login_date / days_since_login`, `cms_company_master.days_to_contract_end` | GA4 `get_ID`, companies |
+| 最終ログイン（30 日以上なしは赤）・契約残 | 同上 | `cms_company_login.last_login_date / days_since_login`, `cms_company_master.days_to_contract_end` | GA4 `get_ID`, companies |
+| 契約中の判定 | 同上 | 当月: `contract_state ∈ {active, ending_30d}`、過去月: `cms_company_monthly.is_contracted_in_month` | companies |
 | KPI: スカウト消化率・利用率 | 同上 | Σ`scout_sent` ÷ Σ`scout_limit`、`scout_sent > 0` の企業数 ÷ 契約中 | クライアント集計 |
 | 業界比の色 | 同上 | `cms_industry_benchmark_monthly.median / n_companies` | cms_company_monthly |
 | 目標比の色 | 同上（D1 `company_targets`） | 目標 × 営業日消化率 | — |
