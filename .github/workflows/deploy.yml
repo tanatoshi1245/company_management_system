@@ -1,0 +1,58 @@
+name: 契約企業マネジメントシステム デプロイ（Cloudflare Workers）
+
+# 本番は Cloudflare ダッシュボードの Git 連携（main への push で自動デプロイ）。
+# この workflow は手動実行だけ（Git 連携を使わない場合の代替。リポジトリの Secrets に
+# CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID を登録してから実行する。BQ の鍵や Google の Secret は
+# Cloudflare ダッシュボードで登録し、GitHub には置かない）。
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-company-management-system
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: 型チェック・テスト・監査
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: 依存の脆弱性（high 以上で失敗）
+        run: npm audit --audit-level=high
+      - name: フロントのバンドルに認証情報が無いこと
+        run: |
+          ! grep -rE "private_key|client_secret|BEGIN PRIVATE KEY" dist/client
+      - name: 鍵ファイルが追跡されていないこと
+        run: |
+          ! git ls-files | grep -Ei '\.(pem|p12)$|key.*\.json$'
+      - name: eval / new Function を使っていないこと
+        run: |
+          ! grep -rnE "\beval\(|new Function\(" src
+
+  deploy:
+    name: デプロイ
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Cloudflare Workers へデプロイ（wrangler.jsonc の build.command がビルドする）
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy
