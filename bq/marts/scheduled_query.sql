@@ -217,10 +217,10 @@ BEGIN
            c.internal_name,
            ci.profile_ids,
            IFNULL(ci.profile_count, 0) AS profile_count,
-           -- 企業種別。NW（Network 契約。たまにある特殊な契約）= 直接 で企業名に DaijobAgent を含まず、求人枠 0 かつ掲載 0、スカウト枠 0 かつ当月送信 0（2026-10-23）
+           -- 企業種別。NW（Network 契約。たまにある特殊な契約）= 直接（プロファイルが無い企業を含む）で企業名に DaijobAgent を含まず、求人枠 0 かつ掲載 0、スカウト枠 0 かつ当月送信 0（2026-10-23）。NW はボードに出さない（Worker 側で除外）
            CASE
              WHEN c.is_da_name OR ci.company_type = 'DA' THEN 'DA'
-             WHEN ci.company_type = '直接'
+             WHEN (ci.company_type = '直接' OR ci.company_type IS NULL)
                   AND IFNULL(COALESCE(c.company_job_limit, ci.job_limit_profiles, la.job_limit), 0) = 0 AND IFNULL(aj.n, 0) = 0
                   AND IFNULL(COALESCE(c.company_scout_limit, ci.scout_limit_profiles, la.scout_limit), 0) = 0 AND scur.company_id IS NULL THEN 'NW'
              ELSE COALESCE(ci.company_type, '不明')
@@ -232,8 +232,9 @@ BEGIN
            DATE_DIFF(run_date, c.active_from, DAY) AS days_since_contract_start,
            IF(c.active_to IS NULL, NULL, DATE_DIFF(c.active_to, c.active_from, DAY) + 1) AS contract_days_total,
            -- 枠数: companies の企業単位の値（契約値）を優先。NULL のときだけプロファイル単位の MAX（company_profiles → company_profiles_all）で補う（2026-10-23）
-           COALESCE(c.company_scout_limit, ci.scout_limit_profiles, la.scout_limit) AS scout_limit,
-           COALESCE(c.company_job_limit, ci.job_limit_profiles, la.job_limit) AS job_posting_limit,
+           -- 枠数: どこにも値が無ければ 0（未設定 = 枠なし。2026-10-23）
+           COALESCE(c.company_scout_limit, ci.scout_limit_profiles, la.scout_limit, 0) AS scout_limit,
+           COALESCE(c.company_job_limit, ci.job_limit_profiles, la.job_limit, 0) AS job_posting_limit,
            scout_limit_period AS scout_limit_period_default,
            COALESCE(ci.dj_industry, a.sf_industry_norm, '(未設定)') AS industry,
            CASE WHEN ci.dj_industry IS NOT NULL THEN 'company_profiles' WHEN a.sf_industry_norm IS NOT NULL THEN 'sf_accounts' ELSE 'none' END AS industry_source,

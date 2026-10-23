@@ -1,6 +1,6 @@
 import type { BuiltQuery } from '../bq/params';
 
-/** cms_company_master（全社）。DATE / TIMESTAMP は STRING にして返す（REST の TIMESTAMP は epoch 秒になるため） */
+/** cms_company_master（全社。NW = Network 契約はボードに出さないので除く）。DATE / TIMESTAMP は STRING にして返す（REST の TIMESTAMP は epoch 秒になるため） */
 export function companyMasterQuery(): BuiltQuery {
   return {
     label: 'company_master',
@@ -16,7 +16,8 @@ SELECT CAST(company_id AS STRING) AS company_id, company_name, internal_name, co
        sf_contract_owner_name, sf_contract_owner_email, sf_contract_owner_position,
        sales_staff, cs_owner_email_default, cs_owner_name_default, owner_source, active_jobs_now,
        CAST(run_date AS STRING) AS run_date
-FROM \`bq-hgt.dwh.cms_company_master\``,
+FROM \`bq-hgt.dwh.cms_company_master\`
+WHERE company_type != 'NW'`,
     params: [],
   };
 }

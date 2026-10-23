@@ -21,7 +21,8 @@ export function mockRows(q: BuiltQuery): Row[] {
     case 'refresh_log':
       return mockRefreshLog();
     case 'company_master':
-      return mockCompanyMaster();
+      // NW（Network 契約）はボードに出さない（SQL の WHERE と同じ）
+      return mockCompanyMaster().filter((r) => r.company_type !== 'NW');
     case 'company_monthly':
       return mockCompanyMonthly();
     case 'company_login':
