@@ -8,7 +8,6 @@ const NAV: { key: RouteKey[]; to: string; label: string; icon: IconName }[] = [
   { key: ['home', 'company'], to: '/', label: 'ボード', icon: 'home' },
   { key: ['targets', 'targetForm'], to: '/targets', label: '目標', icon: 'target' },
   { key: ['settings'], to: '/settings', label: '設定', icon: 'settings' },
-  { key: ['help'], to: '/help', label: '指標の定義', icon: 'help' },
 ];
 
 /** 左の固定レール: ブランド・ナビ・データの鮮度・ログイン者 */

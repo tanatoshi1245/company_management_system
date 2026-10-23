@@ -53,14 +53,22 @@ describe('ホーム（ボード）', () => {
     expect(screen.queryByText(/注目/)).toBeNull();
     expect(screen.queryByRole('button', { name: '目標比' })).toBeNull();
     expect(screen.queryByText('契約終了まで 60 日以内')).toBeNull();
-    expect(screen.getByText('スカウトの消化率_進捗遅れ')).toBeTruthy();
+    expect(screen.queryByText('スカウトの消化率_進捗遅れ')).toBeNull();
+    expect(screen.queryByText(/日以上ログインなし$/)).toBeNull();
+    expect(screen.getByText('アクティブ企業数（最終ログイン30日以内）')).toBeTruthy();
+    // KPI タイルは見出しと数字だけ（副説明・スパークラインは無い）
+    expect(document.querySelectorAll('.kpi .n, .kpi .spark').length).toBe(0);
+    expect(document.querySelectorAll('.kpi').length).toBe(4);
+    // サブメニューに「指標の定義」は無い。見出しに「マート更新」は出さない
+    expect(screen.queryByRole('link', { name: /指標の定義/ })).toBeNull();
+    expect(document.querySelector('.page-header')?.textContent ?? '').not.toContain('マート更新');
     expect(screen.queryByLabelText('並べ替え')).toBeNull();
     expect(screen.queryByLabelText('期間')).toBeNull();
     expect(screen.queryByText(/^業種/)).toBeNull();
     // 列の順: 種別 → CS 担当 → 企業名 → 実績
     const headers = Array.from(table.querySelectorAll('thead tr.metrics th')).map((h) => h.textContent?.replace(/[▲▼]/g, '').trim());
     expect(headers.slice(0, 3)).toEqual(['種別', 'CS 担当', '企業名']);
-    for (const h of ['掲載 / 枠', '閲覧', '応募', '送信 / 枠', '返信（当月）', '選考中', '採用', '最終ログイン', '契約残']) expect(headers).toContain(h);
+    for (const h of ['掲載 / 枠', '閲覧', '応募', '送信 / 枠', '返信', '選考中', '採用', '最終ログイン', '契約残']) expect(headers).toContain(h);
     // 契約中の企業だけ（終了済み・開始前・直近終了は出ない）。メーター・アイコンは無い
     const f = await fixtures();
     const contractedIds = new Set(f.board.companies.filter((c) => c.state === 'active' || c.state === 'ending_30d').map((c) => c.id));
@@ -122,6 +130,31 @@ describe('ホーム（ボード）', () => {
     expect(table.querySelector('tbody tr td[data-col=views]')?.classList.contains('gs')).toBe(false);
     // 返信・最終ログイン・契約残にも副情報（送信月基準・n 日前・終了日）は出さない
     expect(table.querySelectorAll('td[data-col=intReply] .heat-s, td[data-col=login] .heat-s, td[data-col=daysToEnd] .heat-s').length).toBe(0);
+  });
+
+  it('求人掲載・スカウト送信の有無で絞り込める', async () => {
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('table', { name: '契約企業の実績一覧' })).toBeTruthy());
+    const rows = () => Array.from(screen.queryByRole('table', { name: '契約企業の実績一覧' })?.querySelectorAll('tbody tr') ?? []);
+    const total = rows().length;
+    const firstNum = (tr: Element, col: string) => Number((tr.querySelector(`td[data-col="${col}"]`)?.textContent ?? '').replace(/,/g, '').split('/')[0]);
+    const zeroJobs = rows().filter((tr) => firstNum(tr, 'jobs') === 0).length;
+    const sentYes = rows().filter((tr) => firstNum(tr, 'sent') > 0).length;
+    fireEvent.change(screen.getByLabelText('求人掲載'), { target: { value: 'no' } });
+    await waitFor(() => expect(window.location.search).toContain('jobs=no'));
+    await waitFor(() => expect(rows().length).toBe(zeroJobs));
+    for (const tr of rows()) expect(firstNum(tr, 'jobs')).toBe(0);
+    fireEvent.change(screen.getByLabelText('求人掲載'), { target: { value: '' } });
+    await waitFor(() => expect(window.location.search).not.toContain('jobs='));
+    fireEvent.change(screen.getByLabelText('スカウト送信'), { target: { value: 'yes' } });
+    await waitFor(() => expect(window.location.search).toContain('sent=yes'));
+    await waitFor(() => expect(rows().length).toBe(sentYes));
+    expect(sentYes).toBeGreaterThan(0);
+    expect(zeroJobs).toBeLessThan(total);
+    for (const tr of rows()) expect(firstNum(tr, 'sent')).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: /クリア/ }));
+    await waitFor(() => expect(window.location.search).not.toContain('sent='));
+    await waitFor(() => expect(rows().length).toBe(total));
   });
 
   it('列見出しの並べ替え、企業種別（複数選択）・契約終了（単数）のプルダウン、検索、クリア', async () => {

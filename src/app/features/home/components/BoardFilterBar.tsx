@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BoardFilters, EndingFilter } from '../../../../shared/metrics/board';
-import { ENDING_LABEL, ENDING_OPTIONS } from '../../../../shared/metrics/board';
+import type { BoardFilters, EndingFilter, YesNo } from '../../../../shared/metrics/board';
+import { ENDING_LABEL, ENDING_OPTIONS, YES_NO_LABEL } from '../../../../shared/metrics/board';
 import { COMPANY_TYPES, COMPANY_TYPE_SHORT } from '../../../../shared/labels';
 import { Chip } from '../../../components/ui/Chip';
 import { Icon } from '../../../components/ui/Icon';
@@ -84,6 +84,22 @@ export function BoardFilterBar(p: Props) {
               {ENDING_LABEL[k]}
             </option>
           ))}
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="f-jobs">求人掲載</label>
+        <select id="f-jobs" className="ctl" value={p.filters.jobs ?? ''} onChange={(e) => p.onChange({ jobs: (e.target.value || null) as YesNo | null })}>
+          <option value="">すべて</option>
+          <option value="yes">{YES_NO_LABEL.yes}</option>
+          <option value="no">{YES_NO_LABEL.no}</option>
+        </select>
+      </div>
+      <div className="field">
+        <label htmlFor="f-sent">スカウト送信</label>
+        <select id="f-sent" className="ctl" value={p.filters.sent ?? ''} onChange={(e) => p.onChange({ sent: (e.target.value || null) as YesNo | null })}>
+          <option value="">すべて</option>
+          <option value="yes">{YES_NO_LABEL.yes}</option>
+          <option value="no">{YES_NO_LABEL.no}</option>
         </select>
       </div>
       <input id="f-q" type="search" className="ctl" placeholder="企業名で検索" aria-label="企業名で検索" value={q} onChange={(e) => setQ(e.target.value)} />

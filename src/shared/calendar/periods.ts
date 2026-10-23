@@ -14,7 +14,9 @@ export function nowJstDisplay(now: Date = new Date()): string {
 /** ISO 文字列（UTC）→ JST の "YYYY-MM-DD HH:MM"。解釈できなければ null */
 export function isoToJstDisplay(iso: string | null | undefined): string | null {
   if (!iso) return null;
-  const t = Date.parse(iso.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(iso) ? iso : `${iso.replace(' ', 'T')}Z`);
+  // BQ の CAST(TIMESTAMP AS STRING) は "2026-10-23 10:22:08.190506+00"（オフセット 2 桁）。":00" を補って ISO にする
+  const s = iso.trim().replace(' ', 'T').replace(/([+-]\d{2})$/, '$1:00');
+  const t = Date.parse(s.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(s) ? s : `${s}Z`);
   if (Number.isNaN(t)) return null;
   return nowJstDisplay(new Date(t));
 }
