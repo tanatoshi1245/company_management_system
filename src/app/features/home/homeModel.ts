@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import type { BoardResponse } from '../../../shared/schema/board';
-import { filterCompanies, kpiStrip, ownerKey, sortCompanies, type BoardFilters, type KpiTile } from '../../../shared/metrics/board';
+import { filterCompanies, isContracted, kpiStrip, ownerKey, sortCompanies, type BoardFilters, type KpiTile } from '../../../shared/metrics/board';
 import { surname } from '../../../shared/labels';
-import { makeContext, scoreCompany, type BenchMode, type ScoredCompany } from '../../../shared/metrics/score';
+import { makeContext, scoreCompany, type ScoredCompany } from '../../../shared/metrics/score';
 
 export interface HomeModel {
   scored: ScoredCompany[];
@@ -16,30 +16,31 @@ export interface HomeModel {
   mineCount: number;
 }
 
-/** スコア（ボード + モード）→ 絞り込み → 並べ替え の 3 段で memo する（モード切替・絞り込みで再取得しない） */
-export function useHomeModel(board: BoardResponse | null, filters: BoardFilters, mode: BenchMode, sort: string): HomeModel | null {
+/** スコア → 絞り込み（契約中のみ）→ 並べ替え の 3 段で memo する（絞り込み・並べ替えで再取得しない） */
+export function useHomeModel(board: BoardResponse | null, filters: BoardFilters, sort: string): HomeModel | null {
   const scored = useMemo(() => {
     if (!board) return null;
     const ctx = makeContext(board.benchmarks, board.meta.benchMinN, board.meta.bizDays.rate, board.meta.bizDays.elapsed, board.meta.isCurrentMonth);
     return board.companies.map((c) => scoreCompany(c, ctx));
   }, [board]);
-  const filtered = useMemo(() => (scored ? filterCompanies(scored, filters, mode) : null), [scored, filters, mode]);
-  const sorted = useMemo(() => (filtered ? sortCompanies(filtered, sort, mode) : null), [filtered, sort, mode]);
+  const filtered = useMemo(() => (scored && board ? filterCompanies(scored, filters, board.meta) : null), [scored, filters, board]);
+  const sorted = useMemo(() => (filtered ? sortCompanies(filtered, sort) : null), [filtered, sort]);
   return useMemo(() => {
     if (!board || !scored || !filtered || !sorted) return null;
+    const contractedRows = scored.filter((s) => isContracted(s.c, board.meta));
     const count = (f: (s: ScoredCompany) => string) => {
       const m = new Map<string, number>();
-      for (const s of scored) m.set(f(s), (m.get(f(s)) ?? 0) + 1);
+      for (const s of contractedRows) m.set(f(s), (m.get(f(s)) ?? 0) + 1);
       return Array.from(m, ([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key, 'ja'));
     };
     return {
       scored,
       filtered,
       sorted,
-      kpis: kpiStrip(filtered, mode, board.meta),
+      kpis: kpiStrip(filtered, board.meta),
       owners: (() => {
         const m = new Map<string, { key: string; label: string; name: string; count: number }>();
-        for (const s of scored) {
+        for (const s of contractedRows) {
           const key = ownerKey(s.c);
           const cur = m.get(key);
           if (cur) cur.count += 1;
@@ -49,7 +50,7 @@ export function useHomeModel(board: BoardResponse | null, filters: BoardFilters,
       })(),
       industries: count((s) => s.c.ind),
       types: count((s) => s.c.type),
-      mineCount: scored.filter((s) => s.c.isMine).length,
+      mineCount: contractedRows.filter((s) => s.c.isMine).length,
     };
-  }, [board, scored, filtered, sorted, mode]);
+  }, [board, scored, filtered, sorted]);
 }

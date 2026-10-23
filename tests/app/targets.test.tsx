@@ -10,7 +10,7 @@ import { addDays, addMonths, fmtMonthShort, monthOf, todayJst } from '../../src/
 import { monthProgress } from '../../src/shared/calendar/businessDays';
 import { CAVEATS } from '../../src/shared/caveats';
 import { hasAnyTarget, type TargetRecord } from '../../src/shared/schema/targets';
-import { CURRENT_STATES } from '../../src/shared/metrics/board';
+import { isContracted } from '../../src/shared/metrics/board';
 import type { TargetRow } from '../../src/worker/d1/targetsRepo';
 
 const VIEWER = 'cs@daijob.com';
@@ -151,7 +151,7 @@ describe('目標フォーム', () => {
     render(<App />);
     await waitFor(() => expect(screen.getByRole('table', { name: '企業別の目標' })).toBeTruthy());
     const table = screen.getByRole('table', { name: '企業別の目標' });
-    const current = board.companies.filter((c) => CURRENT_STATES.has(c.state) || c.m.contracted).length;
+    const current = board.companies.filter((c) => isContracted(c, board.meta)).length;
     expect(table.querySelectorAll('tbody tr').length).toBe(current);
     const row = within(table).getByText(company.name).closest('tr')!;
     expect(row.textContent).toContain('100');

@@ -1,7 +1,5 @@
-import type { BoardMeta } from '../schema/board';
-import { HEAT_COLUMNS_INDUSTRY, HEAT_COLUMNS_TARGET } from './definitions';
-import type { HealthLevel } from './health';
-import { cellScore, type BenchMode, type ScoredCompany } from './score';
+import type { BoardCompany, BoardMeta } from '../schema/board';
+import type { ScoredCompany } from './score';
 
 export const ENDING_OPTIONS = [30, 60, 90] as const;
 export type EndingDays = (typeof ENDING_OPTIONS)[number];
@@ -13,13 +11,10 @@ export interface BoardFilters {
   industry: string[];
   type: string[];
   ending: EndingDays | null;
-  status: HealthLevel | null;
-  /** current = 契約中・終了間近・開始前・直近終了（既定）、all = 終了済みも */
-  state: 'current' | 'all';
   q: string;
 }
 
-export const DEFAULT_FILTERS: BoardFilters = { mine: false, owner: [], industry: [], type: [], ending: null, state: 'current', status: null, q: '' };
+export const DEFAULT_FILTERS: BoardFilters = { mine: false, owner: [], industry: [], type: [], ending: null, q: '' };
 
 export const NO_OWNER_KEY = '(未設定)';
 /** 担当の絞り込みキー（メール優先。無ければ名前、どちらも無ければ (未設定)） */
@@ -27,29 +22,37 @@ export function ownerKey(c: { owner: { email: string | null; name: string | null
   return c.owner.email?.toLowerCase() || c.owner.name || NO_OWNER_KEY;
 }
 
+/** Worker が /api/board の応答に含める契約状態（画面は isContracted でさらに契約中に絞る） */
 export const CURRENT_STATES = new Set(['active', 'ending_30d', 'upcoming', 'ended_recent']);
+
+/**
+ * 契約中の企業だけを表示・カウントする。
+ * 当月: 今日時点で契約中（state = active / ending_30d）。過去月: その月に契約期間が重なっていた企業（is_contracted_in_month）
+ */
+export function isContracted(c: Pick<BoardCompany, 'state' | 'm'>, meta: Pick<BoardMeta, 'isCurrentMonth'>): boolean {
+  return meta.isCurrentMonth ? c.state === 'active' || c.state === 'ending_30d' : c.m.contracted;
+}
 
 export function normalizeQuery(s: string): string {
   return s.normalize('NFKC').toLowerCase().replace(/\s+/g, '');
 }
 
-export function filterCompanies(rows: ScoredCompany[], f: BoardFilters, mode: BenchMode): ScoredCompany[] {
+export function filterCompanies(rows: ScoredCompany[], f: BoardFilters, meta: Pick<BoardMeta, 'isCurrentMonth'>): ScoredCompany[] {
   const q = normalizeQuery(f.q);
   return rows.filter((r) => {
     const c = r.c;
-    if (f.state === 'current' && !CURRENT_STATES.has(c.state) && !c.m.contracted) return false;
+    if (!isContracted(c, meta)) return false;
     if (f.mine && !c.isMine) return false;
     if (f.owner.length && !f.owner.includes(ownerKey(c))) return false;
     if (f.industry.length && !f.industry.includes(c.ind)) return false;
     if (f.type.length && !f.type.includes(c.type)) return false;
     if (f.ending !== null && (c.contract.daysToEnd === null || c.contract.daysToEnd < 0 || c.contract.daysToEnd > f.ending)) return false;
-    if (f.status && r.health[mode].level !== f.status) return false;
     if (q && !normalizeQuery(c.name).includes(q) && !String(c.id).includes(q)) return false;
     return true;
   });
 }
 
-/** ボードの列（実数表示）。metric があるセルはヒートマップの色（業界比 / 目標比）を持つ */
+/** ボードの列（実数表示）。metric はツールチップに式を出すための参照（色付けには使わない） */
 export interface BoardColumn {
   key: string;
   label: string;
@@ -82,10 +85,10 @@ export const RAW_SORT: Record<string, (s: ScoredCompany) => number | null> = {
   daysToEnd: (s) => s.c.contract.daysToEnd,
 };
 
-export const SORT_KEYS = ['health', 'name', 'contractEnd', 'pace', ...Object.keys(RAW_SORT), ...HEAT_COLUMNS_INDUSTRY] as const;
+export const SORT_KEYS = ['name', 'type', 'owner', 'contractEnd', 'pace', ...Object.keys(RAW_SORT)] as const;
 
-/** sort: 'health' | 'name' | 'contractEnd' | 'pace' | 指標キー。先頭の '-' で降順 */
-export function sortCompanies(rows: ScoredCompany[], sort: string, mode: BenchMode): ScoredCompany[] {
+/** sort: 'name' | 'type' | 'owner' | 'contractEnd' | 'pace' | 列キー（RAW_SORT）。先頭の '-' で降順 */
+export function sortCompanies(rows: ScoredCompany[], sort: string): ScoredCompany[] {
   const desc = sort.startsWith('-');
   const key = desc ? sort.slice(1) : sort;
   const dir = desc ? -1 : 1;
@@ -94,28 +97,21 @@ export function sortCompanies(rows: ScoredCompany[], sort: string, mode: BenchMo
     switch (key) {
       case 'name':
         return a.c.name.localeCompare(b.c.name, 'ja') * dir;
+      case 'type':
+        return a.c.type.localeCompare(b.c.type, 'ja') * dir;
+      case 'owner':
+        return (a.c.owner.name ?? '').localeCompare(b.c.owner.name ?? '', 'ja') * dir;
       case 'contractEnd':
         return (num(a.c.contract.daysToEnd) - num(b.c.contract.daysToEnd)) * dir;
       case 'pace':
         return (num(a.pace.ratio) - num(b.pace.ratio)) * dir;
-      case 'health': {
-        const ha = a.health[mode];
-        const hb = b.health[mode];
-        const d = num(ha.score) - num(hb.score);
-        return (d !== 0 ? d : num(ha.worstScore) - num(hb.worstScore)) * dir;
-      }
       default: {
         const raw = RAW_SORT[key];
-        const d = raw ? num(raw(a)) - num(raw(b)) : num(a.values[key]) - num(b.values[key]);
-        return d * dir;
+        return raw ? (num(raw(a)) - num(raw(b))) * dir : 0;
       }
     }
   };
   return [...rows].sort((a, b) => cmp(a, b) || a.c.name.localeCompare(b.c.name, 'ja'));
-}
-
-export function heatColumns(mode: BenchMode): string[] {
-  return mode === 'industry' ? HEAT_COLUMNS_INDUSTRY : HEAT_COLUMNS_TARGET;
 }
 
 export interface KpiTile {
@@ -150,13 +146,18 @@ export function portfolioTrend(rows: ScoredCompany[], key: TrendKey): number[] {
   return out;
 }
 
-export const NO_LOGIN_DAYS = 14;
+export const NO_LOGIN_DAYS = 30;
+
+/** 30 日以上ログインなし（記録なし = 2026-05-15 以降ログインなし も含む） */
+export function isNoLogin(c: Pick<BoardCompany, 'login'>): boolean {
+  return c.login.daysSince === null || c.login.daysSince >= NO_LOGIN_DAYS;
+}
 export const ENDING_SOON_DAYS = 60;
 
-export function kpiStrip(rows: ScoredCompany[], _mode: BenchMode, meta: BoardMeta): KpiTile[] {
-  const contracted = rows.filter((r) => r.c.m.contracted || CURRENT_STATES.has(r.c.state));
+export function kpiStrip(rows: ScoredCompany[], meta: BoardMeta): KpiTile[] {
+  const contracted = rows.filter((r) => isContracted(r.c, meta));
   const behind = rows.filter((r) => r.pace.status === 'behind');
-  const noLogin = rows.filter((r) => r.c.login.daysSince === null || r.c.login.daysSince >= NO_LOGIN_DAYS);
+  const noLogin = rows.filter((r) => isNoLogin(r.c));
   const ending = rows.filter((r) => r.c.contract.daysToEnd !== null && r.c.contract.daysToEnd >= 0 && r.c.contract.daysToEnd <= ENDING_SOON_DAYS);
   // スカウト消化率 = 月間送信実績の合計 ÷ 月間送信枠の合計（枠のある契約企業）
   const withLimit = contracted.filter((r) => r.c.limits.period === 'month' && r.c.limits.scout !== null && r.c.limits.scout > 0);
@@ -168,11 +169,11 @@ export function kpiStrip(rows: ScoredCompany[], _mode: BenchMode, meta: BoardMet
   const using = contracted.filter((r) => r.c.m.sent > 0).length;
   const usage = contracted.length ? using / contracted.length : null;
   return [
-    { key: 'contracted', label: '契約企業', value: contracted.length, unit: 'count', sub: `${meta.month.replace('-', '年')}月に契約中`, spark: portfolioTrend(rows, 'sent'), filter: { status: null, ending: null }, tone: 'neutral' },
+    { key: 'contracted', label: '契約企業', value: contracted.length, unit: 'count', sub: `${meta.month.replace('-', '年')}月に契約中`, spark: portfolioTrend(rows, 'sent'), filter: { ending: null }, tone: 'neutral' },
     { key: 'scoutUtil', label: 'スカウト消化率', value: util, unit: 'rate', sub: `送信 ${sentSum.toLocaleString('ja-JP')} / 枠 ${limitSum.toLocaleString('ja-JP')}（枠あり ${withLimit.length} 社）${meta.isCurrentMonth ? `・営業日 ${Math.round(meta.bizDays.rate * 100)}% 経過` : ''}`, spark: portfolioTrend(rows, 'sent'), filter: null, tone: utilRatio === null || !meta.isCurrentMonth ? 'neutral' : utilRatio < 0.8 ? 'bad' : utilRatio < 1 ? 'warn' : 'good' },
     { key: 'scoutUsage', label: 'スカウト利用率', value: usage, unit: 'rate', sub: `${using} / ${contracted.length} 社が 1 件以上送信`, spark: [], filter: null, tone: usage === null ? 'neutral' : usage < 0.5 ? 'bad' : usage < 0.7 ? 'warn' : 'good' },
-    { key: 'behind', label: 'スカウトのペース遅れ', value: behind.length, unit: 'count', sub: `${rows.filter((r) => r.pace.status !== 'na').length} 社中（期待の 80% 未満）`, spark: [], filter: { status: 'alert' }, tone: behind.length ? 'bad' : 'good' },
-    { key: 'noLogin', label: `${NO_LOGIN_DAYS} 日以上ログインなし`, value: noLogin.length, unit: 'count', sub: 'CT 画面への最終ログイン', spark: [], filter: null, tone: noLogin.length ? 'warn' : 'good' },
+    { key: 'behind', label: 'スカウトのペース遅れ', value: behind.length, unit: 'count', sub: `${rows.filter((r) => r.pace.status !== 'na').length} 社中（期待の 80% 未満）`, spark: [], filter: null, tone: behind.length ? 'bad' : 'good' },
+    { key: 'noLogin', label: `${NO_LOGIN_DAYS} 日以上ログインなし`, value: noLogin.length, unit: 'count', sub: 'CT 画面への最終ログイン（記録なしを含む）', spark: [], filter: null, tone: noLogin.length ? 'bad' : 'good' },
     { key: 'ending', label: `契約終了まで ${ENDING_SOON_DAYS} 日以内`, value: ending.length, unit: 'count', sub: '更新の提案時期', spark: [], filter: { ending: 60 }, tone: ending.length ? 'warn' : 'neutral' },
   ];
 }

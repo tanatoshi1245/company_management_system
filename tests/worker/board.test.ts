@@ -5,7 +5,7 @@ import { baseEnv, ctx } from '../helpers/env';
 import { BoardResponseSchema } from '../../src/shared/schema/board';
 import { addMonths, monthOf, todayJst } from '../../src/shared/calendar/periods';
 import { makeContext, scoreCompany } from '../../src/shared/metrics/score';
-import { filterCompanies, kpiStrip, ownerKey, sortCompanies, DEFAULT_FILTERS } from '../../src/shared/metrics/board';
+import { filterCompanies, isContracted, isNoLogin, kpiStrip, ownerKey, sortCompanies, DEFAULT_FILTERS } from '../../src/shared/metrics/board';
 
 const get = (q = '', env = baseEnv) => app.fetch(new Request(`http://x/api/board${q}`), env, ctx);
 
@@ -68,30 +68,41 @@ describe('/api/board（モック）', () => {
     expect(scored.some((s) => s.pace.status === 'behind')).toBe(true);
     expect(scored.some((s) => s.bench.scout_utilization?.score !== null)).toBe(true);
     expect(scored.every((s) => s.health.target.level === 'none')).toBe(true); // 目標なし
-    const mine = filterCompanies(scored, { ...DEFAULT_FILTERS, mine: true }, 'industry');
+    // 契約中の企業だけ（終了済み・開始前・直近終了は出ない）
+    const all = filterCompanies(scored, DEFAULT_FILTERS, body.meta);
+    expect(all.length).toBeLessThan(scored.length);
+    expect(all.every((s) => s.c.state === 'active' || s.c.state === 'ending_30d')).toBe(true);
+    expect(scored.some((s) => s.c.state === 'ended_recent' || s.c.state === 'upcoming')).toBe(true);
+    const mine = filterCompanies(scored, { ...DEFAULT_FILTERS, mine: true }, body.meta);
     expect(mine.length).toBeGreaterThan(0);
-    expect(mine.length).toBeLessThan(scored.length);
-    const byPace = sortCompanies(scored, 'pace', 'industry');
+    expect(mine.length).toBeLessThan(all.length);
+    const byPace = sortCompanies(scored, 'pace');
     const ratios = byPace.map((s) => s.pace.ratio).filter((r): r is number => r !== null);
     for (let i = 1; i < ratios.length; i++) expect(ratios[i]).toBeGreaterThanOrEqual(ratios[i - 1]);
-    const tiles = kpiStrip(scored, 'industry', body.meta);
+    const tiles = kpiStrip(all, body.meta);
     expect(tiles.map((t) => t.key)).toEqual(['contracted', 'scoutUtil', 'scoutUsage', 'behind', 'noLogin', 'ending']);
+    expect(tiles[0].value).toBe(all.length);
     expect(tiles[0].value).toBeGreaterThan(20);
+    // 30 日以上ログインなし（記録なしを含む）
+    expect(tiles[4].value).toBe(all.filter((s) => s.c.login.daysSince === null || s.c.login.daysSince >= 30).length);
+    expect(all.some((s) => s.c.login.daysSince !== null && s.c.login.daysSince >= 14 && s.c.login.daysSince < 30 && !isNoLogin(s.c))).toBe(true);
     // スカウト消化率 = Σ送信 ÷ Σ枠（枠のある契約企業）、利用率 = 1 件以上送信 ÷ 契約中
-    const contracted = scored.filter((s) => s.c.m.contracted || ['active', 'ending_30d', 'upcoming', 'ended_recent'].includes(s.c.state));
+    const contracted = all.filter((s) => isContracted(s.c, body.meta));
     const withLimit = contracted.filter((s) => s.c.limits.scout);
     expect(tiles[1].value).toBeCloseTo(withLimit.reduce((a, s) => a + s.c.m.sent, 0) / withLimit.reduce((a, s) => a + (s.c.limits.scout ?? 0), 0), 6);
     expect(tiles[2].value).toBeCloseTo(contracted.filter((s) => s.c.m.sent > 0).length / contracted.length, 6);
     // CS 担当で絞り込み
     const key = ownerKey(scored.find((s) => s.c.owner.email)!.c);
-    const byOwner = filterCompanies(scored, { ...DEFAULT_FILTERS, owner: [key] }, 'industry');
+    const byOwner = filterCompanies(scored, { ...DEFAULT_FILTERS, owner: [key] }, body.meta);
     expect(byOwner.length).toBeGreaterThan(0);
     expect(byOwner.every((s) => ownerKey(s.c) === key)).toBe(true);
     // 実数の列で並べ替え
-    const byApps = sortCompanies(scored, '-apps', 'industry');
+    const byApps = sortCompanies(scored, '-apps');
     for (let i = 1; i < byApps.length; i++) expect(byApps[i].c.m.apps).toBeLessThanOrEqual(byApps[i - 1].c.m.apps);
     expect(scored.some((s) => s.c.type === '派遣')).toBe(true);
-    const q = filterCompanies(scored, { ...DEFAULT_FILTERS, q: 'ｱｰｸ' }, 'industry');
+    const q = filterCompanies(scored, { ...DEFAULT_FILTERS, q: 'ｱｰｸ' }, body.meta);
+    const byType = sortCompanies(all, 'type');
+    for (let i = 1; i < byType.length; i++) expect(byType[i].c.type.localeCompare(byType[i - 1].c.type, 'ja')).toBeGreaterThanOrEqual(0);
     expect(q.length).toBeGreaterThan(0);
   });
 });

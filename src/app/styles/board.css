@@ -54,22 +54,16 @@ table.board td { padding: 0; height: var(--row-h); vertical-align: middle; }
 table.board tbody tr { cursor: pointer; }
 table.board tbody tr:hover td { filter: brightness(0.97); }
 table.board tbody tr:focus-visible { outline: var(--focus); outline-offset: -2px; }
-table.board td.company, table.board th.company { position: sticky; left: 0; z-index: 2; background: var(--surface); min-width: 260px; max-width: 320px; border-left: 3px solid transparent; padding: 0 8px 0 6px; }
-table.board thead th.company { z-index: 4; }
-table.board td.company.h-alert { border-left-color: var(--bad); }
-table.board td.company.h-watch { border-left-color: var(--warn); }
-table.board td.company.h-good { border-left-color: var(--good); }
-table.board td.company.h-none { border-left-color: var(--de-emphasis); }
-.co-strip { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.co-strip .nm { font-size: var(--fs-13); font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.co-strip .meta { font-size: var(--fs-11); color: var(--muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
-.co-strip .meta .badge { padding: 0 5px; font-size: 10px; }
-.co-strip .meta .days { font-family: var(--font-body); font-variant-numeric: tabular-nums; }
-.co-strip .meta .days.soon { color: var(--warn); font-weight: 700; }
-.co-strip .own { color: var(--ink); font-weight: 600; max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
-.co-strip .ava { width: 20px; height: 20px; border-radius: 50%; flex: 0 0 auto; background: var(--surface-sunken); color: var(--ink-soft); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; letter-spacing: 0.02em; }
-.co-strip .ava.mine { background: var(--dj-navy); color: #fff; }
-.co-strip .ava.none { background: transparent; border: 1px dashed var(--rule-strong); color: var(--muted); }
+/* 固定の 3 列: 種別（52px）→ 担当（88px）→ 企業名 */
+table.board td.col-type, table.board th.col-type { position: sticky; left: 0; z-index: 2; background: var(--surface); width: 52px; min-width: 52px; padding: 0 4px 0 8px; text-align: left; }
+table.board td.col-owner, table.board th.col-owner { position: sticky; left: 52px; z-index: 2; background: var(--surface); width: 88px; min-width: 88px; max-width: 88px; padding: 0 6px; text-align: left; font-size: var(--fs-12); font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+table.board td.col-owner.mine { color: var(--dj-navy); }
+table.board td.col-owner.none { color: var(--muted); font-weight: 400; }
+table.board td.company, table.board th.company { position: sticky; left: 140px; z-index: 2; background: var(--surface); min-width: 220px; max-width: 300px; padding: 0 10px 0 6px; text-align: left; border-right: 1px solid var(--rule); }
+table.board thead th.col-type, table.board thead th.col-owner, table.board thead th.company { z-index: 4; }
+table.board thead tr.groups th.col-type { text-align: left; }
+table.board td.col-type .badge { padding: 0 5px; font-size: 10px; }
+table.board td.company .nm { display: block; font-size: var(--fs-13); font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 table.board td.heat { min-width: 86px; text-align: right; }
 .heat-in { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; padding: 3px 8px; height: var(--row-h); line-height: 1.15; }
 .heat-v { font-size: var(--fs-13); font-weight: 600; color: var(--ink); }
@@ -86,6 +80,11 @@ td.heat-na .heat-v { color: var(--muted); font-weight: 400; }
 table.board td.why { font-size: var(--fs-11); color: var(--muted); padding: 0 10px; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 table.board td.info { min-width: 60px; text-align: right; }
 table.board td.info.soon .heat-v { color: var(--warn); }
+/* 0 件・30 日以上ログインなし */
+table.board td.info.zero { background: var(--heat-n1); }
+table.board td.info.zero .heat-v { color: var(--heat-n2); font-weight: 700; }
+table.board td.info.zero .heat-s { color: var(--heat-n2); }
+.legend .sw.zero { background: var(--heat-n1); border-color: var(--heat-n2); }
 table.board td.info .heat-in { align-items: flex-end; }
 .board-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 2px 0; font-size: var(--fs-11); color: var(--muted); }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
