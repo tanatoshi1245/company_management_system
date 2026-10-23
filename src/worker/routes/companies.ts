@@ -12,6 +12,8 @@ import { addMonths, monthOf } from '../../shared/calendar/periods';
 import { asD1 } from '../d1/db';
 import { TargetsRepo } from '../d1/targetsRepo';
 import { SettingsRepo } from '../d1/settingsRepo';
+import { ScoutUnusedRepo } from '../d1/scoutUnusedRepo';
+import { overlayScoutUnused } from '../services/scoutUnusedService';
 import { AppMetaRepo } from '../d1/appMetaRepo';
 import type { CompanyDetailResponse } from '../../shared/schema/company';
 
@@ -37,8 +39,9 @@ companyRoutes.get('/companies/:id', async (c) => {
     throw e;
   }
   if (!res.core) throw new AppError('notFound', 404, '企業が見つかりません');
-  const [targets, settings] = db ? await Promise.all([new TargetsRepo(db).byCompany(id, addMonths(month, -13), addMonths(month, 3)), new SettingsRepo(db).get(id)]) : [[], null];
+  const [targets, settings, unused] = db ? await Promise.all([new TargetsRepo(db).byCompany(id, addMonths(month, -13), addMonths(month, 3)), new SettingsRepo(db).get(id), new ScoutUnusedRepo(db).byCompanyIncludingDeleted(id)]) : [[], null, []];
   const body: CompanyDetailResponse = mergeCompanyDetail(res.core, targets, settings, c.get('identity')?.email ?? null, intVar(c.env.BENCH_MIN_N, 5));
+  if (unused.length) body.scoutUnused = overlayScoutUnused(JSON.stringify(res.core.scoutUnused), unused);
   body.meta.cached = res.hit;
   return c.json(body, 200, { 'x-cache': res.hit ? 'HIT' : 'MISS', 'cache-control': 'private, no-store' });
 });

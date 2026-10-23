@@ -4,7 +4,7 @@ import { lazy, useSyncExternalStore, type ComponentType, type LazyExoticComponen
  * 小さなルータ（History API）。ルートは 6 つだけなのでライブラリは入れない。
  * 画面は React.lazy で分割（ルートごとに 1 チャンク）。
  */
-export type RouteKey = 'home' | 'company' | 'targets' | 'targetForm' | 'settings' | 'help';
+export type RouteKey = 'home' | 'company' | 'targets' | 'targetForm' | 'scoutUnused' | 'settings' | 'help';
 
 export interface PageProps {
   params: Record<string, string>;
@@ -25,13 +25,14 @@ function def(key: RouteKey, path: string): RouteDef {
   return { key, pattern: new RegExp(`^${re}/?$`), names };
 }
 
-export const ROUTES: RouteDef[] = [def('home', '/'), def('company', '/companies/:id'), def('targets', '/targets'), def('targetForm', '/targets/:id'), def('settings', '/settings'), def('help', '/help')];
+export const ROUTES: RouteDef[] = [def('home', '/'), def('company', '/companies/:id'), def('targets', '/targets'), def('targetForm', '/targets/:id'), def('scoutUnused', '/scout-unused'), def('settings', '/settings'), def('help', '/help')];
 
 export const PAGES: Record<RouteKey, LazyExoticComponent<ComponentType<PageProps>>> = {
   home: lazy(() => import('./features/home/HomePage')),
   company: lazy(() => import('./features/company/CompanyPage')),
   targets: lazy(() => import('./features/targets/TargetsListPage')),
   targetForm: lazy(() => import('./features/targets/TargetFormPage')),
+  scoutUnused: lazy(() => import('./features/scoutUnused/ScoutUnusedPage')),
   settings: lazy(() => import('./features/settings/SettingsPage')),
   help: lazy(() => import('./features/settings/HelpPage')),
 };

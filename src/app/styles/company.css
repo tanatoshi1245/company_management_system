@@ -73,3 +73,14 @@ table.unused td:nth-child(3) { color: var(--ink-soft); }
 .progress .fill.heat-p2 { background: var(--heat-p2); }
 .progress .fill.heat-na { background: var(--de-emphasis); }
 .progress .mark { position: absolute; top: -3px; width: 2px; height: 16px; background: var(--ink); }
+
+/* スカウト未利用の登録ページ */
+table.unused-reg td { vertical-align: top; padding-top: 6px; padding-bottom: 6px; }
+table.unused-reg td .nm { font-weight: 600; }
+table.unused-reg select.ctl { max-width: 360px; width: 100%; }
+table.unused-reg input.remarks { width: 100%; min-width: 220px; }
+table.unused-reg tr.dirty td { background: var(--surface-low); }
+table.unused-reg .status { margin-top: 4px; white-space: nowrap; }
+table.unused-reg .status .ok { color: var(--good); font-weight: 600; }
+.sheet-hint { margin-top: 2px; }
+.sheet-hint .btn { margin-left: 6px; }

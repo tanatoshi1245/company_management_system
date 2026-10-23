@@ -80,3 +80,19 @@ BEGIN
     """, src.ds, src.ds, FORMAT_DATE('%Y%m%d', src.from_date), FORMAT_DATE('%Y%m%d', run_date));
   END FOR;
 END;
+
+-- 4. アプリからのスカウト未利用登録（契約企業マネジメントシステムの登録ページが MERGE で書く。2026-10-23）--------------
+--    Worker 用 SA cms-bq-reader にこの表だけ roles/bigquery.dataEditor を付与する（docs/デプロイ手順.md）
+CREATE TABLE IF NOT EXISTS `bq-hgt.dwh.cms_scout_unused_app` (
+  company_id INT64 NOT NULL OPTIONS (description = 'companies.id'),
+  target_month DATE NOT NULL OPTIONS (description = '対象月（月初の日付）'),
+  unused_reason STRING OPTIONS (description = '未利用の理由（8 件の定型文のどれか）'),
+  remarks STRING OPTIONS (description = '補足（自由記述、500 文字まで）'),
+  sales_rep STRING OPTIONS (description = '登録時点の CS 担当（表示用）'),
+  company_name STRING OPTIONS (description = '登録時点の企業名（表示用）'),
+  updated_by STRING OPTIONS (description = '登録した人のメール'),
+  updated_at TIMESTAMP,
+  deleted BOOL OPTIONS (description = 'TRUE = 画面で削除された（マートは無視する）')
+)
+CLUSTER BY company_id
+OPTIONS (description = '契約企業マネジメントシステムの登録ページで CS が入力したスカウト未利用の理由・補足。企業 × 月で 1 行（MERGE）。シート取込の scout_unused_companies_monthly とは別。マート cms_company_master.scout_unused_json が両方を統合（同じ企業・月はこちらを優先）');

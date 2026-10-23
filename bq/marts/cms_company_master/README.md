@@ -37,12 +37,12 @@ status: active
 | sales_staff | STRING | active_companies.sales_staff（企業管理ツールの担当。ローマ字「姓 名」） |
 | cs_owner_email_default / cs_owner_name_default / owner_source | STRING | 既定の CS 担当（owner_source = sales_staff。名前は sales_staff そのまま、メールは「名の頭文字-姓@daijob.com」の規則で導出。姓だけの値は NULL）。DA（企業名に DaijobAGENT を含む企業）は BQ の担当データによらず名前 `DA`・メール NULL に固定。アプリの上書き（D1）が優先 |
 | active_jobs_now | INT64 | 当日の掲載求人（企業単位で set_id 重複排除） |
-| scout_unused_json | STRING | スカウト未利用の記録（`scout_unused_companies_monthly`。契約期間に入る月だけ）。JSON 配列 `[{month: 'YYYY-MM', reason, remarks}]` を月の降順。無ければ `[]`。Worker が JSON.parse して企業ページの「スカウト未利用状況」に出す |
+| scout_unused_json | STRING | スカウト未利用の記録。シート取込 `scout_unused_companies_monthly` とアプリの登録 `cms_scout_unused_app`（`deleted` 以外）を統合し、同じ企業・月はアプリを優先。契約期間に入る月だけ。JSON 配列 `[{month: 'YYYY-MM', reason, remarks, source: 'app' \| 'sheet'}]` を月の降順。無ければ `[]`。Worker が JSON.parse し、D1 の最新を重ねて企業ページの「スカウト未利用状況」に出す |
 | run_date / refreshed_at | DATE / TIMESTAMP | 生成日 |
 
 ## 元テーブル（依存するデータ）
 
-companies, company_profiles（最新スナップショット）, company_profiles_all, active_jobs, active_companies, scout_unused_companies_monthly, sf_contracts, sf_accounts, sf_opportunities, sf_users, cms_dim_industry_alias
+companies, company_profiles（最新スナップショット）, company_profiles_all, active_jobs, active_companies, scout_unused_companies_monthly, cms_scout_unused_app, sf_contracts, sf_accounts, sf_opportunities, sf_users, cms_dim_industry_alias
 
 ## 更新
 `bq/marts/scheduled_query.sql`（毎日 22:45 UTC = 07:45 JST）。生成ロジックの変更時は Worker の `src/worker/sql/` と `src/shared/schema/` を合わせ、`DATA_VERSION` を +1 する。

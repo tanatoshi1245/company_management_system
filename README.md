@@ -33,13 +33,15 @@ CS（カスタマーサクセス）向けの社内 Web アプリ。契約中企�
 | 4 | Cloudflare の Git 連携で Worker `company-management-system` を作る（Production branch = `main`、Deploy command = `npx wrangler deploy`） | Workers & Pages | 同 4 |
 | 5 | Secret 4 つを入れて Deploy、`/api/health` と curl 試験（未ログイン 302 / 401、gmail 403、他オリジン PUT 403）を行い結果を記入 | Cloudflare | 同 5〜6、[セキュリティチェックリスト](./docs/セキュリティチェックリスト.md) §2.3 |
 | 6 | 台帳（claude_analysis `04_アプリケーション/セキュリティ要件.md` §5.1 / §5.2）のキー ID・発行日を埋め、リリース 1 週間後に Workers Logs を確認 | claude_analysis | 同 7 |
+| 7 | **（2026-10-23 追加）スカウト未利用の登録ページ**: D1 に `0003_scout_unused.sql` を適用（`npx wrangler d1 migrations apply CMS_DB --remote`）し、Worker 用 SA に BigQuery の書き込み先 `dwh.cms_scout_unused_app` だけ `roles/bigquery.dataEditor` を付与（`bq add-iam-policy-binding --member=serviceAccount:cms-bq-reader@bq-hgt.iam.gserviceaccount.com --role=roles/bigquery.dataEditor bq-hgt:dwh.cms_scout_unused_app`）。付与前でも登録は D1 に保存され画面に反映するが、BigQuery には「未反映」になる（登録ページの「BQ に再同期」で後から反映できる） | Cloudflare D1 / Cloud Shell | [デプロイ手順](./docs/デプロイ手順.md) 3・8 |
 
 ## 画面
 
 | ルート | 画面 | 主な内容 |
 |---|---|---|
 | `/` | 契約企業ボード | KPI タイル（契約企業数・求人枠消化率・ペース遅れ・ログインなし・契約終了間近）→ 注目レーン → `担当=自分` などの絞り込み → **マトリクス・ヒートマップ**（利用状況 / 反応 / 選考 / 接点 × 企業）。右上で **業界比 | 目標比** を切替（再取得なし） |
-| `/companies/:id` | 企業詳細 | 契約タイムライン・担当・最終ログイン、求人枠 / スカウト枠の **ゲージ**（営業日ペースの期待値と業界中央値の印）、13 か月の推移（目標の破線・業界 p25〜p75 の帯）、誰にスカウトを送っているか（11 属性）、選考コホート（興味あり返信月 / 応募月 × 現ステータス）、目標との比較、注意点 |
+| `/companies/:id` | 企業詳細 | 契約タイムライン・担当・最終ログイン、当月の実績（ボードと同じ 8 項目 + 求人枠 / スカウト枠の **ゲージ**）、閲覧と応募の推移 / スカウト送信と返信の推移（1 軸 2 本の折れ線）、誰にスカウトを送っているか（8 属性）、スカウト未利用状況（シート取込 + アプリ登録）、目標との比較、注意点 |
+| `/scout-unused` | スカウト未利用の理由 | 月ごとに「契約中・送信 0 件・スカウト枠あり」の企業と営業担当を並べ、理由（プルダウン 8 件）と補足（500 文字）を登録。D1 に保存 → BigQuery `cms_scout_unused_app` に MERGE → 翌朝のマートで企業ページに統合（即時には D1 を重ねて表示） |
 | `/targets`, `/targets/:id` | 契約時の目標 | 一覧（達成率バー・未設定のみ・プラン既定値で一括登録）、企業別 12 か月グリッド（前月からコピー・既定値の適用・差分だけ保存・変更履歴）、企業の設定（担当上書き・枠の期間 / 上書き・メモ） |
 | `/settings`, `/help` | 設定・ヘルプ | データの鮮度、Worker 設定の有無、プラン別の既定目標、担当上書き一覧、キャッシュ破棄、指標の定義一覧 |
 
@@ -94,6 +96,8 @@ tests/                vitest（worker / shared / app / repo）。helpers/fakeD1.
 | PUT / DELETE /api/companies/:id/targets/:month、POST …/targets/copy、POST /api/targets/bulk-defaults | verified + 同一オリジン | 目標の登録・削除・コピー・一括既定値（更新 + 監査ログを 1 batch） |
 | GET / PUT /api/companies/:id/settings、GET /api/settings/overrides | session / verified | 企業設定（担当上書き・枠） |
 | GET / PUT /api/settings/plan-defaults | session / verified | プラン別の既定目標 |
+| GET /api/scout-unused?month= | session | その月の登録（D1）とシート取込の記録 |
+| PUT / DELETE /api/scout-unused/:companyId/:month、POST /api/scout-unused/sync | verified + 同一オリジン | スカウト未利用の理由・補足の登録・削除（D1 + 監査ログを 1 batch → BigQuery MERGE）、未反映の再同期 |
 | POST /api/admin/cache/bump | verified | Worker キャッシュの破棄（cache_epoch +1） |
 
 エラーは `{error, code, details?}`（code: noSession / notAllowed / authConfig / readOnly / csrf / badRequest / notFound / bq / noCredentials / storage / internal）。詳細は `src/worker/routes/README.md`。
