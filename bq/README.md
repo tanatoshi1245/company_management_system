@@ -54,6 +54,7 @@ companies / company_profiles(_all) / active_companies / active_jobs / scouts / s
 
 | 日付 | 変更 | スキャン | 反映 |
 |---|---|---|---|
+| 2026-10-23 | 社内用テストアカウント（5542 Daijob.com、8980 レジュメ更新自動リクエスト専用）を `companies_now` で除外。企業名に DaijobAGENT を含む企業は `company_type` を DA、CS 担当（`cs_owner_name_default`）を `DA`（メール NULL）に固定 | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 7 |
 | 2026-10-23 | 枠数（`scout_limit` / `job_posting_limit`）を `companies` の企業単位の値優先に変更（それまではプロファイル単位の MAX だけで、プロファイルが無い契約中 11 社が NULL、プロファイル側 0 の 8 社が 0 だった）。`dm_network_contract_candidates` の更新（`company_id` 付き 196 件）も同じ実行で反映 | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 6 |
 | 2026-10-23 | Network 契約（別管理）の企業を `companies_now` で除外（`dm_network_contract_candidates` の `company_id`（NULL 以外）に載る企業。契約中 5 社が対象外に） | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 5 |
 | 2026-10-23 | CS 担当の既定（`owner_source`）を `sf_account_owner` → `sales_staff`（企業管理ツール `active_companies.sales_staff`）に変更。メールは「名の頭文字-姓@daijob.com」の規則で導出（主要 CS 9 名は `sf_users` のメールと一致を確認） | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 4 |
