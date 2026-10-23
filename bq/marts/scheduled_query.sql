@@ -32,7 +32,8 @@ BEGIN
     --   （契約中 + 直近に終了 + 開始間近。ベンチマークの母集団のため過去月の契約企業も持つ）
     CREATE TEMP TABLE company_base AS
     WITH companies_now AS (
-      SELECT id AS company_id, internal_name, active_from, active_to, contract_from, contract_to,
+      -- companies.contract_from / contract_to は 2026-10-23 のリロードで列が無くなった（ETL のスキーマ変更）。下流の列は残して NULL にする
+      SELECT id AS company_id, internal_name, active_from, active_to, CAST(NULL AS DATE) AS contract_from, CAST(NULL AS DATE) AS contract_to,
              (active_from <= run_date AND run_date <= COALESCE(active_to, DATE '9999-12-31')) AS is_contracted_now,
              CASE
                WHEN active_from <= run_date AND run_date <= COALESCE(active_to, DATE '9999-12-31')
@@ -44,6 +45,8 @@ BEGIN
              END AS contract_state
       FROM `bq-hgt.dwh.companies`
       WHERE active_from IS NOT NULL
+        -- 掲載サイトに WAWW を含む企業はダッシュボードの対象外（表示も集計もしない。2026-10-23）
+        AND NOT REGEXP_CONTAINS(UPPER(IFNULL(publishing_sites, '')), 'WAWW')
         AND active_from <= DATE_ADD(run_date, INTERVAL 30 DAY)
         AND COALESCE(active_to, DATE '9999-12-31') >= window_start
         -- RA（4928 / 14508）・RDS（7080）の企業は契約企業として扱わない（CLAUDE.md §3）

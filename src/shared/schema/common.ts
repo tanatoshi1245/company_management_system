@@ -6,8 +6,9 @@ import { isYmd } from '../calendar/periods';
  * 応答の形・指標の式・ヒートマップの閾値を変えたら必ず +1 する。
  *   1: 初版（M0）
  *   2: 企業種別に 派遣 を追加（紹介（派遣含む）→ 紹介 / 派遣）、ボードの列を実数表示に変更（2026-10-23）
+ *   3: companies.publishing_sites に WAWW を含む企業をマートから除外（2026-10-23）
  */
-export const DATA_VERSION = 2;
+export const DATA_VERSION = 3;
 
 export const MonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'YYYY-MM で指定してください');
 export const YmdSchema = z.string().refine((s) => isYmd(s), 'YYYY-MM-DD で指定してください');

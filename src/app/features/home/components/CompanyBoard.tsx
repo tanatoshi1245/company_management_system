@@ -8,7 +8,7 @@ import { COMPANY_TYPE_SHORT, CONTRACT_STATE_LABEL, surname, type ContractState }
 import { navigate } from '../../../router';
 import { prefetch } from '../../../lib/useResource';
 import { CompanyDetailResponseSchema } from '../../../../shared/schema/company';
-import { fmtInt, fmtMd, fmtNum, fmtRate } from '../../../lib/format';
+import { fmtInt, fmtMd, fmtRate } from '../../../lib/format';
 
 export const PAGE_SIZE = 200;
 
@@ -22,14 +22,11 @@ function cellText(col: BoardColumn, s: ScoredCompany): { value: string; secondar
     case 'jobs':
       return { value: `${fmtInt(c.m.jobs)} / ${c.limits.job === null ? '–' : fmtInt(c.limits.job)}`, secondary: null };
     case 'views':
-      return { value: fmtInt(c.m.views), secondary: s.values.views_per_active_job === null ? null : `${fmtNum(s.values.views_per_active_job, 0)} / 求人` };
+      return { value: fmtInt(c.m.views), secondary: null };
     case 'apps':
-      return { value: fmtInt(c.m.apps), secondary: s.values.apps_per_active_job === null ? null : `${fmtNum(s.values.apps_per_active_job, 1)} / 求人` };
-    case 'sent': {
-      const util = s.pace.util === null ? null : fmtRate(s.pace.util);
-      const exp = s.pace.expected === null ? null : `期待 ${fmtInt(s.pace.expected)}`;
-      return { value: `${fmtInt(c.m.sent)} / ${c.limits.scout === null ? '–' : fmtInt(c.limits.scout)}`, secondary: [util, exp].filter(Boolean).join('・') || null };
-    }
+      return { value: fmtInt(c.m.apps), secondary: null };
+    case 'sent':
+      return { value: `${fmtInt(c.m.sent)} / ${c.limits.scout === null ? '–' : fmtInt(c.limits.scout)}`, secondary: null };
     case 'intReply':
       return { value: fmtInt(c.m.intReply), secondary: c.m.int !== c.m.intReply ? `送信月基準 ${fmtInt(c.m.int)}` : null };
     case 'inSel':
@@ -57,7 +54,7 @@ function isAlert(col: BoardColumn, s: ScoredCompany): boolean {
 function titleOf(col: BoardColumn, s: ScoredCompany): string {
   const { value, secondary } = cellText(col, s);
   const lines = [`${col.label}: ${value}${secondary ? `（${secondary}）` : ''}`];
-  if (col.key === 'sent') lines.push(`ペース: ${PACE_LABEL[s.pace.status]}`);
+  if (col.key === 'sent') lines.push(`消化率 ${s.pace.util === null ? '–' : fmtRate(s.pace.util)}${s.pace.expected === null ? '' : `・期待 ${fmtInt(s.pace.expected)}`}・ペース: ${PACE_LABEL[s.pace.status]}`);
   if (col.key === 'intReply') lines.push('その月に「興味あり」返信があったスカウト数（送信月は問わない）');
   if (col.key === 'login') lines.push(`直近 30 日のログイン日数 ${fmtInt(s.c.login.days30)} 日。CT 画面（2026-05-15 以降）`);
   const def = col.metric ? METRIC_BY_KEY[col.metric] : null;
