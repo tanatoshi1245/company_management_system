@@ -1,0 +1,30 @@
+/* 目標フォーム・一覧・設定 */
+.filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+.tgrid th, .tgrid td { padding: 4px 6px; }
+.tgrid th.sticky-col, .tgrid td.sticky-col { position: sticky; left: 0; background: var(--surface); z-index: 1; text-align: left; white-space: nowrap; min-width: 120px; }
+.tgrid thead th { vertical-align: top; }
+.tgrid thead th > div { margin-bottom: 2px; }
+.tgrid th.cur, .tgrid td.cur { background: var(--surface-low); }
+.tgrid th.dirty { color: var(--dj-gold-deep); }
+.tgrid tr.group-start th, .tgrid tr.group-start td { border-top: 2px solid var(--rule-strong); }
+.tgrid input.ctl.num { width: 68px; min-width: 0; }
+.tgrid input.ctl.note { width: 110px; min-width: 0; font-size: var(--fs-11); }
+input.ctl.invalid { border-color: var(--heat-n2); background: #fbeeed; }
+.btn.xs { padding: 1px 4px; font-size: var(--fs-11); line-height: 1; }
+.save-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--rule); position: sticky; bottom: 0; background: var(--surface); }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 16px; }
+.field.col { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.field.col > span { font-size: var(--fs-11); font-weight: 700; color: var(--muted); letter-spacing: 0.04em; }
+.field.col.wide { grid-column: 1 / -1; }
+.form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+.err { color: var(--heat-n2); }
+.fieldset { border: 1px solid var(--rule); padding: 8px 10px; margin: 10px 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.fieldset legend { font-size: var(--fs-11); font-weight: 700; color: var(--muted); padding: 0 4px; }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-13); }
+.tpb { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+table.targets td { white-space: nowrap; }
+.co-link { font-weight: 600; color: var(--heading); text-decoration: none; }
+.co-link:hover { text-decoration: underline; }
+.plan-defaults input.ctl.num { width: 64px; min-width: 0; }
+.def-row dt { font-weight: 700; margin-top: 8px; }
+.defs .def-row { display: contents; }

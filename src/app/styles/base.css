@@ -1,0 +1,25 @@
+/* リセット・本文・フォーカス・スケルトン */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--page); color: var(--ink); font-family: var(--font-jp); font-size: var(--fs-13); line-height: var(--lh-body); -webkit-font-smoothing: antialiased; }
+#root { min-height: 100vh; }
+a { color: var(--link); }
+button, select, input, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+button { cursor: pointer; }
+h1, h2, h3, h4 { margin: 0; font-weight: 700; color: var(--heading); line-height: var(--lh-tight); }
+p { margin: 0; }
+.num, .tabular { font-family: var(--font-body); font-variant-numeric: tabular-nums; }
+:focus-visible { outline: var(--focus); outline-offset: 1px; }
+.muted { color: var(--muted); }
+.small { font-size: var(--fs-12); }
+.tiny { font-size: var(--fs-11); }
+.nowrap { white-space: nowrap; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
+.visually-dim { opacity: 0.55; transition: opacity var(--motion); }
+
+/* スケルトン: 面色のブロックが 1.2 秒で明滅する（流れる光沢は使わない） */
+.skeleton { background: var(--surface-sunken); border-radius: var(--radius); animation: sk-pulse 1.2s ease-in-out infinite; }
+.skeleton.text { height: 12px; margin: 6px 0; }
+.skeleton.tile { height: 84px; }
+.skeleton.row { height: var(--row-h); margin-bottom: var(--cell-gap); }
+@keyframes sk-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }

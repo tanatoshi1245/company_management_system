@@ -1,0 +1,52 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Cloudflare ダッシュボードで作る Worker の名前と一致させる（Git 連携はダッシュボード側の名前を優先する）
+  "name": "company-management-system",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // `npx wrangler deploy` だけでビルドから走るようにする（Cloudflare の Git 連携の既定コマンドがこれ）
+  "build": { "command": "npm run build", "watch_dir": "src" },
+  // D1（目標・企業設定・監査ログ）。Workers Builds は D1 を自動作成できないので、ダッシュボードで作って Database ID をここに書く（docs/デプロイ手順.md）
+  "d1_databases": [
+    { "binding": "CMS_DB", "database_name": "company-management-system", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "d1/migrations" }
+  ],
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  // ダッシュボードで設定した Secret（BQ_SA_KEY / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / SESSION_SECRET）をデプロイで消さない
+  "keep_vars": true,
+  "vars": {
+    "BQ_PROJECT": "bq-hgt",
+    "BQ_LOCATION": "asia-northeast1",
+    "BQ_MOCK": "0",
+    "CACHE_TTL_SEC": "0",
+    // ドメイン認証: ログインしたメールがこのドメインでなければ 403（カンマ区切りで複数可。@ は付けない）
+    "ALLOWED_EMAIL_DOMAINS": "daijob.com",
+    // CS 担当の既定の出所（マートの owner_source と同じ値）: sf_account_owner / sf_contract_owner / sales_staff
+    "OWNER_SOURCE": "sf_account_owner",
+    "BENCH_MIN_N": "5",
+    "APP_ENV": "production"
+  },
+  // 非本番ブランチ（PR）の Workers Builds は `wrangler preview` で動き、この previews ブロックが無いと失敗する。
+  // プレビューには Secret が無いので BQ_MOCK=1（サンプルデータ・読み取り専用）で動かし、D1 もプレビュー用を使う
+  "previews": {
+    "vars": {
+      "BQ_PROJECT": "bq-hgt",
+      "BQ_LOCATION": "asia-northeast1",
+      "BQ_MOCK": "1",
+      "CACHE_TTL_SEC": "60",
+      "ALLOWED_EMAIL_DOMAINS": "daijob.com",
+      "OWNER_SOURCE": "sf_account_owner",
+      "BENCH_MIN_N": "5",
+      "APP_ENV": "preview"
+    },
+    "d1_databases": [
+      { "binding": "CMS_DB", "database_name": "company-management-system-preview", "database_id": "00000000-0000-0000-0000-000000000001", "migrations_dir": "d1/migrations" }
+    ]
+  },
+  "observability": { "enabled": true }
+}
