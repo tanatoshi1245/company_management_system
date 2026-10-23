@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { BoardResponse } from '../../../shared/schema/board';
-import { attentionLanes, filterCompanies, kpiStrip, sortCompanies, type BoardFilters, type KpiTile, type Lanes } from '../../../shared/metrics/board';
+import { filterCompanies, kpiStrip, ownerKey, sortCompanies, type BoardFilters, type KpiTile } from '../../../shared/metrics/board';
+import { surname } from '../../../shared/labels';
 import { makeContext, scoreCompany, type BenchMode, type ScoredCompany } from '../../../shared/metrics/score';
 
 export interface HomeModel {
@@ -8,7 +9,8 @@ export interface HomeModel {
   filtered: ScoredCompany[];
   sorted: ScoredCompany[];
   kpis: KpiTile[];
-  lanes: Lanes;
+  /** CS 担当の一覧（key = ownerKey、label = 苗字、name = フルネーム） */
+  owners: { key: string; label: string; name: string; count: number }[];
   industries: { key: string; count: number }[];
   types: { key: string; count: number }[];
   mineCount: number;
@@ -35,7 +37,16 @@ export function useHomeModel(board: BoardResponse | null, filters: BoardFilters,
       filtered,
       sorted,
       kpis: kpiStrip(filtered, mode, board.meta),
-      lanes: attentionLanes(filtered),
+      owners: (() => {
+        const m = new Map<string, { key: string; label: string; name: string; count: number }>();
+        for (const s of scored) {
+          const key = ownerKey(s.c);
+          const cur = m.get(key);
+          if (cur) cur.count += 1;
+          else m.set(key, { key, label: surname(s.c.owner.name) ?? s.c.owner.email ?? key, name: s.c.owner.name ?? s.c.owner.email ?? key, count: 1 });
+        }
+        return Array.from(m.values()).sort((a, b) => (a.key === '(未設定)' ? 1 : b.key === '(未設定)' ? -1 : b.count - a.count || a.label.localeCompare(b.label, 'ja')));
+      })(),
       industries: count((s) => s.c.ind),
       types: count((s) => s.c.type),
       mineCount: scored.filter((s) => s.c.isMine).length,

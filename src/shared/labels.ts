@@ -1,8 +1,15 @@
 /** 画面の日本語ラベルと並び順（マートの値 → 表示）。値そのものはマート README を参照 */
 
-export const COMPANY_TYPES = ['DA', 'RPO', '直接', '紹介（派遣含む）', '不明'] as const;
+export const COMPANY_TYPES = ['DA', 'RPO', '直接', '紹介', '派遣', '不明'] as const;
 export type CompanyType = (typeof COMPANY_TYPES)[number];
-export const COMPANY_TYPE_SHORT: Record<string, string> = { DA: 'DA', RPO: 'RPO', 直接: '直接', '紹介（派遣含む）': '紹介', 不明: '不明' };
+export const COMPANY_TYPE_SHORT: Record<string, string> = { DA: 'DA', RPO: 'RPO', 直接: '直接', 紹介: '紹介', 派遣: '派遣', '紹介（派遣含む）': '紹介', 不明: '不明' };
+
+/** 担当の表示名（苗字だけ）。「田辺 真美」→「田辺」、「JUNG KYOUNGJOON」→「JUNG」。空白が無ければそのまま */
+export function surname(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const t = name.trim().split(/[\s\u3000]+/)[0];
+  return t || null;
+}
 
 export const CONTRACT_STATES = ['active', 'ending_30d', 'upcoming', 'ended_recent', 'ended'] as const;
 export type ContractState = (typeof CONTRACT_STATES)[number];

@@ -7,7 +7,7 @@ import { between, pick, seeded } from './random';
  * ペース遅れ・ログインなし・契約終了間近・目標未設定が必ず混ざるようにしてある
  */
 const INDUSTRIES = ['通信・情報サービス関連', 'ソフトウェアベンダー', 'ITコンサルティング', '人材紹介会社', '商社・卸', '教育・学校', '旅行・ホテル・レジャー・外食', '機械メーカー'];
-const TYPES = ['直接', '直接', '直接', '直接', '直接', '直接', '紹介（派遣含む）', '紹介（派遣含む）', 'RPO', 'DA'];
+const TYPES = ['直接', '直接', '直接', '直接', '直接', '直接', '紹介', '派遣', 'RPO', 'DA'];
 const PLANS = ['DJ', 'DJ_成果報酬', 'RPO', 'WA', 'DJ_成果報酬（採用成功）'];
 const OWNERS: { email: string; name: string; position: string }[] = [
   { email: 'preview@daijob.com', name: 'サンプル 利用者', position: 'CS' },

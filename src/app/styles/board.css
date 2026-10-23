@@ -1,5 +1,5 @@
 /* KPI タイル */
-.kpi-strip { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--s3); margin-bottom: var(--s4); }
+.kpi-strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--s3); margin-bottom: var(--s4); }
 @media (max-width: 1100px) { .kpi-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .kpi { background: var(--surface); border: 1px solid var(--rule); padding: 10px 14px 12px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-width: 0; transition: border-color var(--motion), background-color var(--motion); }
@@ -60,13 +60,14 @@ table.board td.company.h-alert { border-left-color: var(--bad); }
 table.board td.company.h-watch { border-left-color: var(--warn); }
 table.board td.company.h-good { border-left-color: var(--good); }
 table.board td.company.h-none { border-left-color: var(--de-emphasis); }
-.co-strip { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 8px; align-items: center; }
+.co-strip { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .co-strip .nm { font-size: var(--fs-13); font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .co-strip .meta { font-size: var(--fs-11); color: var(--muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
 .co-strip .meta .badge { padding: 0 5px; font-size: 10px; }
 .co-strip .meta .days { font-family: var(--font-body); font-variant-numeric: tabular-nums; }
 .co-strip .meta .days.soon { color: var(--warn); font-weight: 700; }
-.co-strip .ava { grid-row: 1 / span 2; width: 26px; height: 26px; border-radius: 50%; background: var(--surface-sunken); color: var(--ink-soft); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; letter-spacing: 0.02em; }
+.co-strip .own { color: var(--ink); font-weight: 600; max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
+.co-strip .ava { width: 20px; height: 20px; border-radius: 50%; flex: 0 0 auto; background: var(--surface-sunken); color: var(--ink-soft); font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; letter-spacing: 0.02em; }
 .co-strip .ava.mine { background: var(--dj-navy); color: #fff; }
 .co-strip .ava.none { background: transparent; border: 1px dashed var(--rule-strong); color: var(--muted); }
 table.board td.heat { min-width: 86px; text-align: right; }
@@ -84,6 +85,7 @@ td.heat-n2 .heat-v, td.heat-p2 .heat-v, td.heat-n2 .heat-s, td.heat-p2 .heat-s, 
 td.heat-na .heat-v { color: var(--muted); font-weight: 400; }
 table.board td.why { font-size: var(--fs-11); color: var(--muted); padding: 0 10px; white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 table.board td.info { min-width: 60px; text-align: right; }
+table.board td.info.soon .heat-v { color: var(--warn); }
 table.board td.info .heat-in { align-items: flex-end; }
 .board-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 2px 0; font-size: var(--fs-11); color: var(--muted); }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }

@@ -50,6 +50,12 @@ companies / company_profiles(_all) / active_companies / active_jobs / scouts / s
 | 突合（`dmt_company_daily` 当月値） | 0.6 MB | 契約中 391 社のうち RA/RDS 2 社（本マートでは除外）以外は送信・興味あり・応募・閲覧が完全一致。掲載求人数は 29 社で ±数件（dmt の 07:30 時点と当日のジョブ更新差。同じ式で再計算すると一致） |
 | データ品質 | – | SF 結合 330 / 391、既定の担当あり 330（CS 232）、業種なし 6、枠なし 13、プラン名あり 371 |
 
+## 変更の記録
+
+| 日付 | 変更 | スキャン | 反映 |
+|---|---|---|---|
+| 2026-10-23 | `cms_company_master.company_type` の `紹介（派遣含む）` を `紹介` / `派遣` に分割（`company_profiles.company_type = '派遣'` を独立）。ベンチマークの種別群も同じ値で再計算 | 手動実行 919.5 MB | スケジュールドクエリ（設定 ID 上記）を Data Transfer API の PATCH で差し替え済み。`DATA_VERSION` 2 |
+
 ## 手元での検証（claude_analysis の認証キーが必要）
 
 ```bash
