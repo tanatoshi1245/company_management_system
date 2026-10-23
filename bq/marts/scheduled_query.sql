@@ -52,8 +52,8 @@ BEGIN
         AND NOT REGEXP_CONTAINS(UPPER(IFNULL(publishing_sites, '')), 'WAWW')
         -- Network 契約（別管理）の企業はダッシュボードの対象外（dm_network_contract_candidates に company_id があるもの。2026-10-23）
         AND id NOT IN (SELECT company_id FROM `bq-hgt.dwh.dm_network_contract_candidates` WHERE company_id IS NOT NULL)
-        -- 社内用テストアカウントは対象外（5542 = Daijob.com、8980 = レジュメ更新自動リクエスト専用。2026-10-23）
-        AND id NOT IN (5542, 8980)
+        -- 社内用テストアカウントは対象外（5542 = Daijob.com、8980 = レジュメ更新自動リクエスト専用、7277 = Daijob Resume Search (Working Abroad Scout)。2026-10-23）
+        AND id NOT IN (5542, 8980, 7277)
         AND NOT REGEXP_CONTAINS(IFNULL(internal_name, ''), r'レジュメ更新自動リクエスト専用')
         AND active_from <= DATE_ADD(run_date, INTERVAL 30 DAY)
         AND COALESCE(active_to, DATE '9999-12-31') >= window_start
