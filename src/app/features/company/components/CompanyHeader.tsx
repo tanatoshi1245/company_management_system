@@ -51,15 +51,15 @@ export function CompanyHeader({ d, onMonth, onEditOwner }: { d: CompanyDetailRes
           <span className="k">担当 CS</span>
           <span className="v">
             {c.owner.name ?? <span className="muted">未設定</span>}
-            {c.owner.src === 'override' ? <span className="muted small"> （画面で上書き。SF: {c.sfOwnerName ?? '–'}）</span> : c.owner.src !== 'none' ? <span className="muted small"> （{OWNER_SOURCE_LABEL[c.owner.src] ?? c.owner.src}{x.sfAccountOwner.position ? `・${x.sfAccountOwner.position}` : ''}）</span> : null}
+            {c.owner.src === 'override' ? <span className="muted small"> （画面で上書き。既定: {c.salesStaff ?? '–'}）</span> : c.owner.src !== 'none' ? <span className="muted small"> （{OWNER_SOURCE_LABEL[c.owner.src] ?? c.owner.src}{c.owner.src === 'sf_account_owner' && x.sfAccountOwner.position ? `・${x.sfAccountOwner.position}` : ''}）</span> : null}
             <button type="button" className="btn ghost sm" onClick={onEditOwner} title="担当を上書き">
               <Icon name="edit" size={14} /> 変更
             </button>
           </span>
         </div>
         <div className="fact">
-          <span className="k">営業担当（Daijob）</span>
-          <span className="v">{c.salesStaff ?? <span className="muted">未設定</span>}</span>
+          <span className="k">SF 取引先の所有者</span>
+          <span className="v">{c.sfOwnerName ?? <span className="muted">未設定</span>}{x.sfAccountOwner.position ? <span className="muted small">（{x.sfAccountOwner.position}）</span> : null}</span>
         </div>
         <div className="fact">
           <span className="k">最終ログイン（CT）</span>

@@ -124,7 +124,7 @@ export function mockCompanyMaster(today = todayJst()): Row[] {
       sales_staff: c.owner ? c.owner.name.split(' ').reverse().join(' ') : '未設定',
       cs_owner_email_default: c.owner?.email ?? null,
       cs_owner_name_default: c.owner?.name ?? null,
-      owner_source: 'sf_account_owner',
+      owner_source: 'sales_staff',
       active_jobs_now: Math.min(c.jobLimit ?? 12, Math.round((c.jobLimit ?? 12) * c.activity)),
       run_date: today,
     };

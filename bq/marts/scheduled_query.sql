@@ -14,7 +14,7 @@ BEGIN
   DECLARE prev_month DATE DEFAULT DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 1 MONTH);
   DECLARE window_start DATE DEFAULT DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 13 MONTH);  -- 13 か月 + 当月
   DECLARE fact_start DATE DEFAULT DATE_SUB(DATE_TRUNC(CURRENT_DATE('Asia/Tokyo'), MONTH), INTERVAL 25 MONTH);    -- 契約累計スカウト用
-  DECLARE owner_source STRING DEFAULT 'sf_account_owner';   -- 'sf_account_owner' | 'sf_contract_owner' | 'sales_staff'（Worker の OWNER_SOURCE と合わせる）
+  DECLARE owner_source STRING DEFAULT 'sales_staff';   -- 'sales_staff'（企業管理ツール active_companies.sales_staff。2026-10-23〜） | 'sf_account_owner' | 'sf_contract_owner'（Worker の OWNER_SOURCE と合わせる）
   DECLARE scout_limit_period STRING DEFAULT 'month';         -- スカウト枠の既定の期間（企業ごとの切替は D1 company_settings）
   DECLARE ga4_datasets ARRAY<STRING> DEFAULT ['analytics_258261950', 'analytics_553479599'];  -- 旧CT / 新CT
   DECLARE login_backfill_days INT64 DEFAULT 3;               -- GA4 は 1〜2 日遅れて届くので直近 3 日を取り直す
@@ -164,8 +164,17 @@ BEGIN
       QUALIFY ROW_NUMBER() OVER (PARTITION BY Id ORDER BY recorded_on DESC, LastModifiedDate DESC) = 1
     ),
     active_companies_latest AS (
-      SELECT company_id, sales_staff FROM `bq-hgt.dwh.active_companies`
-      QUALIFY ROW_NUMBER() OVER (PARTITION BY company_id ORDER BY recorded_on DESC NULLS LAST) = 1
+      -- sales_staff はローマ字「姓 名」（例: Tanabe Mami）。社内メールの規則「名の頭文字-姓@daijob.com」でメールを導出し、
+      -- 「担当=自分」（ログインメールとの一致）に使う。姓だけの値はメール NULL
+      SELECT company_id, sales_staff,
+             IF(ARRAY_LENGTH(name_parts) >= 2,
+                SUBSTR(name_parts[OFFSET(1)], 1, 1) || '-' || name_parts[OFFSET(0)] || '@daijob.com', NULL) AS sales_staff_email
+      FROM (
+        SELECT company_id, NULLIF(TRIM(sales_staff), '') AS sales_staff,
+               SPLIT(REGEXP_REPLACE(LOWER(TRIM(IFNULL(sales_staff, ''))), r'\s+', ' '), ' ') AS name_parts
+        FROM `bq-hgt.dwh.active_companies`
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY company_id ORDER BY recorded_on DESC NULLS LAST) = 1
+      )
     )
     SELECT c.company_id,
            COALESCE(ci.company_name, c.internal_name) AS company_name,
@@ -205,7 +214,7 @@ BEGIN
            ua.Name AS sf_account_owner_name, ua.email AS sf_account_owner_email, ua.Position__c AS sf_account_owner_position, ua.IsActive AS sf_account_owner_active,
            uc.Name AS sf_contract_owner_name, uc.email AS sf_contract_owner_email, uc.Position__c AS sf_contract_owner_position, uc.IsActive AS sf_contract_owner_active,
            ac.sales_staff,
-           CASE owner_source WHEN 'sf_account_owner' THEN ua.email WHEN 'sf_contract_owner' THEN uc.email ELSE NULL END AS cs_owner_email_default,
+           CASE owner_source WHEN 'sf_account_owner' THEN ua.email WHEN 'sf_contract_owner' THEN uc.email ELSE ac.sales_staff_email END AS cs_owner_email_default,
            CASE owner_source WHEN 'sf_account_owner' THEN ua.Name WHEN 'sf_contract_owner' THEN uc.Name ELSE ac.sales_staff END AS cs_owner_name_default,
            owner_source,
            IFNULL(aj.n, 0) AS active_jobs_now

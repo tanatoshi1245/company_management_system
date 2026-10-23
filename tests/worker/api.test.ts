@@ -28,7 +28,7 @@ describe('Worker API（モック）', () => {
     expect(body.bizDays.elapsed).toBeLessThanOrEqual(body.bizDays.total);
     expect(body.caveats.length).toBeGreaterThan(5);
     expect(body.caveats.map((c) => c.id)).toContain('status_current_only');
-    expect(body.ownerSource).toBe('sf_account_owner');
+    expect(body.ownerSource).toBe('sales_staff');
     expect(body.mock).toBe(true);
   });
 

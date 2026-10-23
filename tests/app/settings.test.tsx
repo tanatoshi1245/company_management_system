@@ -18,7 +18,7 @@ async function setup() {
   const core = await loadBoardCore(new MockBqClient(), month, refresh);
   const board = mergeBoard(core, new Map(), new Map(), 'cs@daijob.com', 5);
   const me = { email: 'cs@daijob.com', name: 'テスト', verified: true, authMode: 'google', mock: true, ownerUserId: null, overrideCompanyIds: [], canEdit: true };
-  const meta = { dataVersion: refresh.dataVersion, dataDate: refresh.dataDate, refreshedAt: refresh.refreshedAt, refreshStatus: 'ok', asOf: today, month, bizDays: monthProgress(month, refresh.dataDate), ownerSource: 'sf_account_owner', scoutLimitPeriodDefault: 'month', benchMinN: 5, login: { availableFrom: '2026-05-15' }, caveats: CAVEATS, holidaysVersion: '2026-10', dataSchemaVersion: 1, mock: true };
+  const meta = { dataVersion: refresh.dataVersion, dataDate: refresh.dataDate, refreshedAt: refresh.refreshedAt, refreshStatus: 'ok', asOf: today, month, bizDays: monthProgress(month, refresh.dataDate), ownerSource: 'sales_staff', scoutLimitPeriodDefault: 'month', benchMinN: 5, login: { availableFrom: '2026-05-15' }, caveats: CAVEATS, holidaysVersion: '2026-10', dataSchemaVersion: 1, mock: true };
   const plans: Record<string, Record<string, number>> = { DJ: { scout_sent: 100 } };
   const calls: { method: string; url: string; body?: unknown }[] = [];
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

@@ -15,7 +15,7 @@ status: active
 | 画面要素 | API | マート.列 | BQ 元テーブル |
 |---|---|---|---|
 | 企業名・種別・業種・プラン・契約状態・契約タイムライン | `GET /api/board?month=` | `cms_company_master.company_name / company_type / industry / plan_name / contract_state / active_from / active_to / days_*` | companies, company_profiles, sf_contracts, sf_accounts |
-| 担当（苗字）・`担当=自分`・CS 担当フィルタ | 同上 + D1 `company_settings` | `cs_owner_email_default / cs_owner_name_default` | sf_accounts.OwnerId → sf_users |
+| 担当（苗字）・`担当=自分`・CS 担当フィルタ | 同上 + D1 `company_settings` | `cs_owner_email_default / cs_owner_name_default`（既定は企業管理ツールの `sales_staff`） | active_companies.sales_staff |
 | 掲載 / 枠、送信 / 枠（分数） | 同上 | `cms_company_monthly.active_jobs_eom / scout_sent`, `cms_company_master.job_posting_limit / scout_limit` | job_publish_history, jobs_all, scouts, companies |
 | 閲覧・応募・返信（当月、返信月軸） | 同上 | `job_views / applications / interested_by_reply_month` | member_job_detail_views, member_applications, scouts × scout_histories |
 | 選考中・採用 | 同上 | `in_selection / hires` | member_applications.status, scouts |

@@ -26,8 +26,8 @@
     "CACHE_TTL_SEC": "0",
     // ドメイン認証: ログインしたメールがこのドメインでなければ 403（カンマ区切りで複数可。@ は付けない）
     "ALLOWED_EMAIL_DOMAINS": "daijob.com",
-    // CS 担当の既定の出所（マートの owner_source と同じ値）: sf_account_owner / sf_contract_owner / sales_staff
-    "OWNER_SOURCE": "sf_account_owner",
+    // CS 担当の既定の出所（マートの owner_source と同じ値）: sales_staff（企業管理ツール）/ sf_account_owner / sf_contract_owner
+    "OWNER_SOURCE": "sales_staff",
     "BENCH_MIN_N": "5",
     "APP_ENV": "production"
   },
@@ -40,7 +40,7 @@
       "BQ_MOCK": "1",
       "CACHE_TTL_SEC": "60",
       "ALLOWED_EMAIL_DOMAINS": "daijob.com",
-      "OWNER_SOURCE": "sf_account_owner",
+      "OWNER_SOURCE": "sales_staff",
       "BENCH_MIN_N": "5",
       "APP_ENV": "preview"
     },

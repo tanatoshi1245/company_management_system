@@ -12,6 +12,6 @@ export const CAVEATS: readonly Caveat[] = [
   { id: 'sf_draft', text: 'Salesforce の契約は 49% がドラフト。契約中の判定は Daijob 側の契約期間を正とし、SF のシグナルは参考表示', doc: '00_セマンティックレイヤー/用語集.md' },
   { id: 'member_attr_current', text: 'スカウト対象の会員属性は送信時点ではなく現在のプロフィール', doc: '00_セマンティックレイヤー/既知の課題.md' },
   { id: 'industry_fallback', text: '業種は company_profiles.industry を優先し、無ければ Salesforce の業種（表記ゆれは alias で吸収）', doc: 'docs/指標定義.md' },
-  { id: 'owner_source', text: 'CS 担当の既定は Salesforce 取引先の所有者。画面での上書きが優先する', doc: 'docs/指標定義.md' },
+  { id: 'owner_source', text: 'CS 担当の既定は企業管理ツール（active_companies.sales_staff）の担当。「担当=自分」の判定メールは「名の頭文字-姓@daijob.com」の規則で導出。画面での上書きが優先する', doc: 'docs/指標定義.md' },
   { id: 'benchmark_small_n', text: '同業種・同種別の企業が 5 社未満のときは上位の群（業種全体／全体）の中央値で代替', doc: 'docs/指標定義.md' },
 ];
