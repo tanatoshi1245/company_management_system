@@ -54,6 +54,8 @@ companies / company_profiles(_all) / active_companies / active_jobs / scouts / s
 
 | 日付 | 変更 | スキャン | 反映 |
 |---|---|---|---|
+| 2026-10-23 | `companies` から `contract_from` / `contract_to` 列が消えた（ETL のスキーマ変更。同日 09:14 UTC の手動実行で `Unrecognized name: contract_from`）ため、`companies_now` で `CAST(NULL AS DATE)` に置換。マートの列 `contract_from` / `contract_to` は NULL になる（画面の SF 契約期間の表示には影響なし） | – | 同上 |
+| 2026-10-23 | `companies.publishing_sites` に `WAWW` を含む企業を `companies_now` で除外（ボード・企業詳細・KPI・ベンチマーク母集団すべてから外れる） | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 3 |
 | 2026-10-23 | `cms_company_master.company_type` の `紹介（派遣含む）` を `紹介` / `派遣` に分割（`company_profiles.company_type = '派遣'` を独立）。ベンチマークの種別群も同じ値で再計算 | 手動実行 919.5 MB | スケジュールドクエリ（設定 ID 上記）を Data Transfer API の PATCH で差し替え済み。`DATA_VERSION` 2 |
 
 ## 手元での検証（claude_analysis の認証キーが必要）

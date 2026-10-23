@@ -71,6 +71,8 @@ describe('ホーム（ボード）', () => {
     expect(first.querySelector('td.col-type .badge')).toBeTruthy();
     expect(first.querySelector('td.col-owner')!.textContent!.trim().split(/[\s\u3000]/).length).toBe(1);
     expect(first.querySelector('td[data-col="jobs"]')!.textContent).toMatch(/^\d[\d,]* \/ (\d[\d,]*|–)/);
+    // 送信 / 閲覧 / 応募 には副情報（消化率・期待・/求人）を出さない
+    for (const col of ['sent', 'views', 'apps']) expect(table.querySelectorAll(`td[data-col="${col}"] .heat-s`).length).toBe(0);
     // ヒートマップの色は無く、0 件 / 30 日以上ログインなし だけが赤
     expect(table.querySelectorAll('td.heat, td[data-score]').length).toBe(0);
     const reds = Array.from(table.querySelectorAll('td.zero'));
