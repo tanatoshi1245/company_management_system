@@ -9,7 +9,7 @@ status: active
 # d1 — ユーザー入力データ（Cloudflare D1）
 
 ## 役割
-BQ のデータは持たない。目標（company_targets）・企業設定（company_settings: 担当上書き・枠の期間/上書き・メモ）・監査ログ（audit_log）・app_meta（cache_epoch）・プラン別既定目標（plan_target_defaults）・スカウト未利用の理由・補足（scout_unused_entries。正はここ、BigQuery `cms_scout_unused_app` へは MERGE で写し `bq_synced_at` で反映状態を持つ。2026-10-23 の `0003_scout_unused.sql`）。
+BQ のデータは持たない。目標（company_targets）・企業設定（company_settings: 担当上書き・枠の期間/上書き・メモ）・監査ログ（audit_log）・app_meta（cache_epoch）・プラン別既定目標（plan_target_defaults）・スカウト未利用の理由・補足（scout_unused_entries。正はここ、BigQuery `scout_unused_companies_monthly`（`match_method = 'app'` の行）へは MERGE で写し `bq_synced_at` で反映状態を持つ。2026-10-23 の `0003_scout_unused.sql`）。
 
 ## 依存するデータ・スキーマ
 `migrations/0001_init.sql`, `0002_plan_defaults.sql`。ソースは画面からの入力（編集者メールはセッションから）。

@@ -96,20 +96,17 @@ BEGIN
       GROUP BY 1
     ),
     -- スカウト未利用の記録（企業 × 月。契約期間に入る月だけを JSON 配列で持つ。2026-10-23）
-    --   シート取込 scout_unused_companies_monthly（CS が月次で記入）と、アプリの登録ページが書く cms_scout_unused_app を統合。
-    --   同じ企業・月はアプリの値を優先（source = 'app' / 'sheet'）
+    --   scout_unused_companies_monthly には、シート取込（match_method = summary 等。CS が月次で記入）と、
+    --   アプリの登録ページが書く行（match_method = 'app'）が同居する。同じ企業・月はアプリの行を優先（source = 'app' / 'sheet'）
     scout_unused AS (
       SELECT u.company_id,
              TO_JSON_STRING(ARRAY_AGG(STRUCT(FORMAT_DATE('%Y-%m', u.month) AS month, u.unused_reason AS reason, u.remarks, u.source) ORDER BY u.month DESC, u.source)) AS scout_unused_json
       FROM (
         SELECT company_id, month, unused_reason, remarks, source
         FROM (
-          SELECT company_id, DATE_TRUNC(target_month, MONTH) AS month, unused_reason, remarks, 'app' AS source, 1 AS prio
-          FROM `bq-hgt.dwh.cms_scout_unused_app`
-          WHERE deleted IS NOT TRUE
-          UNION ALL
-          -- 同じ企業の複数プロファイルで同じ記録が重複するので (月, 理由, 補足) で一意にする
-          SELECT DISTINCT company_id, DATE_TRUNC(target_month, MONTH), unused_reason, remarks, 'sheet', 2
+          -- 同じ企業の複数プロファイルで同じ記録が重複するので (月, 理由, 補足, 出所) で一意にする
+          SELECT DISTINCT company_id, DATE_TRUNC(target_month, MONTH) AS month, unused_reason, remarks,
+                 IF(match_method = 'app', 'app', 'sheet') AS source, IF(match_method = 'app', 1, 2) AS prio
           FROM `bq-hgt.dwh.scout_unused_companies_monthly`
           WHERE company_id IS NOT NULL
         )

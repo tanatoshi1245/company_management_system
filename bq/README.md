@@ -17,7 +17,6 @@ companies / company_profiles(_all) / active_companies / active_jobs / scouts / s
 | マート | 粒度 | 更新 |
 |---|---|---|
 | cms_company_master | 企業 | 全件差し替え |
-| cms_scout_unused_app | 企業 × 月（アプリの登録ページが MERGE で書く。スケジュールドクエリは読むだけ） | 随時（Worker） |
 | cms_contract_snapshot_daily | 企業 × 日 | 追記（当日分を入れ直し） |
 | cms_company_monthly | 企業 × 月（13 か月 + 当月） | 全件差し替え |
 | cms_company_daily_usage | 企業 × 日（前月 + 当月） | 全件差し替え |
@@ -55,7 +54,7 @@ companies / company_profiles(_all) / active_companies / active_jobs / scouts / s
 
 | 日付 | 変更 | スキャン | 反映 |
 |---|---|---|---|
-| 2026-10-23 | アプリの登録ページ用の表 `cms_scout_unused_app` を `init.sql` で作成。`scout_unused_json` はシート取込 `scout_unused_companies_monthly` と `cms_scout_unused_app`（`deleted` 以外）を統合し、同じ企業・月はアプリを優先、要素に `source`（app / sheet）を追加 | 手動実行 919.9 MB | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 11 |
+| 2026-10-23 | アプリの登録ページは既存の `scout_unused_companies_monthly` に `match_method = 'app'` の行を MERGE で書く（アプリ専用表 `cms_scout_unused_app` は同日中に廃止・削除）。`scout_unused_json` は同じ企業・月についてアプリの行を優先し、要素に `source`（app / sheet）を追加 | 手動実行 919.9 MB | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 11 |
 | 2026-10-23 | `cms_company_master` に `scout_unused_json`（`scout_unused_companies_monthly` の契約期間中の記録を JSON 配列で。(月, 理由, 補足) で重複排除）を追加。企業ページの「スカウト未利用状況」用 | 手動実行 919.9 MB | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 10 |
 | 2026-10-23 | 社内用テストアカウント 7196（Daijob Resume Search (Potential Non-Japanese Scouting Service)）を追加で除外 | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 9 |
 | 2026-10-23 | 社内用テストアカウント 7277（Daijob Resume Search (Working Abroad Scout)）を追加で除外 | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 8 |
