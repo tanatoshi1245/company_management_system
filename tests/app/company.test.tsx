@@ -35,7 +35,8 @@ async function fixtures() {
   };
   const me = { email: VIEWER, name: 'テスト', verified: false, authMode: 'mock', mock: true, ownerUserId: null, overrideCompanyIds: [], canEdit: false };
   const meta = { dataVersion: refresh.dataVersion, dataDate: refresh.dataDate, refreshedAt: refresh.refreshedAt, refreshStatus: 'ok', asOf: today, month, bizDays: biz, ownerSource: 'sales_staff', scoutLimitPeriodDefault: 'month', benchMinN: 5, login: { availableFrom: '2026-05-15' }, caveats: CAVEATS, holidaysVersion: '2026-10', dataSchemaVersion: 1, mock: true };
-  return { board, me, meta, month, behind, detail, biz };
+  const unused = (await detail(behind.id))?.scoutUnused ?? [];
+  return { board, me, meta, month, behind, detail, biz, unused };
 }
 
 type F = Awaited<ReturnType<typeof fixtures>>;
@@ -66,14 +67,17 @@ describe('企業詳細', () => {
   });
   afterEach(() => cleanup());
 
-  it('ヘッダ・ゲージ（ペース遅れなら期待値の印が塗りより右）・推移・タブ・コホート・未登録 CTA・注意点', async () => {
+  it('ヘッダ・当月の実績（8 タイル + ゲージ）・累積と推移の 2 グラフ・属性タブ・未利用状況・未登録 CTA・注意点', async () => {
     installFetch(f, calls);
     const c = f.behind;
     window.history.replaceState(null, '', `/companies/${c.id}?month=${f.month}`);
     render(<App />);
     await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: c.name })).toBeTruthy());
     await waitFor(() => expect(document.title).toContain(c.name));
-    // 利用状況: 求人枠とスカウト枠の 2 本のゲージ
+    // 当月の実績: ボードと同じ 8 項目
+    const stats = Array.from(document.querySelectorAll('.stat-grid .stat .t')).map((e) => e.textContent);
+    expect(stats).toEqual(['掲載 / 枠', '閲覧', '応募', '送信 / 枠', '返信', '選考中', '採用', '最終ログイン']);
+    // ゲージ: 求人枠とスカウト枠の 2 本
     const bullets = document.querySelectorAll('.bullet');
     expect(bullets.length).toBe(2);
     const scout = bullets[1];
@@ -83,24 +87,47 @@ describe('企業詳細', () => {
     if (f.biz.elapsed >= 3) {
       expect(expectedLine).toBeTruthy();
       expect(scout.textContent).toContain('ペース: 遅れ');
-      // 期待値の印は実績の塗りの右端より右
       expect(Number(expectedLine.getAttribute('x1'))).toBeGreaterThan(Number(fill.getAttribute('width')));
     }
-    // 推移: 8 パネル + 業界 p25–p75 の帯
-    expect(screen.getByText('13 か月の推移')).toBeTruthy();
-    expect(document.querySelectorAll('.multiples .panel.chart').length).toBe(8);
-    expect(document.querySelectorAll('.multiples path[fill="var(--band)"]').length).toBeGreaterThan(0);
-    // 属性タブ: 切替で URL と見出しが変わる
+    // 下半分: 左 = 累積（閲覧・応募）、右 = 送信・返信の推移 + 属性。13 か月の推移の小グラフ群とコホート表は無い
+    const lower = document.querySelector('.co-lower')!;
+    const cols = lower.querySelectorAll(':scope > .stack');
+    expect(cols.length).toBe(2);
+    expect(cols[0].querySelector('section[aria-label="契約期間中の累積（閲覧・応募）"]')).toBeTruthy();
+    expect(cols[1].querySelector('section[aria-label="スカウト送信と返信の推移"]')).toBeTruthy();
+    expect(cols[1].querySelector('[role=tablist][aria-label="属性"]')).toBeTruthy();
+    expect(screen.queryByText('13 か月の推移')).toBeNull();
+    expect(document.querySelectorAll('.multiples').length).toBe(0);
+    expect(screen.queryByRole('table', { name: /現在の選考ステータス/ })).toBeNull();
+    // 2 系列の折れ線（凡例 2 つ・2 本の path）。表で見るに切り替えられる
+    const dual = document.querySelectorAll('.chart.dual');
+    expect(dual.length).toBe(2);
+    for (const ch of dual) {
+      expect(ch.querySelectorAll('.legend > span').length).toBe(2);
+      expect(ch.querySelectorAll('svg g[data-series] > path').length).toBe(2);
+    }
+    fireEvent.click(screen.getAllByRole('button', { name: '表で見る' })[0]);
+    expect(screen.getByRole('table', { name: '契約期間中の累積（閲覧・応募）の表' })).toBeTruthy();
+    // 属性タブ: 最終経験職種・ターゲット区分・会員分類は無い。日本語レベルは番号の降順
     const attrTabs = screen.getByRole('tablist', { name: '属性' });
+    const tabNames = Array.from(attrTabs.querySelectorAll('[role=tab]')).map((t) => t.textContent);
+    expect(tabNames).toEqual(['日本語レベル', '英語レベル', '現住所', '経験職種', '希望職種', '現年収', '希望年収', '年代']);
+    const firstLabel = document.querySelector('.attr-bars .attr-row .attr-label')?.textContent ?? '';
+    expect(firstLabel.startsWith('6.')).toBe(true);
     const second = attrTabs.querySelectorAll('[role=tab]')[1] as HTMLElement;
     fireEvent.click(second);
     await waitFor(() => expect(window.location.search).toContain('attr='));
     expect(second.getAttribute('aria-selected')).toBe('true');
-    // コホート: スカウト → 応募
-    expect(screen.getByRole('table', { name: /興味あり返信月 × 現在の選考ステータス/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole('tab', { name: /応募/ }));
-    await waitFor(() => expect(window.location.search).toContain('tab=application'));
-    expect(screen.getByRole('table', { name: /応募月 × 現在の選考ステータス/ })).toBeTruthy();
+    // スカウト未利用状況の表（モックは 3 社に 1 社に記録がある）
+    const unused = screen.getByRole('region', { name: 'スカウト未利用状況' });
+    expect(unused).toBeTruthy();
+    if (f.unused.length) {
+      const table = screen.getByRole('table', { name: 'スカウト未利用の記録' });
+      expect(table.querySelectorAll('tbody tr').length).toBe(f.unused.length);
+      expect(table.textContent).toContain(f.unused[0].reason ?? '–');
+    } else {
+      expect(unused.textContent).toContain('未利用の記録はありません');
+    }
     // 目標未登録の CTA
     expect(screen.getByText('この月の目標は未登録です')).toBeTruthy();
     expect(screen.getByRole('link', { name: '目標を編集' }).getAttribute('href')).toBe(`/targets/${c.id}?from=${f.month}`);
@@ -111,7 +138,7 @@ describe('企業詳細', () => {
     expect(calls.filter((u) => u.startsWith(`/api/companies/${c.id}`)).length).toBe(1);
   });
 
-  it('目標があれば目標と実績の表と達成率が出る。推移に目標の破線', async () => {
+  it('目標があれば目標と実績の表と達成率が出る', async () => {
     const c = f.behind;
     const row: TargetRow = { company_id: Number(c.id), target_month: f.month, scout_sent_target: 100, application_target: 10, interested_target: 20, view_target: null, hire_target: 1, stage_targets_json: '{}', note: null, created_by: VIEWER, created_at: 'x', updated_by: VIEWER, updated_at: 'x' };
     installFetch(f, calls, () => [row]);
@@ -121,7 +148,6 @@ describe('企業詳細', () => {
     const table = screen.getByRole('table', { name: '目標と実績' });
     expect(table.querySelectorAll('tbody tr').length).toBeGreaterThanOrEqual(4);
     expect(table.textContent).toContain('スカウト送信');
-    expect(document.querySelectorAll('.multiples path[stroke="var(--target-line)"]').length).toBeGreaterThan(0);
   });
 
   it('存在しない企業は 404 → 空状態、ボードへ戻るで一覧に戻る。ボードの行ホバーで詳細を先読みする', async () => {

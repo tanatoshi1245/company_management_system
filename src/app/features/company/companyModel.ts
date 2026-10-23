@@ -1,38 +1,37 @@
 import { useMemo } from 'react';
-import type { CompanyDetailResponse, DailyPoint } from '../../../shared/schema/company';
+import type { CompanyDetailResponse } from '../../../shared/schema/company';
 import type { BenchRow } from '../../../shared/schema/board';
-import { indexBenchmarks, lookupBenchmark } from '../../../shared/metrics/benchmark';
 import { makeContext, scoreCompany, type ScoredCompany } from '../../../shared/metrics/score';
-import { STATUS_ORDER, STATUS_VALUES } from '../../../shared/labels';
-import type { CohortMatrixData } from '../../components/charts/CohortMatrix';
+import { LEVEL_ATTRIBUTES } from '../../../shared/labels';
+import { monthOf } from '../../../shared/calendar/periods';
 import type { AttrBar } from '../../components/charts/AttributeBars';
-import type { Panel } from '../../components/charts/SmallMultiples';
-import { fmtInt, fmtRate } from '../../lib/format';
+
+export interface SeriesByMonth {
+  months: string[];
+  /** 契約開始月（マートの窓より前なら窓の先頭） */
+  fromMonth: string;
+  /** 契約開始がマートの窓（直近 13 か月 + 当月）より前で、累積の起点を窓の先頭にしている */
+  truncated: boolean;
+  /** 当月（最後の点）は途中経過 */
+  partialLast: boolean;
+}
 
 export interface CompanyModel {
   scored: ScoredCompany;
   months: string[];
-  panels: Panel[];
-  cohort: { scout: CohortMatrixData; application: CohortMatrixData };
+  /** 契約期間中（窓内）の累積: 閲覧人数・応募人数 */
+  cumulative: SeriesByMonth & { views: number[]; apps: number[] };
+  /** 契約期間中（窓内）の月次推移: スカウト送信数・返信数（返信月基準） */
+  scoutTrend: SeriesByMonth & { sent: number[]; intReply: number[] };
   attributes: Record<string, AttrBar[]>;
   attrMonths: string[];
-  dailyCurrent: DailyPoint[];
-  dailyPrev: DailyPoint[];
   caveatIds: string[];
 }
 
-function cohortMatrix(cells: { month: string; status: string; count: number }[], last = 6): CohortMatrixData {
-  const months = Array.from(new Set(cells.map((c) => c.month))).sort().slice(-last);
-  const present = new Set(cells.filter((c) => months.includes(c.month)).map((c) => c.status));
-  const statuses = STATUS_ORDER.filter((s) => present.has(s));
-  const map = new Map<string, number>();
-  const totals = new Map<string, number>();
-  for (const c of cells) {
-    if (!months.includes(c.month)) continue;
-    map.set(`${c.month}|${c.status}`, (map.get(`${c.month}|${c.status}`) ?? 0) + c.count);
-    totals.set(c.month, (totals.get(c.month) ?? 0) + c.count);
-  }
-  return { months, statuses, cells: map, totals, hiredKey: STATUS_VALUES.st11_hired };
+/** 値の先頭の番号（"6. ネイティヴ" → 6）。無ければ null */
+function levelNo(v: string): number | null {
+  const m = /^(\d+)\./.exec(v);
+  return m ? Number(m[1]) : null;
 }
 
 export function useCompanyModel(d: CompanyDetailResponse | null): CompanyModel | null {
@@ -44,26 +43,17 @@ export function useCompanyModel(d: CompanyDetailResponse | null): CompanyModel |
     const scored = scoreCompany(d.company, ctx);
     const months = d.monthly.map((m) => m.month);
     const byMonth = new Map(d.monthly.map((m) => [m.month, m]));
-    const idxByMonth = new Map<string, ReturnType<typeof indexBenchmarks>>();
-    for (const m of months) idxByMonth.set(m, indexBenchmarks(d.benchSeries.filter((b) => b.month === m)));
-    const band = (metric: string): ({ lo: number; hi: number } | null)[] =>
-      months.map((m) => {
-        const lk = lookupBenchmark(idxByMonth.get(m)!, d.company.ind, d.company.type, metric, d.meta.benchMinN);
-        return lk.row && lk.row.p25 !== null && lk.row.p75 !== null ? { lo: lk.row.p25, hi: lk.row.p75 } : null;
-      });
-    const tgt = (k: 'scout_sent' | 'interested' | 'applications' | 'views' | 'hires') => months.map((m) => d.targetsByMonth[m]?.[k] ?? null);
-    const anyTarget = (vals: (number | null)[]) => (vals.some((v) => v !== null) ? vals : undefined);
-    const partial = d.meta.isCurrentMonth && months[months.length - 1] === month;
-    const panels: Panel[] = [
-      { key: 'sent', label: 'スカウト送信', values: d.monthly.map((m) => m.sent), target: anyTarget(tgt('scout_sent')), format: fmtInt, partialLast: partial },
-      { key: 'int', label: '興味あり返信', values: d.monthly.map((m) => m.int), target: anyTarget(tgt('interested')), format: fmtInt, partialLast: partial },
-      { key: 'apps', label: '応募', values: d.monthly.map((m) => m.apps), target: anyTarget(tgt('applications')), format: fmtInt, partialLast: partial },
-      { key: 'views', label: '求人閲覧', values: d.monthly.map((m) => m.views), target: anyTarget(tgt('views')), format: fmtInt, partialLast: partial },
-      { key: 'hires', label: '採用', values: d.monthly.map((m) => m.hires), target: anyTarget(tgt('hires')), format: fmtInt, partialLast: partial },
-      { key: 'jobs', label: '掲載求人（月末）', values: d.monthly.map((m) => m.jobs), format: fmtInt },
-      { key: 'util', label: 'スカウト枠消化率（業界 p25〜p75）', values: d.monthly.map((m) => (d.company.limits.scout ? m.sent / d.company.limits.scout : null)), band: band('scout_utilization'), format: (v) => fmtRate(v), partialLast: partial },
-      { key: 'reply', label: '興味あり返信率（業界 p25〜p75）', values: d.monthly.map((m) => (m.sent ? m.int / m.sent : null)), band: band('reply_rate'), format: (v) => fmtRate(v, 1) },
-    ];
+    // 契約期間に入る月だけ（開始月以降、終了月まで）。マートの窓より前の契約開始は窓の先頭から
+    const startMonth = monthOf(d.company.contract.from);
+    const endMonth = d.company.contract.to ? monthOf(d.company.contract.to) : null;
+    const inContract = months.filter((m) => m >= startMonth && (endMonth === null || m <= endMonth));
+    const truncated = startMonth < months[0];
+    const partialLast = d.meta.isCurrentMonth && inContract[inContract.length - 1] === month;
+    const base = { months: inContract, fromMonth: inContract[0] ?? months[0], truncated, partialLast };
+    const cum = (k: 'views' | 'apps') => {
+      let acc = 0;
+      return inContract.map((m) => (acc += byMonth.get(m)?.[k] ?? 0));
+    };
     const attributes: Record<string, AttrBar[]> = {};
     const attrMonths = Array.from(new Set(d.attributes.map((a) => a.month))).sort();
     const byType = new Map<string, Map<string, { scouts: number; interested: number }>>();
@@ -75,8 +65,14 @@ export function useCompanyModel(d: CompanyDetailResponse | null): CompanyModel |
     }
     for (const [type, vals] of byType) {
       const total = Array.from(vals.values()).reduce((s, v) => s + v.scouts, 0) || 1;
-      attributes[type] = Array.from(vals, ([value, v]) => ({ value, scouts: v.scouts, share: v.scouts / total, replyRate: v.scouts ? v.interested / v.scouts : null }))
-        .sort((a, b) => (a.value === '(未入力)' ? 1 : b.value === '(未入力)' ? -1 : b.scouts - a.scouts));
+      const rows = Array.from(vals, ([value, v]) => ({ value, scouts: v.scouts, share: v.scouts / total, replyRate: v.scouts ? v.interested / v.scouts : null }));
+      // 語学レベルは値の番号で降順（6. ネイティヴ → 1. なし）、他は件数順。(未入力) は末尾
+      attributes[type] = rows.sort((a, b) => {
+        if (a.value === '(未入力)') return 1;
+        if (b.value === '(未入力)') return -1;
+        if (LEVEL_ATTRIBUTES.has(type)) return (levelNo(b.value) ?? -1) - (levelNo(a.value) ?? -1) || b.scouts - a.scouts;
+        return b.scouts - a.scouts;
+      });
     }
     const caveatIds = ['status_current_only', 'member_attr_current', 'scout_lag'];
     if (d.company.login.last === null) caveatIds.push('login_from');
@@ -86,12 +82,10 @@ export function useCompanyModel(d: CompanyDetailResponse | null): CompanyModel |
     return {
       scored,
       months,
-      panels,
-      cohort: { scout: cohortMatrix(d.cohorts.scout), application: cohortMatrix(d.cohorts.application) },
+      cumulative: { ...base, views: cum('views'), apps: cum('apps') },
+      scoutTrend: { ...base, sent: inContract.map((m) => byMonth.get(m)?.sent ?? 0), intReply: inContract.map((m) => byMonth.get(m)?.intReply ?? 0) },
       attributes,
       attrMonths,
-      dailyCurrent: d.daily.filter((p) => p.month === month),
-      dailyPrev: d.daily.filter((p) => p.month < month),
       caveatIds,
     };
   }, [d]);

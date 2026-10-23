@@ -133,6 +133,8 @@ export interface KpiTile {
   label: string;
   value: number | null;
   unit: 'count' | 'rate';
+  /** 件数の右に添える割合（スカウト利用社数の利用率） */
+  rate?: number | null;
   /** クリックで適用するフィルタ */
   filter: Partial<BoardFilters> | null;
   tone: 'neutral' | 'bad' | 'warn' | 'good';
@@ -169,7 +171,7 @@ export function isActiveLogin(c: Pick<BoardCompany, 'login'>): boolean {
   return c.login.daysSince !== null && c.login.daysSince < NO_LOGIN_DAYS;
 }
 
-/** KPI タイル（4 枚: 契約企業 / アクティブ企業数 / スカウト消化率 / スカウト利用率）。数字だけを出す */
+/** KPI タイル（4 枚: 契約企業 / アクティブ企業数 / スカウト利用社数（利用率）/ スカウト消化率）。数字だけを出す */
 export function kpiStrip(rows: ScoredCompany[], meta: BoardMeta): KpiTile[] {
   const contracted = rows.filter((r) => isContracted(r.c, meta));
   const active = contracted.filter((r) => isActiveLogin(r.c));
@@ -185,7 +187,7 @@ export function kpiStrip(rows: ScoredCompany[], meta: BoardMeta): KpiTile[] {
   return [
     { key: 'contracted', label: '契約企業', value: contracted.length, unit: 'count', filter: null, tone: 'neutral' },
     { key: 'active', label: `アクティブ企業数（最終ログイン${NO_LOGIN_DAYS}日以内）`, value: active.length, unit: 'count', filter: null, tone: 'neutral' },
+    { key: 'scoutUsers', label: 'スカウト利用社数（利用率）', value: using, unit: 'count', rate: usage, filter: null, tone: usage === null ? 'neutral' : usage < 0.5 ? 'bad' : usage < 0.7 ? 'warn' : 'good' },
     { key: 'scoutUtil', label: 'スカウト消化率', value: util, unit: 'rate', filter: null, tone: utilRatio === null || !meta.isCurrentMonth ? 'neutral' : utilRatio < 0.8 ? 'bad' : utilRatio < 1 ? 'warn' : 'good' },
-    { key: 'scoutUsage', label: 'スカウト利用率', value: usage, unit: 'rate', filter: null, tone: usage === null ? 'neutral' : usage < 0.5 ? 'bad' : usage < 0.7 ? 'warn' : 'good' },
   ];
 }

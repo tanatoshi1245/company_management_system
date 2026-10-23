@@ -5,7 +5,8 @@ import { addMonths, lastNMonths, monthOf, todayJst } from '../../shared/calendar
 import { monthProgress } from '../../shared/calendar/businessDays';
 import { DATA_VERSION } from '../../shared/schema/common';
 import type { BoardMeta } from '../../shared/schema/board';
-import type { CompanyDetailResponse, CompanySettings } from '../../shared/schema/company';
+import { ScoutUnusedRowSchema, type CompanyDetailResponse, type CompanySettings, type ScoutUnusedRow } from '../../shared/schema/company';
+import { z } from 'zod';
 import { STATUS_KEYS } from '../../shared/labels';
 import { martTtlSec, type RefreshMeta } from './refreshMeta';
 import { buildBoardCompany, mergeCompany, MONTHS_IN_MART, num, numOrNull, str, toMonthly, type MonthlyAgg } from './boardService';
@@ -14,6 +15,17 @@ import { rowToValues, type TargetRow } from '../d1/targetsRepo';
 import type { SettingsRow } from '../d1/settingsRepo';
 
 export type CompanyCore = Omit<CompanyDetailResponse, 'settings' | 'targetsByMonth'>;
+
+/** cms_company_master.scout_unused_json（JSON 配列の文字列）→ 行。壊れていれば空 */
+export function parseScoutUnused(raw: unknown): ScoutUnusedRow[] {
+  if (typeof raw !== 'string' || !raw) return [];
+  try {
+    const parsed = z.array(ScoutUnusedRowSchema).safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : [];
+  } catch {
+    return [];
+  }
+}
 
 /** 属性の内訳は選択月を含む直近 3 か月 */
 export const ATTRIBUTE_MONTHS = 3;
@@ -79,6 +91,7 @@ export async function loadCompanyCore(client: BqClient, companyId: string, month
       application: appCohort.rows.map((r) => ({ month: String(r.month_ym), status: String(r.status), count: num(r.cnt), members: num(r.members) })),
     },
     attributes: attrs.rows.map((r) => ({ month: String(r.month_ym), type: String(r.attribute_type), value: String(r.attribute_value), scouts: num(r.scouts), members: num(r.members), interested: num(r.interested_scouts) })),
+    scoutUnused: parseScoutUnused(master.scout_unused_json),
     benchSeries: bench.rows.map((b) => ({ month: String(b.month_ym), industry: String(b.industry), companyType: String(b.company_type), metric: String(b.metric), n: num(b.n_companies), mean: numOrNull(b.mean), p25: numOrNull(b.p25), median: numOrNull(b.median), p75: numOrNull(b.p75) })),
   };
 }

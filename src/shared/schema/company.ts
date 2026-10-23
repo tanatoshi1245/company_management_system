@@ -45,6 +45,10 @@ export type CohortCell = z.infer<typeof CohortCellSchema>;
 export const AttributeRowSchema = z.object({ month: z.string(), type: z.string(), value: z.string(), scouts: z.number(), members: z.number(), interested: z.number() });
 export type AttributeRow = z.infer<typeof AttributeRowSchema>;
 
+/** スカウト未利用の記録（cms_company_master.scout_unused_json。契約期間に入る月だけ、月の降順） */
+export const ScoutUnusedRowSchema = z.object({ month: z.string(), reason: z.string().nullable(), remarks: z.string().nullable() });
+export type ScoutUnusedRow = z.infer<typeof ScoutUnusedRowSchema>;
+
 export const BenchSeriesRowSchema = BenchRowSchema.extend({ month: z.string() });
 export type BenchSeriesRow = z.infer<typeof BenchSeriesRowSchema>;
 
@@ -87,6 +91,8 @@ export const CompanyDetailResponseSchema = z.object({
   attributes: z.array(AttributeRowSchema),
   /** 企業の群（業種 × 種別と __ALL__ の組み合わせ）の 14 か月分 */
   benchSeries: z.array(BenchSeriesRowSchema),
+  /** スカウト未利用の記録（契約期間中。月の降順） */
+  scoutUnused: z.array(ScoutUnusedRowSchema),
   settings: CompanySettingsSchema.nullable(),
   targetsByMonth: z.record(z.string(), TargetValuesSchema),
 });

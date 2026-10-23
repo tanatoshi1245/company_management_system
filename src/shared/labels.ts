@@ -52,20 +52,20 @@ export const STATUS_ORDER: string[] = [...STATUS_KEYS.map((k) => STATUS_VALUES[k
 /** 「選考中」= 面接調整中〜最終面接 */
 export const IN_SELECTION_KEYS: StatusKey[] = ['st06_interview_adjusting', 'st07_interview_1st', 'st08_interview_2nd', 'st09_interview_3rd', 'st10_interview_final'];
 
-export const ATTRIBUTE_TYPES = ['japanese_level', 'english_level', 'residence_prefecture', 'last_occupation_group', 'experienced_occupation', 'desired_occupation', 'current_income_range', 'desired_income_range', 'age_group', 'target_flag', 'member_category'] as const;
+/** 企業ページ「誰にスカウトを送っているか」のタブ（マートには last_occupation_group / target_flag / member_category もあるが画面には出さない） */
+export const ATTRIBUTE_TYPES = ['japanese_level', 'english_level', 'residence_prefecture', 'experienced_occupation', 'desired_occupation', 'current_income_range', 'desired_income_range', 'age_group'] as const;
+/** 値の先頭の番号（1. なし 〜 6. ネイティヴ）で降順に並べる属性 */
+export const LEVEL_ATTRIBUTES: ReadonlySet<string> = new Set(['japanese_level', 'english_level']);
 export type AttributeType = (typeof ATTRIBUTE_TYPES)[number];
 export const ATTRIBUTE_LABEL: Record<AttributeType, string> = {
   japanese_level: '日本語レベル',
   english_level: '英語レベル',
   residence_prefecture: '現住所',
-  last_occupation_group: '最終経験職種',
   experienced_occupation: '経験職種',
   desired_occupation: '希望職種',
   current_income_range: '現年収',
   desired_income_range: '希望年収',
   age_group: '年代',
-  target_flag: 'ターゲット区分',
-  member_category: '会員分類',
 };
 
 export const OWNER_SOURCE_LABEL: Record<string, string> = {

@@ -11,6 +11,7 @@ export function KpiStrip({ tiles, onPick, active }: { tiles: KpiTile[]; onPick: 
           <span className={`v ${t.tone === 'bad' || t.tone === 'warn' ? t.tone : ''}`}>
             {t.unit === 'rate' ? fmtRate(t.value) : fmtInt(t.value)}
             {t.unit === 'count' ? <span className="u">社</span> : null}
+            {t.rate !== undefined ? <span className="u">（{fmtRate(t.rate)}）</span> : null}
           </span>
         </button>
       ))}
