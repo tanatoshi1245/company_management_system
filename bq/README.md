@@ -54,6 +54,7 @@ companies / company_profiles(_all) / active_companies / active_jobs / scouts / s
 
 | 日付 | 変更 | スキャン | 反映 |
 |---|---|---|---|
+| 2026-10-23 | 企業種別に `NW`（Network 契約）を追加: 直接 で企業名に DaijobAgent を含まず、求人枠 0 かつ掲載 0、スカウト枠 0 かつ当月送信 0（`scouts` の当月分 26 MB を追加で読む）。契約中 7 社が該当 | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 12 |
 | 2026-10-23 | アプリの登録ページは既存の `scout_unused_companies_monthly` に `match_method = 'app'` の行を MERGE で書く（アプリ専用表 `cms_scout_unused_app` は同日中に廃止・削除）。`scout_unused_json` は同じ企業・月についてアプリの行を優先し、要素に `source`（app / sheet）を追加 | 手動実行 919.9 MB | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 11 |
 | 2026-10-23 | `cms_company_master` に `scout_unused_json`（`scout_unused_companies_monthly` の契約期間中の記録を JSON 配列で。(月, 理由, 補足) で重複排除）を追加。企業ページの「スカウト未利用状況」用 | 手動実行 919.9 MB | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 10 |
 | 2026-10-23 | 社内用テストアカウント 7196（Daijob Resume Search (Potential Non-Japanese Scouting Service)）を追加で除外 | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 9 |

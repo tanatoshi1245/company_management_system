@@ -69,7 +69,8 @@ export function BoardFilterBar(p: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
   const typeCount = new Map(p.types.map((t) => [t.key, t.count]));
-  const typeOptions = COMPANY_TYPES.filter((t) => t !== '不明' || typeCount.get(t)).map((t) => ({ key: t, label: COMPANY_TYPE_SHORT[t], count: typeCount.get(t) ?? 0 }));
+  // 不明・NW は稀なので 0 件なら選択肢に出さない
+  const typeOptions = COMPANY_TYPES.filter((t) => (t !== '不明' && t !== 'NW') || typeCount.get(t)).map((t) => ({ key: t, label: COMPANY_TYPE_SHORT[t], count: typeCount.get(t) ?? 0 }));
   return (
     <div className="sticky-bar" role="search" aria-label="絞り込み">
       <Chip label="担当 = 自分" on={p.filters.mine} onClick={() => p.onChange({ mine: !p.filters.mine })} count={p.mineCount} disabled={p.mineCount === 0 && !p.filters.mine} title={p.mineCount === 0 ? 'ログイン中のメールが担当になっている企業がありません（設定で担当を上書きできます）' : '自分が担当の企業だけ'} icon={<Icon name="filter" size={14} />} />

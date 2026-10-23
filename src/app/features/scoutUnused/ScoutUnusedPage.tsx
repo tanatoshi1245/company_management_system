@@ -30,10 +30,10 @@ const UrlSchema = z.object({
   q: z.string().max(100).default(''),
 });
 
-/** 登録の対象外の企業種別（DA・RPO は Daijob 側でスカウトを運用するため） */
-export const SCOUT_UNUSED_EXCLUDED_TYPES: ReadonlySet<string> = new Set(['DA', 'RPO']);
+/** 登録の対象外の企業種別（DA・RPO は Daijob 側でスカウトを運用、NW はスカウト枠の無い Network 契約） */
+export const SCOUT_UNUSED_EXCLUDED_TYPES: ReadonlySet<string> = new Set(['DA', 'RPO', 'NW']);
 
-/** スカウト未使用の企業 = その月に契約中・送信 0 件・スカウト枠あり・DA / RPO 以外 */
+/** スカウト未使用の企業 = その月に契約中・送信 0 件・スカウト枠あり・DA / RPO / NW 以外 */
 export function isScoutUnused(c: BoardCompany, meta: { isCurrentMonth: boolean }): boolean {
   return isContracted(c, meta) && c.m.sent === 0 && c.limits.scout !== null && c.limits.scout > 0 && !SCOUT_UNUSED_EXCLUDED_TYPES.has(c.type);
 }

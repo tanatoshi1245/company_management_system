@@ -111,6 +111,11 @@ describe('/api/board（モック）', () => {
     const byApps = sortCompanies(scored, '-apps');
     for (let i = 1; i < byApps.length; i++) expect(byApps[i].c.m.apps).toBeLessThanOrEqual(byApps[i - 1].c.m.apps);
     expect(scored.some((s) => s.c.type === '派遣')).toBe(true);
+    // NW（Network 契約）: 枠 0・掲載 0・送信 0 のサンプルがあり、種別フィルタで絞れる
+    const nw = scored.filter((s) => s.c.type === 'NW');
+    expect(nw.length).toBeGreaterThan(0);
+    for (const s of nw) expect([s.c.limits.scout, s.c.limits.job, s.c.m.sent, s.c.m.jobs]).toEqual([0, 0, 0, 0]);
+    expect(filterCompanies(scored, { ...DEFAULT_FILTERS, type: ['NW'] }, body.meta).every((s) => s.c.type === 'NW')).toBe(true);
     const q = filterCompanies(scored, { ...DEFAULT_FILTERS, q: 'ｱｰｸ' }, body.meta);
     const byType = sortCompanies(all, 'type');
     for (let i = 1; i < byType.length; i++) expect(byType[i].c.type.localeCompare(byType[i - 1].c.type, 'ja')).toBeGreaterThanOrEqual(0);
