@@ -9,7 +9,7 @@ status: active
 # `bq-hgt.dwh.cms_company_master` — 企業マスタ
 
 **粒度**: 企業（`company_id` = `companies.id`）1 行。**更新**: 全件差し替え（CREATE OR REPLACE）。
-**対象**: `companies.active_from` / `active_to` が「13 か月前〜今日 + 30 日」に重なる企業（契約中 + 直近終了 + 開始間近 + ベンチマーク用の過去契約企業）。RA（4928 / 14508）・RDS（7080）のプロファイルは除外。`companies.publishing_sites` に `WAWW` を含む企業と、Network 契約（別管理）の企業 = `dm_network_contract_candidates.company_id` に載る企業も除外（2026-10-23〜。ダッシュボードの対象外）。
+**対象**: `companies.active_from` / `active_to` が「13 か月前〜今日 + 30 日」に重なる企業（契約中 + 直近終了 + 開始間近 + ベンチマーク用の過去契約企業）。RA（4928 / 14508）・RDS（7080）のプロファイルは除外。`companies.publishing_sites` に `WAWW` を含む企業と、Network 契約（別管理）の企業 = `dm_network_contract_candidates.company_id` に載る企業、社内用テストアカウント（5542 Daijob.com、8980 レジュメ更新自動リクエスト専用）も除外（2026-10-23〜。ダッシュボードの対象外）。
 
 ## 列定義
 
@@ -35,7 +35,7 @@ status: active
 | sf_notice_check | BOOL | sf_accounts.notice_check_company__c（接触中） |
 | sf_account_owner_* / sf_contract_owner_* | STRING / BOOL | 取引先 / 契約の所有者（sf_users: 名前・メール・Position__c・IsActive） |
 | sales_staff | STRING | active_companies.sales_staff（企業管理ツールの担当。ローマ字「姓 名」） |
-| cs_owner_email_default / cs_owner_name_default / owner_source | STRING | 既定の CS 担当（owner_source = sales_staff。名前は sales_staff そのまま、メールは「名の頭文字-姓@daijob.com」の規則で導出。姓だけの値は NULL）。アプリの上書き（D1）が優先 |
+| cs_owner_email_default / cs_owner_name_default / owner_source | STRING | 既定の CS 担当（owner_source = sales_staff。名前は sales_staff そのまま、メールは「名の頭文字-姓@daijob.com」の規則で導出。姓だけの値は NULL）。DA（企業名に DaijobAGENT を含む企業）は BQ の担当データによらず名前 `DA`・メール NULL に固定。アプリの上書き（D1）が優先 |
 | active_jobs_now | INT64 | 当日の掲載求人（企業単位で set_id 重複排除） |
 | run_date / refreshed_at | DATE / TIMESTAMP | 生成日 |
 

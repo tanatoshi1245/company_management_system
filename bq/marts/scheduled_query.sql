@@ -35,6 +35,8 @@ BEGIN
       -- companies.contract_from / contract_to は 2026-10-23 のリロードで列が無くなった（ETL のスキーマ変更）。下流の列は残して NULL にする
       SELECT id AS company_id, internal_name, active_from, active_to, CAST(NULL AS DATE) AS contract_from, CAST(NULL AS DATE) AS contract_to,
              resume_bank_scout_limit AS company_scout_limit, job_posting_limit AS company_job_limit,
+             -- 企業名に DaijobAGENT を含む企業（DA）。CS 担当は BQ の担当データによらず 'DA' に固定する（2026-10-23）
+             REGEXP_CONTAINS(LOWER(NORMALIZE(IFNULL(internal_name, ''), NFKC)), r'daijob\s*agent') AS is_da_name,
              (active_from <= run_date AND run_date <= COALESCE(active_to, DATE '9999-12-31')) AS is_contracted_now,
              CASE
                WHEN active_from <= run_date AND run_date <= COALESCE(active_to, DATE '9999-12-31')
@@ -50,6 +52,9 @@ BEGIN
         AND NOT REGEXP_CONTAINS(UPPER(IFNULL(publishing_sites, '')), 'WAWW')
         -- Network 契約（別管理）の企業はダッシュボードの対象外（dm_network_contract_candidates に company_id があるもの。2026-10-23）
         AND id NOT IN (SELECT company_id FROM `bq-hgt.dwh.dm_network_contract_candidates` WHERE company_id IS NOT NULL)
+        -- 社内用テストアカウントは対象外（5542 = Daijob.com、8980 = レジュメ更新自動リクエスト専用。2026-10-23）
+        AND id NOT IN (5542, 8980)
+        AND NOT REGEXP_CONTAINS(IFNULL(internal_name, ''), r'レジュメ更新自動リクエスト専用')
         AND active_from <= DATE_ADD(run_date, INTERVAL 30 DAY)
         AND COALESCE(active_to, DATE '9999-12-31') >= window_start
         -- RA（4928 / 14508）・RDS（7080）の企業は契約企業として扱わない（CLAUDE.md §3）
@@ -184,7 +189,7 @@ BEGIN
            c.internal_name,
            ci.profile_ids,
            IFNULL(ci.profile_count, 0) AS profile_count,
-           COALESCE(ci.company_type, '不明') AS company_type,
+           COALESCE(IF(c.is_da_name, 'DA', ci.company_type), '不明') AS company_type,
            ci.dj_contract_type,
            c.active_from, c.active_to, c.contract_from, c.contract_to,
            c.is_contracted_now, c.contract_state,
@@ -218,8 +223,9 @@ BEGIN
            ua.Name AS sf_account_owner_name, ua.email AS sf_account_owner_email, ua.Position__c AS sf_account_owner_position, ua.IsActive AS sf_account_owner_active,
            uc.Name AS sf_contract_owner_name, uc.email AS sf_contract_owner_email, uc.Position__c AS sf_contract_owner_position, uc.IsActive AS sf_contract_owner_active,
            ac.sales_staff,
-           CASE owner_source WHEN 'sf_account_owner' THEN ua.email WHEN 'sf_contract_owner' THEN uc.email ELSE ac.sales_staff_email END AS cs_owner_email_default,
-           CASE owner_source WHEN 'sf_account_owner' THEN ua.Name WHEN 'sf_contract_owner' THEN uc.Name ELSE ac.sales_staff END AS cs_owner_name_default,
+           -- DA（企業名に DaijobAGENT）は担当を 'DA' に固定（メールは無し）
+           IF(c.is_da_name OR ci.company_type = 'DA', NULL, CASE owner_source WHEN 'sf_account_owner' THEN ua.email WHEN 'sf_contract_owner' THEN uc.email ELSE ac.sales_staff_email END) AS cs_owner_email_default,
+           IF(c.is_da_name OR ci.company_type = 'DA', 'DA', CASE owner_source WHEN 'sf_account_owner' THEN ua.Name WHEN 'sf_contract_owner' THEN uc.Name ELSE ac.sales_staff END) AS cs_owner_name_default,
            owner_source,
            IFNULL(aj.n, 0) AS active_jobs_now
     FROM companies_now c
