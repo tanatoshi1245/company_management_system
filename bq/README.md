@@ -54,6 +54,7 @@ companies / company_profiles(_all) / active_companies / active_jobs / scouts / s
 
 | 日付 | 変更 | スキャン | 反映 |
 |---|---|---|---|
+| 2026-10-23 | Network 契約（別管理）の企業を `companies_now` で除外（`dm_network_contract_candidates` の `company_id`（NULL 以外）に載る企業。契約中 5 社が対象外に） | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 5 |
 | 2026-10-23 | CS 担当の既定（`owner_source`）を `sf_account_owner` → `sales_staff`（企業管理ツール `active_companies.sales_staff`）に変更。メールは「名の頭文字-姓@daijob.com」の規則で導出（主要 CS 9 名は `sf_users` のメールと一致を確認） | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 4 |
 | 2026-10-23 | `companies` から `contract_from` / `contract_to` 列が消えた（ETL のスキーマ変更。同日 09:14 UTC の手動実行で `Unrecognized name: contract_from`）ため、`companies_now` で `CAST(NULL AS DATE)` に置換。マートの列 `contract_from` / `contract_to` は NULL になる（画面の SF 契約期間の表示には影響なし） | – | 同上 |
 | 2026-10-23 | `companies.publishing_sites` に `WAWW` を含む企業を `companies_now` で除外（ボード・企業詳細・KPI・ベンチマーク母集団すべてから外れる） | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 3 |

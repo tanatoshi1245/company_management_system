@@ -47,6 +47,8 @@ BEGIN
       WHERE active_from IS NOT NULL
         -- 掲載サイトに WAWW を含む企業はダッシュボードの対象外（表示も集計もしない。2026-10-23）
         AND NOT REGEXP_CONTAINS(UPPER(IFNULL(publishing_sites, '')), 'WAWW')
+        -- Network 契約（別管理）の企業はダッシュボードの対象外（dm_network_contract_candidates に company_id があるもの。2026-10-23）
+        AND id NOT IN (SELECT company_id FROM `bq-hgt.dwh.dm_network_contract_candidates` WHERE company_id IS NOT NULL)
         AND active_from <= DATE_ADD(run_date, INTERVAL 30 DAY)
         AND COALESCE(active_to, DATE '9999-12-31') >= window_start
         -- RA（4928 / 14508）・RDS（7080）の企業は契約企業として扱わない（CLAUDE.md §3）
