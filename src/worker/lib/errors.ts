@@ -34,6 +34,17 @@ export function errorResponse(err: unknown, c: Context): Response {
     const status = err.status === 403 ? 502 : err.reason === 'timeout' ? 504 : 502;
     return c.json({ error: 'データの取得に失敗しました。時間をおいて再度お試しください', code: 'bq', reason: err.reason }, status as ContentfulStatusCode);
   }
+  const msg = err instanceof Error ? err.message : String(err);
+  // D1 の表が無い = マイグレーション未適用（設定不足を画面で分かるようにする。SQL やスタックは出さない）
+  if (/no such table|D1_ERROR/i.test(msg)) {
+    console.error(`D1 error: ${msg}`);
+    return c.json({ error: 'D1 のマイグレーションが適用されていません。D1 コンソールで d1/migrations/0001_init.sql と 0002_plan_defaults.sql を順に実行してください（docs/デプロイ手順.md 3）', code: 'storage' }, 503);
+  }
+  // SA 鍵の形式不正（Secret の貼り間違い）
+  if (/^BQ_SA_KEY/.test(msg)) {
+    console.error(`BQ key error: ${msg}`);
+    return c.json({ error: `${msg}。Secret BQ_SA_KEY を 1 行の JSON で貼り直してください（docs/Google_Cloud認証情報の発行手順.md）`, code: 'noCredentials' }, 500);
+  }
   console.error(err);
   return c.json({ error: 'サーバー内部でエラーが発生しました', code: 'internal' }, 500);
 }
