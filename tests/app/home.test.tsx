@@ -108,8 +108,21 @@ describe('ホーム（ボード）', () => {
     await waitFor(() => expect(window.location.search).toContain('sort=-apps'));
     const table0 = screen.getByRole('table', { name: '契約企業の実績一覧' });
     const total = table0.querySelectorAll('tbody tr').length;
+    // 企業種別のプルダウンは外側のクリック・Esc で閉じ、中のクリックでは閉じない
+    const typeGroup = screen.getByRole('group', { name: '企業種別' });
+    const details = typeGroup.closest('details') as HTMLDetailsElement;
+    details.open = true;
+    fireEvent(details, new Event('toggle', { bubbles: false }));
+    fireEvent.pointerDown(typeGroup.querySelector('label')!);
+    expect(details.open).toBe(true);
+    fireEvent.pointerDown(table0.querySelector('tbody')!);
+    expect(details.open).toBe(false);
+    details.open = true;
+    fireEvent(details, new Event('toggle', { bubbles: false }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(details.open).toBe(false);
     // 企業種別: 2 つ選ぶ
-    const typeBoxes = screen.getByRole('group', { name: '企業種別' }).querySelectorAll('input[type=checkbox]');
+    const typeBoxes = typeGroup.querySelectorAll('input[type=checkbox]');
     fireEvent.click(typeBoxes[0]);
     fireEvent.click(typeBoxes[1]);
     await waitFor(() => expect(window.location.search).toMatch(/type=[^&]+%2C|type=[^&]+,/));

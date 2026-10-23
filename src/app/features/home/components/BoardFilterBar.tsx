@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { BoardFilters, EndingFilter } from '../../../../shared/metrics/board';
 import { ENDING_LABEL, ENDING_OPTIONS } from '../../../../shared/metrics/board';
 import { COMPANY_TYPES, COMPANY_TYPE_SHORT } from '../../../../shared/labels';
@@ -15,10 +15,28 @@ interface Props {
   onClear: () => void;
 }
 
-/** 複数選択のプルダウン（チェックボックス付き） */
+/** 複数選択のプルダウン（チェックボックス付き）。外側のクリック・Esc で閉じる */
 function MultiPick({ label, ariaLabel, options, value, onChange }: { label: string; ariaLabel: string; options: { key: string; label: string; title?: string; count: number }[]; value: string[]; onChange: (v: string[]) => void }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: Event) => {
+      const el = ref.current;
+      if (el && !el.contains(e.target as Node)) el.open = false;
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && ref.current) ref.current.open = false;
+    };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
   return (
-    <details className="industry-pick">
+    <details className="industry-pick" ref={ref} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
       <summary>
         <span className={`chip ${value.length ? 'on' : ''}`} aria-label={`${ariaLabel}で絞り込み`}>
           {label}
