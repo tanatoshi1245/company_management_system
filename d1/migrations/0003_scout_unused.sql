@@ -1,4 +1,4 @@
--- スカウト未利用の理由・補足（登録ページ）。正は D1、BigQuery dwh.cms_scout_unused_app に MERGE で写す
+-- スカウト未利用の理由・補足（登録ページ）。正は D1、BigQuery dwh.scout_unused_companies_monthly（match_method = 'app' の行）に MERGE で写す
 CREATE TABLE IF NOT EXISTS scout_unused_entries (
   company_id INTEGER NOT NULL,
   target_month TEXT NOT NULL CHECK (target_month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'),

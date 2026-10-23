@@ -93,7 +93,7 @@ describe('/api/scout-unused（スカウト未利用の理由・補足）', () =>
     await put(`/scout-unused/${id}/${month}`, { reason: null, remarks: '補足' });
     const repo = new ScoutUnusedRepo(d1);
     const row = (await repo.get(id, month))!;
-    const failing = { mock: false, run: async () => { throw new Error('Access Denied: cms_scout_unused_app'); }, dryRun: async () => ({ bytesProcessed: 0 }) } as unknown as BqClient;
+    const failing = { mock: false, run: async () => { throw new Error('Access Denied: scout_unused_companies_monthly'); }, dryRun: async () => ({ bytesProcessed: 0 }) } as unknown as BqClient;
     const r = await syncOne(failing, d1, row, { salesRep: null, companyName: null });
     expect(r.synced).toBe(false);
     expect(r.error).toContain('Access Denied');
@@ -105,9 +105,11 @@ describe('/api/scout-unused（スカウト未利用の理由・補足）', () =>
     expect(sync).toEqual({ synced: 1, failed: 0, pending: 0 });
     // 成功する擬似クライアントは MERGE を @param だけで組み立てた SQL を受け取る
     const seen: string[] = [];
-    const ok = { mock: false, run: async (q: { sql: string; params: { name: string }[] }) => { seen.push(q.sql); expect(q.params.map((p) => p.name).sort()).toEqual(['companyName', 'deleted', 'id', 'month', 'reason', 'remarks', 'salesRep', 'updatedBy']); return { rows: [], bytesProcessed: 0, cacheHit: false, jobId: null }; }, dryRun: async () => ({ bytesProcessed: 0 }) } as unknown as BqClient;
+    const ok = { mock: false, run: async (q: { sql: string; params: { name: string }[] }) => { seen.push(q.sql); expect(q.params.map((p) => p.name).sort()).toEqual(['companyName', 'deleted', 'id', 'month', 'reason', 'remarks', 'salesRep']); return { rows: [], bytesProcessed: 0, cacheHit: false, jobId: null }; }, dryRun: async () => ({ bytesProcessed: 0 }) } as unknown as BqClient;
     expect((await syncOne(ok, d1, (await repo.get(id, month))!, { salesRep: 'Tanabe Mami', companyName: 'X' })).synced).toBe(true);
-    expect(seen[0]).toContain('MERGE `bq-hgt.dwh.cms_scout_unused_app`');
+    expect(seen[0]).toContain('MERGE `bq-hgt.dwh.scout_unused_companies_monthly`');
+    expect(seen[0]).toContain("T.match_method = 'app'");
+    expect(seen[0]).toContain('WHEN MATCHED AND @deleted THEN DELETE');
     expect(seen[0]).not.toMatch(/補足|Tanabe/);
     const q = scoutUnusedMergeQuery({ companyId: '1', month: '2026-09', reason: null, remarks: 'a', salesRep: null, companyName: null, updatedBy: 'x@daijob.com', deleted: false });
     expect(q.params.find((p) => p.name === 'month')?.parameterValue.value).toBe('2026-09-01');

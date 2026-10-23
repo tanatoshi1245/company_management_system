@@ -20,7 +20,7 @@ export const ScoutUnusedEntrySchema = z.object({
   remarks: z.string().nullable(),
   updatedBy: z.string(),
   updatedAt: z.string(),
-  /** BigQuery（cms_scout_unused_app）に反映した時刻。null = 未反映 */
+  /** BigQuery（scout_unused_companies_monthly の match_method = 'app' の行）に反映した時刻。null = 未反映 */
   bqSyncedAt: z.string().nullable(),
   bqError: z.string().nullable(),
 });

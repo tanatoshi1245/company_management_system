@@ -150,7 +150,7 @@ export default function ScoutUnusedPage(_props: PageProps) {
         <input type="search" className="ctl" placeholder="企業名・担当で検索" aria-label="企業名・担当で検索" value={url.q} onChange={(e) => setUrl({ q: e.target.value })} />
         <span className="spacer" />
         <span className="muted small">
-          理由はプルダウン、補足は自由記述（500 文字まで）。保存すると企業ページの「スカウト未利用状況」に即時反映、BigQuery（cms_scout_unused_app）にも書き込む <Help text="保存先は D1（アプリの DB）が正。BigQuery への書き込みに失敗しても保存は残り、「BQ に再同期」で再試行できる。マート（翌朝 07:45）はシート取込とアプリの登録を統合し、同じ企業・月はアプリの値を優先する" />
+          理由はプルダウン、補足は自由記述（500 文字まで）。保存すると企業ページの「スカウト未利用状況」に即時反映、BigQuery（scout_unused_companies_monthly）にも 1 行追加する <Help text="保存先は D1（アプリの DB）が正。BigQuery にはシート取込と同じ表に match_method = 'app' の行として書き、失敗しても保存は残り「BQ に再同期」で再試行できる。マート（翌朝 07:45）は同じ企業・月についてアプリの行をシートの行より優先する" />
         </span>
       </div>
       {!rows || !bm ? (

@@ -6,7 +6,7 @@ import { scoutUnusedMergeQuery } from '../sql/scoutUnused';
 import type { ScoutUnusedRow as DetailRow } from '../../shared/schema/company';
 import { parseScoutUnused } from './companyService';
 
-/** D1 の 1 行を BigQuery（cms_scout_unused_app）に写す。成功で bq_synced_at、失敗で bq_error。モックは常に成功 */
+/** D1 の 1 行を BigQuery（scout_unused_companies_monthly の match_method = 'app' の行）に写す。成功で bq_synced_at、失敗で bq_error。モックは常に成功 */
 export async function syncOne(client: BqClient, db: D1Like, row: ScoutUnusedRow, display: { salesRep: string | null; companyName: string | null }): Promise<{ synced: boolean; error: string | null }> {
   const repo = new ScoutUnusedRepo(db);
   try {
