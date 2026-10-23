@@ -31,6 +31,7 @@ status: active
 | GET /api/settings/overrides | session | ?limit=（≤500） | 上書きのある企業 | D1 company_settings |
 | GET / PUT /api/settings/plan-defaults | session / verified | `{plan, values}`（null の指標は削除） | `{plans, updatedAt}` | D1 plan_target_defaults + audit_log |
 | POST /api/admin/cache/bump | verified + 同一オリジン | — | `{cacheEpoch}` | D1 app_meta + audit_log |
+| `GET /api/scout-unused?month=` / `PUT`・`DELETE /api/scout-unused/:companyId/:month` / `POST /api/scout-unused/sync` | `scoutUnused.ts` | スカウト未利用の理由・補足（D1 が正 → BigQuery `cms_scout_unused_app` に MERGE）。書き込みは `requireVerified` + 同一オリジン、strict zod、監査ログ同 batch |
 
 D1 が束ねられていない環境では書き込み系は 503 `storage`、読み取り系は空を返す。
 

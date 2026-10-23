@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import App from '../../src/app/App';
 import { clearResourceCache } from '../../src/app/lib/useResource';
 import { MockBqClient } from '../../src/worker/bq/mockClient';
@@ -93,7 +93,7 @@ describe('企業詳細', () => {
     const lower = document.querySelector('.co-lower')!;
     const cols = lower.querySelectorAll(':scope > .stack');
     expect(cols.length).toBe(2);
-    expect(cols[0].querySelector('section[aria-label="契約期間中の累積（閲覧・応募）"]')).toBeTruthy();
+    expect(cols[0].querySelector('section[aria-label="閲覧と応募の推移"]')).toBeTruthy();
     expect(cols[1].querySelector('section[aria-label="スカウト送信と返信の推移"]')).toBeTruthy();
     expect(cols[1].querySelector('[role=tablist][aria-label="属性"]')).toBeTruthy();
     expect(screen.queryByText('13 か月の推移')).toBeNull();
@@ -107,7 +107,12 @@ describe('企業詳細', () => {
       expect(ch.querySelectorAll('svg g[data-series] > path').length).toBe(2);
     }
     fireEvent.click(screen.getAllByRole('button', { name: '表で見る' })[0]);
-    expect(screen.getByRole('table', { name: '契約期間中の累積（閲覧・応募）の表' })).toBeTruthy();
+    const va = screen.getByRole('table', { name: '閲覧と応募の推移の表' });
+    // 単月の値（累積ではない）: 最後の行 = 当月の閲覧・応募がボードの値と一致
+    const lastRow = va.querySelector('tbody tr:last-child')!;
+    const cells = Array.from(lastRow.querySelectorAll('td')).map((td) => td.textContent?.replace(/,/g, ''));
+    expect(Number(cells[1])).toBe(c.m.views);
+    expect(Number(cells[2])).toBe(c.m.apps);
     // 属性タブ: 最終経験職種・ターゲット区分・会員分類は無い。日本語レベルは番号の降順
     const attrTabs = screen.getByRole('tablist', { name: '属性' });
     const tabNames = Array.from(attrTabs.querySelectorAll('[role=tab]')).map((t) => t.textContent);
@@ -121,9 +126,11 @@ describe('企業詳細', () => {
     // スカウト未利用状況の表（モックは 3 社に 1 社に記録がある）
     const unused = screen.getByRole('region', { name: 'スカウト未利用状況' });
     expect(unused).toBeTruthy();
+    expect(within(unused).getByRole('link', { name: '理由を登録する' }).getAttribute('href')).toBe(`/scout-unused?month=${f.month}`);
     if (f.unused.length) {
       const table = screen.getByRole('table', { name: 'スカウト未利用の記録' });
       expect(table.querySelectorAll('tbody tr').length).toBe(f.unused.length);
+      expect(Array.from(table.querySelectorAll('thead th')).map((h) => h.textContent)).toEqual(['対象月', '理由', '補足', '出所']);
       expect(table.textContent).toContain(f.unused[0].reason ?? '–');
       // 対象月は年月（例: 2026年9月）
       expect(table.querySelector('tbody tr td')?.textContent).toMatch(/^\d{4}年\d{1,2}月$/);

@@ -147,7 +147,9 @@ export function mockCompanyMonthly(today = todayJst()): Row[] {
       const contracted = c.from <= `${ym}-31` && (c.to === null || c.to >= `${ym}-01`);
       const frac = isCur ? Math.max(0.05, (dayOfMonth - 1) / 30) : 1;
       const limit = c.scoutLimit ?? 120;
-      const sent = contracted ? Math.round(limit * c.activity * frac * (0.75 + rand() * 0.5)) : 0;
+      // 7 社に 1 社は奇数月にスカウトを送らない（スカウト未利用の登録ページ・フィルタのサンプル）
+      const skipMonth = Number(c.id) % 7 === 0 && Number(ym.slice(5, 7)) % 2 === 1;
+      const sent = contracted && !skipMonth ? Math.round(limit * c.activity * frac * (0.75 + rand() * 0.5)) : 0;
       const manual = Math.round(sent * (0.5 + rand() * 0.4));
       const interested = Math.round(sent * (0.06 + rand() * 0.14));
       const jobs = contracted ? Math.min(c.jobLimit ?? 12, Math.max(1, Math.round((c.jobLimit ?? 12) * c.activity * (0.8 + rand() * 0.3)))) : 0;

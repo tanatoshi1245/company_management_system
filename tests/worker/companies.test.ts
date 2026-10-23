@@ -67,8 +67,8 @@ describe('/api/companies/:id（モック）', () => {
 describe('parseScoutUnused', () => {
   it('JSON 配列を行にし、壊れた JSON・形の違う要素・NULL は空にする', () => {
     expect(parseScoutUnused('[{"month":"2026-09","reason":"7. その他の理由","remarks":"運用開始直後"},{"month":"2026-08","reason":null,"remarks":null}]')).toEqual([
-      { month: '2026-09', reason: '7. その他の理由', remarks: '運用開始直後' },
-      { month: '2026-08', reason: null, remarks: null },
+      { month: '2026-09', reason: '7. その他の理由', remarks: '運用開始直後', source: 'sheet' },
+      { month: '2026-08', reason: null, remarks: null, source: 'sheet' },
     ]);
     expect(parseScoutUnused('[]')).toEqual([]);
     expect(parseScoutUnused(null)).toEqual([]);

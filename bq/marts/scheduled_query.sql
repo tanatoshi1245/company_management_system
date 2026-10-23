@@ -95,17 +95,29 @@ BEGIN
       FROM `bq-hgt.dwh.company_profiles_all` cpa JOIN pcm USING (profile_id)
       GROUP BY 1
     ),
-    -- スカウト未利用の記録（CS が月次で記入。企業 × 月。契約期間に入る月だけを JSON 配列で持つ。2026-10-23）
+    -- スカウト未利用の記録（企業 × 月。契約期間に入る月だけを JSON 配列で持つ。2026-10-23）
+    --   シート取込 scout_unused_companies_monthly（CS が月次で記入）と、アプリの登録ページが書く cms_scout_unused_app を統合。
+    --   同じ企業・月はアプリの値を優先（source = 'app' / 'sheet'）
     scout_unused AS (
       SELECT u.company_id,
-             TO_JSON_STRING(ARRAY_AGG(STRUCT(FORMAT_DATE('%Y-%m', u.target_month) AS month, u.unused_reason AS reason, u.remarks) ORDER BY u.target_month DESC)) AS scout_unused_json
+             TO_JSON_STRING(ARRAY_AGG(STRUCT(FORMAT_DATE('%Y-%m', u.month) AS month, u.unused_reason AS reason, u.remarks, u.source) ORDER BY u.month DESC, u.source)) AS scout_unused_json
       FROM (
-        -- 同じ企業の複数プロファイルで同じ記録が重複するので (月, 理由, 補足) で一意にする
-        SELECT DISTINCT company_id, target_month, unused_reason, remarks FROM `bq-hgt.dwh.scout_unused_companies_monthly` WHERE company_id IS NOT NULL
+        SELECT company_id, month, unused_reason, remarks, source
+        FROM (
+          SELECT company_id, DATE_TRUNC(target_month, MONTH) AS month, unused_reason, remarks, 'app' AS source, 1 AS prio
+          FROM `bq-hgt.dwh.cms_scout_unused_app`
+          WHERE deleted IS NOT TRUE
+          UNION ALL
+          -- 同じ企業の複数プロファイルで同じ記録が重複するので (月, 理由, 補足) で一意にする
+          SELECT DISTINCT company_id, DATE_TRUNC(target_month, MONTH), unused_reason, remarks, 'sheet', 2
+          FROM `bq-hgt.dwh.scout_unused_companies_monthly`
+          WHERE company_id IS NOT NULL
+        )
+        QUALIFY MIN(prio) OVER (PARTITION BY company_id, month) = prio
       ) u
       JOIN companies_now c USING (company_id)
-      WHERE DATE_TRUNC(u.target_month, MONTH) >= DATE_TRUNC(c.active_from, MONTH)
-        AND DATE_TRUNC(u.target_month, MONTH) <= COALESCE(c.active_to, DATE '9999-12-31')
+      WHERE u.month >= DATE_TRUNC(c.active_from, MONTH)
+        AND u.month <= COALESCE(c.active_to, DATE '9999-12-31')
       GROUP BY u.company_id
     ),
     -- 当日の掲載求人（企業単位で set_id 重複排除。日英プロファイルにまたがる）

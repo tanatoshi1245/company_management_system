@@ -46,7 +46,7 @@ export const AttributeRowSchema = z.object({ month: z.string(), type: z.string()
 export type AttributeRow = z.infer<typeof AttributeRowSchema>;
 
 /** スカウト未利用の記録（cms_company_master.scout_unused_json。契約期間に入る月だけ、月の降順） */
-export const ScoutUnusedRowSchema = z.object({ month: z.string(), reason: z.string().nullable(), remarks: z.string().nullable() });
+export const ScoutUnusedRowSchema = z.object({ month: z.string(), reason: z.string().nullable(), remarks: z.string().nullable(), source: z.enum(['sheet', 'app']).default('sheet') });
 export type ScoutUnusedRow = z.infer<typeof ScoutUnusedRowSchema>;
 
 export const BenchSeriesRowSchema = BenchRowSchema.extend({ month: z.string() });

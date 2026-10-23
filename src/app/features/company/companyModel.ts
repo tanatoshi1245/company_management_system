@@ -10,7 +10,7 @@ export interface SeriesByMonth {
   months: string[];
   /** 契約開始月（マートの窓より前なら窓の先頭） */
   fromMonth: string;
-  /** 契約開始がマートの窓（直近 13 か月 + 当月）より前で、累積の起点を窓の先頭にしている */
+  /** 契約開始がマートの窓（直近 13 か月 + 当月）より前で、表示の起点を窓の先頭にしている */
   truncated: boolean;
   /** 当月（最後の点）は途中経過 */
   partialLast: boolean;
@@ -19,8 +19,8 @@ export interface SeriesByMonth {
 export interface CompanyModel {
   scored: ScoredCompany;
   months: string[];
-  /** 契約期間中（窓内）の累積: 閲覧人数・応募人数 */
-  cumulative: SeriesByMonth & { views: number[]; apps: number[] };
+  /** 契約期間中（窓内）の単月の実績: 閲覧人数・応募人数 */
+  viewsApps: SeriesByMonth & { views: number[]; apps: number[] };
   /** 契約期間中（窓内）の月次推移: スカウト送信数・返信数（返信月基準） */
   scoutTrend: SeriesByMonth & { sent: number[]; intReply: number[] };
   attributes: Record<string, AttrBar[]>;
@@ -50,10 +50,7 @@ export function useCompanyModel(d: CompanyDetailResponse | null): CompanyModel |
     const truncated = startMonth < months[0];
     const partialLast = d.meta.isCurrentMonth && inContract[inContract.length - 1] === month;
     const base = { months: inContract, fromMonth: inContract[0] ?? months[0], truncated, partialLast };
-    const cum = (k: 'views' | 'apps') => {
-      let acc = 0;
-      return inContract.map((m) => (acc += byMonth.get(m)?.[k] ?? 0));
-    };
+    const monthly = (k: 'views' | 'apps') => inContract.map((m) => byMonth.get(m)?.[k] ?? 0);
     const attributes: Record<string, AttrBar[]> = {};
     const attrMonths = Array.from(new Set(d.attributes.map((a) => a.month))).sort();
     const byType = new Map<string, Map<string, { scouts: number; interested: number }>>();
@@ -82,7 +79,7 @@ export function useCompanyModel(d: CompanyDetailResponse | null): CompanyModel |
     return {
       scored,
       months,
-      cumulative: { ...base, views: cum('views'), apps: cum('apps') },
+      viewsApps: { ...base, views: monthly('views'), apps: monthly('apps') },
       scoutTrend: { ...base, sent: inContract.map((m) => byMonth.get(m)?.sent ?? 0), intReply: inContract.map((m) => byMonth.get(m)?.intReply ?? 0) },
       attributes,
       attrMonths,

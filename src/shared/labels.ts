@@ -52,6 +52,19 @@ export const STATUS_ORDER: string[] = [...STATUS_KEYS.map((k) => STATUS_VALUES[k
 /** 「選考中」= 面接調整中〜最終面接 */
 export const IN_SELECTION_KEYS: StatusKey[] = ['st06_interview_adjusting', 'st07_interview_1st', 'st08_interview_2nd', 'st09_interview_3rd', 'st10_interview_final'];
 
+/** スカウト未利用の理由（登録ページのプルダウン。番号の大きい順に並べる。文言はシート取込 scout_unused_companies_monthly と同じ） */
+export const SCOUT_UNUSED_REASONS = [
+  '8. どうしても連絡つかず不明',
+  '7. その他の理由',
+  '6. 既に採用でき、案件クローズ',
+  '5. 応募で十分間に合うのでスカウト不要',
+  '4. サイトの機能が分かりづらく使い勝手が悪い等、技術的な問題で未利用',
+  '3. 前月以前スカウト利用中で、今月送れる対象がいない',
+  '2. そもそもスカウト対象が1人もいなく、1通も送れない',
+  '1. 企業担当者の作業時間取れず未利用',
+] as const;
+export type ScoutUnusedReason = (typeof SCOUT_UNUSED_REASONS)[number];
+
 /** 企業ページ「誰にスカウトを送っているか」のタブ（マートには last_occupation_group / target_flag / member_category もあるが画面には出さない） */
 export const ATTRIBUTE_TYPES = ['japanese_level', 'english_level', 'residence_prefecture', 'experienced_occupation', 'desired_occupation', 'current_income_range', 'desired_income_range', 'age_group'] as const;
 /** 値の先頭の番号（1. なし 〜 6. ネイティヴ）で降順に並べる属性 */

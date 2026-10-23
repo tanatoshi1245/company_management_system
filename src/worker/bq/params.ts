@@ -1,4 +1,4 @@
-// 複製元: sales_dashboard_IS-FS_ver2（営業行動モニタリング）の同名ファイル。変更なし。
+// 複製元: sales_dashboard_IS-FS_ver2（営業行動モニタリング）の同名ファイル。変更点: nullableStr を追加（スカウト未利用の MERGE 用）。
 /** BigQuery REST `queryParameters` のビルダー。利用者入力は必ずここを通し、SQL 本文には埋め込まない。 */
 export interface QueryParameter {
   name: string;
@@ -12,6 +12,9 @@ export const p = {
   },
   int(name: string, v: number): QueryParameter {
     return { name, parameterType: { type: 'INT64' }, parameterValue: { value: String(Math.trunc(v)) } };
+  },
+  nullableStr(name: string, v: string | null): QueryParameter {
+    return { name, parameterType: { type: 'STRING' }, parameterValue: { value: v } };
   },
   nullableInt(name: string, v: number | null): QueryParameter {
     return { name, parameterType: { type: 'INT64' }, parameterValue: { value: v === null ? null : String(Math.trunc(v)) } };

@@ -13,7 +13,7 @@ import { ApiError } from '../../lib/api';
 import { useCompanyModel } from './companyModel';
 import { CompanyHeader } from './components/CompanyHeader';
 import { CurrentMonthPanel } from './components/CurrentMonthPanel';
-import { CumulativePanel } from './components/CumulativePanel';
+import { ViewsAppsPanel } from './components/ViewsAppsPanel';
 import { ScoutTrendPanel } from './components/ScoutTrendPanel';
 import { ScoutTargetPanel } from './components/ScoutTargetPanel';
 import { ScoutUnusedPanel } from './components/ScoutUnusedPanel';
@@ -23,7 +23,7 @@ import { CaveatFootnotes } from './components/CaveatFootnotes';
 const UrlSchema = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).or(z.literal('')).default(''), attr: z.string().default('') });
 const URL_DEFAULTS = { month: '', attr: '' };
 
-/** 企業詳細: ヘッダ → 当月の実績 → 左: 累積（閲覧・応募）/ 右: 送信・返信の推移 + スカウト対象 → スカウト未利用状況 → 目標比較 → 注意点 */
+/** 企業詳細: ヘッダ → 当月の実績 → 左: 閲覧・応募の推移 / 右: 送信・返信の推移 + スカウト対象 → スカウト未利用状況 → 目標比較 → 注意点 */
 export default function CompanyPage({ params }: PageProps) {
   const { meta } = useSession();
   const [url, setUrl] = useUrlState(UrlSchema, URL_DEFAULTS);
@@ -57,14 +57,14 @@ export default function CompanyPage({ params }: PageProps) {
       <CurrentMonthPanel d={d} m={model} />
       <div className="grid-2 co-lower">
         <div className="stack">
-          <CumulativePanel m={model} />
+          <ViewsAppsPanel m={model} />
         </div>
         <div className="stack">
           <ScoutTrendPanel m={model} />
           <ScoutTargetPanel m={model} initial={url.attr} onChange={(t) => setUrl({ attr: t === 'japanese_level' ? '' : t })} />
         </div>
       </div>
-      <ScoutUnusedPanel rows={d.scoutUnused} />
+      <ScoutUnusedPanel rows={d.scoutUnused} month={d.meta.month} />
       <TargetVsActualPanel d={d} m={model} />
       <CaveatFootnotes ids={model.caveatIds} />
     </div>
