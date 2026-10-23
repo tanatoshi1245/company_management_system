@@ -140,8 +140,8 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
                 <td className={`col-owner ${c.isMine ? 'mine' : ''} ${c.owner.name ? '' : 'none'}`} title={c.owner.name ? `担当: ${c.owner.name}${c.owner.src === 'override' ? '（画面で上書き）' : ''}` : '担当未設定'}>
                   {surname(c.owner.name) ?? '未設定'}
                 </td>
-                <td className="company">
-                  <span className="nm" title={c.name}>
+                <td className={`company${c.contractKind === 'ad' ? ' ad' : ''}`}>
+                  <span className="nm" title={c.contractKind === 'ad' ? `${c.name}（広告掲載型）` : c.name}>
                     {c.name}
                   </span>
                 </td>

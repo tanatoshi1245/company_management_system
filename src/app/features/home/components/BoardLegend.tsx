@@ -9,6 +9,10 @@ export function BoardLegend({ meta }: { meta: BoardMeta }) {
           <span className="sw zero" />
           掲載・閲覧・応募・スカウト送信が 0 件、または {NO_LOGIN_DAYS} 日以上ログインなし（記録なしを含む）
         </span>
+        <span>
+          <span className="sw ad" />
+          広告掲載型の企業（契約体系。Daijob プロファイルの contract_type、無ければ SF のプラン名で判定。成功報酬型は無印）
+        </span>
       </div>
       <div>
         契約中の企業のみ

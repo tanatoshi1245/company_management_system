@@ -11,6 +11,13 @@
 .kpi .v.bad { color: var(--bad); }
 .kpi .v.warn { color: var(--warn); }
 .kpi .n { font-size: var(--fs-11); color: var(--ink-soft); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+/* 契約体系の内訳: 左 = 広告掲載（黄の下地。表の企業名のハイライトと同じ色）/ 右 = 成功報酬 */
+.kpi .split { display: grid; grid-template-columns: 1fr 1fr; margin-top: 6px; border-top: 1px solid var(--rule); padding-top: 6px; }
+.kpi .split .cell { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding: 0 8px; }
+.kpi .split .cell.success { border-left: 1px solid var(--rule); }
+.kpi .split .k { font-size: var(--fs-11); color: var(--muted); font-weight: 700; }
+.kpi .split .cell.ad .k { background: var(--dj-gold-pale); display: inline-block; padding: 0 4px; border-radius: 2px; width: fit-content; }
+.kpi .split .v2 { font-size: var(--fs-14); font-weight: 600; color: var(--heading); white-space: nowrap; }
 .kpi .spark { flex: 0 0 auto; }
 
 /* 注目レーン */
@@ -65,6 +72,8 @@ table.board thead th.col-type, table.board thead th.col-owner, table.board thead
 table.board thead tr.groups th.col-type { text-align: left; }
 table.board td.col-type .badge { padding: 0 5px; font-size: 10px; }
 table.board td.company .nm { display: block; font-size: var(--fs-13); font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 広告掲載型の企業は企業名を黄色でハイライト */
+table.board td.company.ad .nm { background: var(--dj-gold-pale); padding: 0 4px; margin: 0 -4px; border-radius: 2px; }
 table.board td.heat { min-width: 86px; text-align: right; }
 .heat-in { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; padding: 3px 8px; height: var(--row-h); line-height: 1.15; }
 .heat-v { font-size: var(--fs-13); font-weight: 600; color: var(--ink); }
@@ -90,6 +99,7 @@ table.board td.info.zero { background: var(--heat-n1); }
 table.board td.info.zero .heat-v { color: var(--heat-n2); font-weight: 700; }
 table.board td.info.zero .heat-s { color: var(--heat-n2); }
 .legend .sw.zero { background: var(--heat-n1); border-color: var(--heat-n2); }
+.legend .sw.ad { background: var(--dj-gold-pale); border-color: var(--dj-gold); }
 table.board td.info .heat-in { align-items: flex-end; }
 .board-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 2px 0; font-size: var(--fs-11); color: var(--muted); }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }

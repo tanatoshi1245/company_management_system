@@ -135,6 +135,8 @@ export interface KpiTile {
   unit: 'count' | 'rate';
   /** 件数の右に添える割合（スカウト利用社数の利用率） */
   rate?: number | null;
+  /** 契約体系ごとの内訳（左 = 広告掲載、右 = 成功報酬。unknown は内訳に入れず合計にだけ含める） */
+  split: { ad: number | null; success: number | null; unknown: number };
   /** クリックで適用するフィルタ */
   filter: Partial<BoardFilters> | null;
   tone: 'neutral' | 'bad' | 'warn' | 'good';
@@ -172,22 +174,30 @@ export function isActiveLogin(c: Pick<BoardCompany, 'login'>): boolean {
 }
 
 /** KPI タイル（4 枚: 契約企業 / アクティブ企業数 / スカウト利用社数（利用率）/ スカウト消化率）。数字だけを出す */
-export function kpiStrip(rows: ScoredCompany[], meta: BoardMeta): KpiTile[] {
-  const contracted = rows.filter((r) => isContracted(r.c, meta));
-  const active = contracted.filter((r) => isActiveLogin(r.c));
-  // スカウト消化率 = 月間送信実績の合計 ÷ 月間送信枠の合計（枠のある契約企業）
-  const withLimit = contracted.filter((r) => r.c.limits.period === 'month' && r.c.limits.scout !== null && r.c.limits.scout > 0);
+/** スカウト消化率 = 月間送信実績の合計 ÷ 月間送信枠の合計（枠のある契約企業。枠の期間が「契約」の企業は除く） */
+function scoutUtilOf(rows: ScoredCompany[]): { util: number | null; sentSum: number; limitSum: number; n: number } {
+  const withLimit = rows.filter((r) => r.c.limits.period === 'month' && r.c.limits.scout !== null && r.c.limits.scout > 0);
   const sentSum = withLimit.reduce((a, r) => a + r.c.m.sent, 0);
   const limitSum = withLimit.reduce((a, r) => a + (r.c.limits.scout ?? 0), 0);
-  const util = limitSum > 0 ? sentSum / limitSum : null;
-  const utilRatio = util !== null && meta.bizDays.rate > 0 ? util / meta.bizDays.rate : null;
+  return { util: limitSum > 0 ? sentSum / limitSum : null, sentSum, limitSum, n: withLimit.length };
+}
+
+export function kpiStrip(rows: ScoredCompany[], meta: BoardMeta): KpiTile[] {
+  const contracted = rows.filter((r) => isContracted(r.c, meta));
+  const ad = contracted.filter((r) => r.c.contractKind === 'ad');
+  const success = contracted.filter((r) => r.c.contractKind === 'success');
+  const unknown = contracted.length - ad.length - success.length;
+  const active = (xs: ScoredCompany[]) => xs.filter((r) => isActiveLogin(r.c)).length;
   // スカウト利用率 = 1 件以上送信している企業数 ÷ 契約中の企業数
-  const using = contracted.filter((r) => r.c.m.sent > 0).length;
-  const usage = contracted.length ? using / contracted.length : null;
+  const using = (xs: ScoredCompany[]) => xs.filter((r) => r.c.m.sent > 0).length;
+  const usage = contracted.length ? using(contracted) / contracted.length : null;
+  const u = scoutUtilOf(contracted);
+  const utilRatio = u.util !== null && meta.bizDays.rate > 0 ? u.util / meta.bizDays.rate : null;
+  const count = (xs: ScoredCompany[], f: (ys: ScoredCompany[]) => number) => (xs.length ? f(xs) : null);
   return [
-    { key: 'contracted', label: '契約企業', value: contracted.length, unit: 'count', filter: null, tone: 'neutral' },
-    { key: 'active', label: `アクティブ企業数（最終ログイン${NO_LOGIN_DAYS}日以内）`, value: active.length, unit: 'count', filter: null, tone: 'neutral' },
-    { key: 'scoutUsers', label: 'スカウト利用社数（利用率）', value: using, unit: 'count', rate: usage, filter: null, tone: usage === null ? 'neutral' : usage < 0.5 ? 'bad' : usage < 0.7 ? 'warn' : 'good' },
-    { key: 'scoutUtil', label: 'スカウト消化率', value: util, unit: 'rate', filter: null, tone: utilRatio === null || !meta.isCurrentMonth ? 'neutral' : utilRatio < 0.8 ? 'bad' : utilRatio < 1 ? 'warn' : 'good' },
+    { key: 'contracted', label: '契約企業', value: contracted.length, unit: 'count', filter: null, tone: 'neutral', split: { ad: ad.length, success: success.length, unknown } },
+    { key: 'active', label: `アクティブ企業数（最終ログイン${NO_LOGIN_DAYS}日以内）`, value: active(contracted), unit: 'count', filter: null, tone: 'neutral', split: { ad: count(ad, active), success: count(success, active), unknown } },
+    { key: 'scoutUsers', label: 'スカウト利用社数（利用率）', value: using(contracted), unit: 'count', rate: usage, filter: null, tone: usage === null ? 'neutral' : usage < 0.5 ? 'bad' : usage < 0.7 ? 'warn' : 'good', split: { ad: count(ad, using), success: count(success, using), unknown } },
+    { key: 'scoutUtil', label: 'スカウト消化率', value: u.util, unit: 'rate', filter: null, tone: utilRatio === null || !meta.isCurrentMonth ? 'neutral' : utilRatio < 0.8 ? 'bad' : utilRatio < 1 ? 'warn' : 'good', split: { ad: scoutUtilOf(ad).util, success: scoutUtilOf(success).util, unknown } },
   ];
 }

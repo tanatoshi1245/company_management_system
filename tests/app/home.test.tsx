@@ -53,6 +53,19 @@ describe('ホーム（ボード）', () => {
     // 並び: 契約企業 → アクティブ企業数 → スカウト利用社数（利用率）→ スカウト消化率。利用社数は「n 社（xx%）」
     expect(Array.from(document.querySelectorAll('.kpi .t')).map((e) => e.textContent)).toEqual(['契約企業', 'アクティブ企業数（最終ログイン30日以内）', 'スカウト利用社数（利用率）', 'スカウト消化率']);
     expect(document.querySelectorAll('.kpi')[2].querySelector('.v')?.textContent).toMatch(/^[\d,]+社（\d+%）$/);
+    // 各タイルの下に契約体系の内訳（左 = 広告掲載、右 = 成功報酬）。消化率は %、それ以外は 社
+    for (const kpi of document.querySelectorAll('.kpi')) {
+      const cells = kpi.querySelectorAll('.split .cell');
+      expect(cells.length).toBe(2);
+      expect(cells[0].querySelector('.k')?.textContent).toBe('広告掲載');
+      expect(cells[1].querySelector('.k')?.textContent).toBe('成功報酬');
+    }
+    expect(document.querySelectorAll('.kpi')[0].querySelector('.split .cell.ad .v2')?.textContent).toMatch(/^[\d,]+ 社$/);
+    expect(document.querySelectorAll('.kpi')[3].querySelector('.split .cell.ad .v2')?.textContent).toMatch(/^(\d+%|–)$/);
+    // 広告掲載型の企業名は黄色（td.company.ad）、凡例に説明
+    expect(table.querySelectorAll('td.company.ad').length).toBeGreaterThan(0);
+    expect(table.querySelectorAll('td.company.ad').length).toBeLessThan(table.querySelectorAll('td.company').length);
+    expect(screen.getByText(/広告掲載型の企業（契約体系/)).toBeTruthy();
     expect(screen.queryByText('求人枠消化率（中央値）')).toBeNull();
     expect(screen.queryByText(/注目/)).toBeNull();
     expect(screen.queryByRole('button', { name: '目標比' })).toBeNull();
