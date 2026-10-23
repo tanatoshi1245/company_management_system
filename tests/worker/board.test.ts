@@ -80,7 +80,15 @@ describe('/api/board（モック）', () => {
     const ratios = byPace.map((s) => s.pace.ratio).filter((r): r is number => r !== null);
     for (let i = 1; i < ratios.length; i++) expect(ratios[i]).toBeGreaterThanOrEqual(ratios[i - 1]);
     const tiles = kpiStrip(all, body.meta);
-    expect(tiles.map((t) => t.key)).toEqual(['contracted', 'scoutUtil', 'scoutUsage', 'behind', 'noLogin', 'ending']);
+    expect(tiles.map((t) => t.key)).toEqual(['contracted', 'scoutUtil', 'scoutUsage', 'behind', 'noLogin']);
+    expect(tiles[3].label).toBe('スカウトの消化率_進捗遅れ');
+    // 契約終了: 30 日以内 / 90 日以上先（無期限を含む）
+    const soon = filterCompanies(scored, { ...DEFAULT_FILTERS, ending: '30' }, body.meta);
+    expect(soon.every((s) => s.c.contract.daysToEnd !== null && s.c.contract.daysToEnd <= 30)).toBe(true);
+    const far = filterCompanies(scored, { ...DEFAULT_FILTERS, ending: 'over90' }, body.meta);
+    expect(far.length).toBeGreaterThan(0);
+    expect(far.every((s) => s.c.contract.daysToEnd === null || s.c.contract.daysToEnd > 90)).toBe(true);
+    expect(soon.length + far.length).toBeLessThanOrEqual(all.length);
     expect(tiles[0].value).toBe(all.length);
     expect(tiles[0].value).toBeGreaterThan(20);
     // 30 日以上ログインなし（記録なしを含む）

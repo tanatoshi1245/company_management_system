@@ -11,7 +11,6 @@ export interface HomeModel {
   kpis: KpiTile[];
   /** CS 担当の一覧（key = ownerKey、label = 苗字、name = フルネーム） */
   owners: { key: string; label: string; name: string; count: number }[];
-  industries: { key: string; count: number }[];
   types: { key: string; count: number }[];
   mineCount: number;
 }
@@ -48,7 +47,6 @@ export function useHomeModel(board: BoardResponse | null, filters: BoardFilters,
         }
         return Array.from(m.values()).sort((a, b) => (a.key === '(未設定)' ? 1 : b.key === '(未設定)' ? -1 : b.count - a.count || a.label.localeCompare(b.label, 'ja')));
       })(),
-      industries: count((s) => s.c.ind),
       types: count((s) => s.c.type),
       mineCount: contractedRows.filter((s) => s.c.isMine).length,
     };

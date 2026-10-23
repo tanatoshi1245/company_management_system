@@ -9,11 +9,11 @@ import { Notice } from '../../components/ui/Notice';
 import { Icon } from '../../components/ui/Icon';
 import { BoardResponseSchema } from '../../../shared/schema/board';
 import { fmtMonthJa, isoToJstDisplay } from '../../../shared/calendar/periods';
-import { BOARD_COLUMNS, type BoardFilters, type KpiTile } from '../../../shared/metrics/board';
+import type { BoardFilters, KpiTile } from '../../../shared/metrics/board';
 import { activeFilterCount, fromFilters, HOME_URL_DEFAULTS, HomeUrlSchema, toFilters } from './homeFilters';
 import { useHomeModel } from './homeModel';
 import { KpiStrip } from './components/KpiStrip';
-import { BoardFilterBar, sortOptions } from './components/BoardFilterBar';
+import { BoardFilterBar } from './components/BoardFilterBar';
 import { CompanyBoard } from './components/CompanyBoard';
 import { BoardLegend } from './components/BoardLegend';
 import { EmptyBoard } from './components/EmptyBoard';
@@ -23,12 +23,12 @@ import { fmtInt } from '../../lib/format';
 export default function HomePage(_props: PageProps) {
   const { meta } = useSession();
   const [url, setUrl] = useUrlState(HomeUrlSchema, HOME_URL_DEFAULTS);
-  const month = url.month || meta?.month || null;
+  const month = meta?.month ?? null;
   const board = useResource(month ? `/api/board?month=${month}` : null, BoardResponseSchema, { ttlMs: 5 * 60_000 });
   const filters = useMemo(() => toFilters(url), [url]);
   const model = useHomeModel(board.data, filters, url.sort);
   const setFilters = useCallback((patch: Partial<BoardFilters>) => setUrl(fromFilters(patch)), [setUrl]);
-  const clear = useCallback(() => setUrl({ ...HOME_URL_DEFAULTS, month: url.month, sort: url.sort }), [setUrl, url.month, url.sort]);
+  const clear = useCallback(() => setUrl({ ...HOME_URL_DEFAULTS, sort: url.sort }), [setUrl, url.sort]);
   const onKpi = (t: KpiTile) => {
     if (t.key === 'noLogin') {
       setUrl({ sort: 'login' });
@@ -52,7 +52,7 @@ export default function HomePage(_props: PageProps) {
   };
   const bm = board.data?.meta;
   const context = bm
-    ? `${fmtMonthJa(bm.month)}${bm.isCurrentMonth ? `（営業日 ${bm.bizDays.elapsed}/${bm.bizDays.total} 経過・${Math.round(bm.bizDays.rate * 100)}%）` : '（月の全営業日）'}・データは ${bm.dataDate} まで${meta?.refreshedAt ? `・マート更新 ${isoToJstDisplay(meta.refreshedAt)}` : ''}`
+    ? `${fmtMonthJa(bm.month)}（契約中の企業・営業日 ${bm.bizDays.elapsed}/${bm.bizDays.total} 経過・${Math.round(bm.bizDays.rate * 100)}%）・データは ${bm.dataDate} まで${meta?.refreshedAt ? `・マート更新 ${isoToJstDisplay(meta.refreshedAt)}` : ''}`
     : meta
       ? fmtMonthJa(meta.month)
       : null;
@@ -75,7 +75,7 @@ export default function HomePage(_props: PageProps) {
       {!model ? (
         <>
           <div className="kpi-strip" aria-hidden="true">
-            {Array.from({ length: 6 }, (_, i) => (
+            {Array.from({ length: 5 }, (_, i) => (
               <Skeleton key={i} variant="tile" />
             ))}
           </div>
@@ -85,18 +85,11 @@ export default function HomePage(_props: PageProps) {
         </>
       ) : (
         <div className={board.refreshing ? 'visually-dim' : ''}>
-          <KpiStrip tiles={model.kpis} onPick={onKpi} active={filters.ending === 60 ? 'ending' : url.sort === 'login' ? 'noLogin' : url.sort === 'pace' ? 'behind' : null} />
+          <KpiStrip tiles={model.kpis} onPick={onKpi} active={url.sort === 'login' ? 'noLogin' : url.sort === 'pace' ? 'behind' : null} />
           <BoardFilterBar
             filters={filters}
             onChange={setFilters}
-            month={bm?.month ?? month ?? ''}
-            months={bm?.months ?? []}
-            onMonth={(m) => setUrl({ month: m === (meta?.month ?? '') ? '' : m })}
-            sort={url.sort}
-            onSort={(s) => setUrl({ sort: s })}
-            sorts={sortOptions(BOARD_COLUMNS)}
             owners={model.owners}
-            industries={model.industries}
             types={model.types}
             mineCount={model.mineCount}
             activeCount={activeFilterCount(filters)}
