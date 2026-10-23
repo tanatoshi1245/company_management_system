@@ -10,12 +10,11 @@ import { Segmented } from '../../components/ui/Segmented';
 import { Icon } from '../../components/ui/Icon';
 import { BoardResponseSchema } from '../../../shared/schema/board';
 import { fmtMonthJa, isoToJstDisplay } from '../../../shared/calendar/periods';
-import { heatColumns, type BoardFilters, type KpiTile, type Lanes } from '../../../shared/metrics/board';
+import { BOARD_COLUMNS, type BoardFilters, type KpiTile } from '../../../shared/metrics/board';
 import type { BenchMode } from '../../../shared/metrics/score';
 import { activeFilterCount, fromFilters, HOME_URL_DEFAULTS, HomeUrlSchema, modeOf, toFilters } from './homeFilters';
 import { useHomeModel } from './homeModel';
 import { KpiStrip } from './components/KpiStrip';
-import { AttentionLanes } from './components/AttentionLanes';
 import { BoardFilterBar, sortOptions } from './components/BoardFilterBar';
 import { CompanyBoard } from './components/CompanyBoard';
 import { BoardLegend } from './components/BoardLegend';
@@ -35,14 +34,11 @@ export default function HomePage(_props: PageProps) {
   const clear = useCallback(() => setUrl({ ...HOME_URL_DEFAULTS, month: url.month, bench: url.bench, sort: url.sort }), [setUrl, url.month, url.bench, url.sort]);
   const onKpi = (t: KpiTile) => {
     if (!t.filter) return;
-    if (t.key === 'noLogin') return;
+    if (t.key === 'noLogin') {
+      setUrl({ sort: 'login' });
+      return;
+    }
     setFilters(t.filter);
-  };
-  const onLaneMore = (lane: keyof Lanes) => {
-    if (lane === 'behind') setUrl({ sort: 'pace', status: '' });
-    if (lane === 'ending') setFilters({ ending: 60 });
-    if (lane === 'noLogin') setUrl({ sort: 'login_days' });
-    document.getElementById('board')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
   const refresh = async () => {
     if (!month) return;
@@ -79,7 +75,7 @@ export default function HomePage(_props: PageProps) {
       {!model ? (
         <>
           <div className="kpi-strip" aria-hidden="true">
-            {Array.from({ length: 5 }, (_, i) => (
+            {Array.from({ length: 6 }, (_, i) => (
               <Skeleton key={i} variant="tile" />
             ))}
           </div>
@@ -90,12 +86,6 @@ export default function HomePage(_props: PageProps) {
       ) : (
         <div className={board.refreshing ? 'visually-dim' : ''}>
           <KpiStrip tiles={model.kpis} onPick={onKpi} active={filters.status === 'alert' ? 'behind' : filters.ending === 60 ? 'ending' : null} />
-          <AttentionLanes
-            lanes={model.lanes}
-            totals={{ behind: model.filtered.filter((s) => s.pace.status === 'behind').length, noLogin: model.filtered.filter((s) => s.c.login.daysSince === null || s.c.login.daysSince >= 14).length, ending: model.filtered.filter((s) => s.c.contract.daysToEnd !== null && s.c.contract.daysToEnd >= 0 && s.c.contract.daysToEnd <= 60).length }}
-            month={bm?.month ?? month ?? ''}
-            onMore={onLaneMore}
-          />
           <BoardFilterBar
             filters={filters}
             onChange={setFilters}
@@ -105,7 +95,8 @@ export default function HomePage(_props: PageProps) {
             onMonth={(m) => setUrl({ month: m === (meta?.month ?? '') ? '' : m })}
             sort={url.sort}
             onSort={(s) => setUrl({ sort: s })}
-            sorts={sortOptions(mode, heatColumns(mode))}
+            sorts={sortOptions(mode, BOARD_COLUMNS)}
+            owners={model.owners}
             industries={model.industries}
             types={model.types}
             mineCount={model.mineCount}

@@ -66,7 +66,8 @@ BEGIN
                WHEN LOGICAL_OR(REGEXP_CONTAINS(LOWER(NORMALIZE(IFNULL(p.company_name, '') || IFNULL(p.profile_name, ''), NFKC)), r'daijob\s*agent')) THEN 'DA'
                WHEN LOGICAL_OR(p.rpo_contract = TRUE) THEN 'RPO'
                WHEN ARRAY_AGG(p.company_type ORDER BY IFNULL(j.n, 0) DESC, p.recorded_on DESC LIMIT 1)[SAFE_OFFSET(0)] = '直接' THEN '直接'
-               ELSE '紹介（派遣含む）'
+               WHEN ARRAY_AGG(p.company_type ORDER BY IFNULL(j.n, 0) DESC, p.recorded_on DESC LIMIT 1)[SAFE_OFFSET(0)] = '派遣' THEN '派遣'
+               ELSE '紹介'
              END AS company_type,
              ARRAY_AGG(NULLIF(p.contract_type, '登録なし') IGNORE NULLS ORDER BY IFNULL(j.n, 0) DESC, p.recorded_on DESC LIMIT 1)[SAFE_OFFSET(0)] AS dj_contract_type,
              ARRAY_AGG(NULLIF(NULLIF(TRIM(p.industry), ''), '(未選択)') IGNORE NULLS ORDER BY IFNULL(j.n, 0) DESC, p.recorded_on DESC LIMIT 1)[SAFE_OFFSET(0)] AS dj_industry,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { BoardFilters, EndingDays } from '../../../../shared/metrics/board';
+import type { BoardColumn, BoardFilters, EndingDays } from '../../../../shared/metrics/board';
 import { ENDING_OPTIONS } from '../../../../shared/metrics/board';
 import type { BenchMode } from '../../../../shared/metrics/score';
 import type { HealthLevel } from '../../../../shared/metrics/health';
@@ -8,20 +8,20 @@ import { fmtMonthJa } from '../../../../shared/calendar/periods';
 import { Chip } from '../../../components/ui/Chip';
 import { Segmented } from '../../../components/ui/Segmented';
 import { Icon } from '../../../components/ui/Icon';
-import { METRIC_BY_KEY } from '../../../../shared/metrics/definitions';
 
 export interface SortOption {
   key: string;
   label: string;
 }
 
-export function sortOptions(mode: BenchMode, columns: string[]): SortOption[] {
+export function sortOptions(mode: BenchMode, columns: BoardColumn[]): SortOption[] {
   return [
     { key: 'health', label: mode === 'industry' ? '状態（悪い順）' : '目標比（悪い順）' },
     { key: 'pace', label: 'スカウトのペース（遅い順）' },
     { key: 'contractEnd', label: '契約終了が近い順' },
+    { key: 'login', label: 'ログインが古い順' },
     { key: 'name', label: '企業名' },
-    ...columns.map((k) => ({ key: `-${k}`, label: `${METRIC_BY_KEY[k]?.short ?? k}（高い順）` })),
+    ...columns.filter((c) => !['login', 'daysToEnd'].includes(c.key)).map((c) => ({ key: `-${c.key}`, label: `${c.label}（多い順）` })),
   ];
 }
 
@@ -35,6 +35,7 @@ interface Props {
   sort: string;
   onSort: (s: string) => void;
   sorts: SortOption[];
+  owners: { key: string; label: string; name: string; count: number }[];
   industries: { key: string; count: number }[];
   types: { key: string; count: number }[];
   mineCount: number;
@@ -57,6 +58,23 @@ export function BoardFilterBar(p: Props) {
   return (
     <div className="sticky-bar" role="search" aria-label="絞り込み">
       <Chip label="担当 = 自分" on={p.filters.mine} onClick={() => p.onChange({ mine: !p.filters.mine })} count={p.mineCount} disabled={p.mineCount === 0 && !p.filters.mine} title={p.mineCount === 0 ? 'ログイン中のメールが担当になっている企業がありません（設定で担当を上書きできます）' : '自分が担当の企業だけ'} icon={<Icon name="filter" size={14} />} />
+      <details className="industry-pick owner-pick">
+        <summary>
+          <span className={`chip ${p.filters.owner.length ? 'on' : ''}`} aria-label="CS 担当で絞り込み">
+            CS 担当{p.filters.owner.length ? ` ${p.filters.owner.length}` : ''}
+            <Icon name="chevronDown" size={14} />
+          </span>
+        </summary>
+        <div className="industry-pop" role="group" aria-label="CS 担当">
+          {p.owners.map((o) => (
+            <label key={o.key} title={o.name}>
+              <input type="checkbox" checked={p.filters.owner.includes(o.key)} onChange={(e) => p.onChange({ owner: e.target.checked ? [...p.filters.owner, o.key] : p.filters.owner.filter((x) => x !== o.key) })} />
+              <span>{o.label}</span>
+              <span className="cnt">{o.count}</span>
+            </label>
+          ))}
+        </div>
+      </details>
       <details className="industry-pick">
         <summary>
           <span className={`chip ${p.filters.industry.length ? 'on' : ''}`}>

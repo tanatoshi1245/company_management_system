@@ -40,14 +40,23 @@ describe('ホーム（ボード）', () => {
   });
   afterEach(() => cleanup());
 
-  it('KPI タイル・注目レーン・ヒートマップが描画され、担当=自分 で絞り込める。モード切替で再取得しない', async () => {
+  it('KPI タイル・実数のボードが描画され、担当=自分 / CS 担当 で絞り込める。モード切替で再取得しない', async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByRole('table', { name: '契約企業のヒートマップ' })).toBeTruthy());
     const table = screen.getByRole('table', { name: '契約企業のヒートマップ' });
     const rowsBefore = table.querySelectorAll('tbody tr').length;
     expect(rowsBefore).toBeGreaterThan(20);
     expect(screen.getByText('契約企業')).toBeTruthy();
-    expect(screen.getAllByText(/ペース遅れ/).length).toBeGreaterThan(0);
+    expect(screen.getByText('スカウト消化率')).toBeTruthy();
+    expect(screen.getByText('スカウト利用率')).toBeTruthy();
+    expect(screen.queryByText('求人枠消化率（中央値）')).toBeNull();
+    expect(screen.queryByText(/注目/)).toBeNull();
+    for (const h of ['掲載 / 枠', '閲覧', '応募', '送信 / 枠', '返信（当月）', '選考中', '採用', '最終ログイン', '契約残']) expect(screen.getByRole('columnheader', { name: new RegExp(h) })).toBeTruthy();
+    // 実数の分数表記（割合ではない）と、担当の苗字 + 種別
+    const first = table.querySelector('tbody tr')!;
+    expect(first.querySelector('td[data-col], td.heat')!.textContent).toMatch(/^\d[\d,]* \/ (\d[\d,]*|–)/);
+    expect(first.querySelector('.co-strip .own')!.textContent!.trim().split(/\s/).length).toBe(1);
+    expect(first.querySelector('.co-strip .badge')).toBeTruthy();
     expect(table.querySelectorAll('td.heat').length).toBeGreaterThan(50);
     expect(table.querySelectorAll('td[data-score="-2"], td[data-score="-1"]').length).toBeGreaterThan(0);
     const boardCalls = () => calls.filter((u) => u.startsWith('/api/board')).length;
@@ -57,6 +66,15 @@ describe('ホーム（ボード）', () => {
     await waitFor(() => expect(window.location.search).toContain('mine=1'));
     await waitFor(() => expect(table.querySelectorAll('tbody tr').length).toBeLessThan(rowsBefore));
     for (const ava of table.querySelectorAll('tbody .ava')) expect(ava.className).toContain('mine');
+    fireEvent.click(screen.getByRole('button', { name: /担当 = 自分/ }));
+    await waitFor(() => expect(window.location.search).not.toContain('mine=1'));
+    // CS 担当（苗字）で絞り込み
+    const ownerBox = screen.getByRole('group', { name: 'CS 担当' }).querySelector('input[type=checkbox]') as HTMLInputElement;
+    fireEvent.click(ownerBox);
+    await waitFor(() => expect(window.location.search).toContain('owner='));
+    await waitFor(() => expect(table.querySelectorAll('tbody tr').length).toBeLessThan(rowsBefore));
+    fireEvent.click(ownerBox);
+    await waitFor(() => expect(window.location.search).not.toContain('owner='));
     // 目標比に切替: 再取得なし・セルは「目標なし」
     fireEvent.click(screen.getByRole('button', { name: '目標比' }));
     await waitFor(() => expect(window.location.search).toContain('bench=target'));
