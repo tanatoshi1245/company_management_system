@@ -52,6 +52,11 @@ describe('ホーム（ボード）', () => {
     expect(screen.queryByText('求人枠消化率（中央値）')).toBeNull();
     expect(screen.queryByText(/注目/)).toBeNull();
     expect(screen.queryByRole('button', { name: '目標比' })).toBeNull();
+    expect(screen.queryByText('契約終了まで 60 日以内')).toBeNull();
+    expect(screen.getByText('スカウトの消化率_進捗遅れ')).toBeTruthy();
+    expect(screen.queryByLabelText('並べ替え')).toBeNull();
+    expect(screen.queryByLabelText('期間')).toBeNull();
+    expect(screen.queryByText(/^業種/)).toBeNull();
     // 列の順: 種別 → CS 担当 → 企業名 → 実績
     const headers = Array.from(table.querySelectorAll('thead tr.metrics th')).map((h) => h.textContent?.replace(/[▲▼]/g, '').trim());
     expect(headers.slice(0, 3)).toEqual(['種別', 'CS 担当', '企業名']);
@@ -96,11 +101,26 @@ describe('ホーム（ボード）', () => {
     expect(boardCalls()).toBe(1);
   });
 
-  it('並べ替え（ペース）と検索、クリア', async () => {
+  it('列見出しの並べ替え、企業種別（複数選択）・契約終了（単数）のプルダウン、検索、クリア', async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByRole('table', { name: '契約企業の実績一覧' })).toBeTruthy());
-    fireEvent.change(screen.getByLabelText('並べ替え'), { target: { value: 'pace' } });
-    await waitFor(() => expect(window.location.search).toContain('sort=pace'));
+    fireEvent.click(screen.getByRole('columnheader', { name: /応募/ }));
+    await waitFor(() => expect(window.location.search).toContain('sort=-apps'));
+    const table0 = screen.getByRole('table', { name: '契約企業の実績一覧' });
+    const total = table0.querySelectorAll('tbody tr').length;
+    // 企業種別: 2 つ選ぶ
+    const typeBoxes = screen.getByRole('group', { name: '企業種別' }).querySelectorAll('input[type=checkbox]');
+    fireEvent.click(typeBoxes[0]);
+    fireEvent.click(typeBoxes[1]);
+    await waitFor(() => expect(window.location.search).toMatch(/type=[^&]+%2C|type=[^&]+,/));
+    await waitFor(() => expect(table0.querySelectorAll('tbody tr').length).toBeLessThan(total));
+    fireEvent.click(typeBoxes[0]);
+    fireEvent.click(typeBoxes[1]);
+    // 契約終了: 90 日以上先
+    fireEvent.change(screen.getByLabelText('契約終了'), { target: { value: 'over90' } });
+    await waitFor(() => expect(window.location.search).toContain('ending=over90'));
+    for (const td of table0.querySelectorAll('td[data-col="daysToEnd"]')) expect(td.textContent).toMatch(/無期限|^(9[1-9]|[1-9]\d{2,})/);
+    fireEvent.change(screen.getByLabelText('契約終了'), { target: { value: '' } });
     fireEvent.change(screen.getByLabelText('企業名で検索'), { target: { value: 'アーク' } });
     await waitFor(() => expect(window.location.search).toContain('q='));
     const table = screen.getByRole('table', { name: '契約企業の実績一覧' });
