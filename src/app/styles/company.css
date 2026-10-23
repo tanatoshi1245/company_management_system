@@ -82,5 +82,3 @@ table.unused-reg input.remarks { width: 100%; min-width: 220px; }
 table.unused-reg tr.dirty td { background: var(--surface-low); }
 table.unused-reg .status { margin-top: 4px; white-space: nowrap; }
 table.unused-reg .status .ok { color: var(--good); font-weight: 600; }
-.sheet-hint { margin-top: 2px; }
-.sheet-hint .btn { margin-left: 6px; }

@@ -30,13 +30,17 @@ const UrlSchema = z.object({
   q: z.string().max(100).default(''),
 });
 
-/** スカウト未使用の企業 = その月に契約中・送信 0 件・スカウト枠あり */
+/** 登録の対象外の企業種別（DA・RPO は Daijob 側でスカウトを運用するため） */
+export const SCOUT_UNUSED_EXCLUDED_TYPES: ReadonlySet<string> = new Set(['DA', 'RPO']);
+
+/** スカウト未使用の企業 = その月に契約中・送信 0 件・スカウト枠あり・DA / RPO 以外 */
 export function isScoutUnused(c: BoardCompany, meta: { isCurrentMonth: boolean }): boolean {
-  return isContracted(c, meta) && c.m.sent === 0 && c.limits.scout !== null && c.limits.scout > 0;
+  return isContracted(c, meta) && c.m.sent === 0 && c.limits.scout !== null && c.limits.scout > 0 && !SCOUT_UNUSED_EXCLUDED_TYPES.has(c.type);
 }
 
 type Draft = { reason: string; remarks: string };
-const draftOf = (e: ScoutUnusedEntry | null): Draft => ({ reason: e?.reason ?? '', remarks: e?.remarks ?? '' });
+/** 入力欄の初期値: アプリの登録（D1）があればそれ、無ければ BQ に既にある記録（シート取込）。どちらも無ければ空 */
+const draftOf = (e: ScoutUnusedEntry | null, sh: ScoutUnusedSheetRow | null = null): Draft => ({ reason: e?.reason ?? sh?.reason ?? '', remarks: e?.remarks ?? sh?.remarks ?? '' });
 const same = (a: Draft, b: Draft) => a.reason === b.reason && a.remarks.trim() === b.remarks.trim();
 
 /** スカウト未利用の理由・補足の登録。既定は前月。保存は行ごと（D1 に保存 → BigQuery に反映） */
@@ -84,12 +88,15 @@ export default function ScoutUnusedPage(_props: PageProps) {
   }, [unusedAll, url.mine, url.q, ownerFilter]);
   const unsynced = (reg.data?.entries ?? []).filter((e) => e.bqSyncedAt === null || e.bqSyncedAt < e.updatedAt).length;
   // 登録済みの行も同じ欄で編集できる（変更すると保存ボタンが有効になり、PUT で更新する）
-  const draft = (id: string): Draft => drafts.get(id) ?? draftOf(entries.get(id) ?? null);
+  const base = (id: string): Draft => draftOf(entries.get(id) ?? null, sheet.get(id) ?? null);
+  const draft = (id: string): Draft => drafts.get(id) ?? base(id);
   const setDraft = (id: string, d: Draft) => setDrafts((m) => new Map(m).set(id, d));
   const save = async (id: string) => {
     if (!month) return;
     const d = draft(id);
     const current = entries.get(id) ?? null;
+    // シート取込しか無い行を空にしても消せない（シートの行は触らない）ので何もしない
+    if (!current && !d.reason && !d.remarks.trim()) return;
     setSaving((s) => new Set(s).add(id));
     setErrors((m) => {
       const n = new Map(m);
@@ -138,7 +145,7 @@ export default function ScoutUnusedPage(_props: PageProps) {
     <>
       <PageHeader
         title="スカウト未利用の理由"
-        context={month ? `${fmtMonthJa(month)} にスカウトを 1 件も送っていない契約中の企業（スカウト枠あり）${rows ? ` ・ ${fmtInt(rows.length)} 社` : ''}${reg.data ? ` ・ 登録済み ${fmtInt(reg.data.entries.length)} 社` : ''}` : null}
+        context={month ? `${fmtMonthJa(month)} にスカウトを 1 件も送っていない契約中の企業（スカウト枠あり）${rows ? ` ・ ${fmtInt(rows.length)} 社` : ''}${reg.data && rows ? ` ・ 登録済み ${fmtInt(rows.filter((c) => entries.has(c.id) || sheet.has(c.id)).length)} 社` : ''}` : null}
         actions={
           <>
             <label className="field">
@@ -174,7 +181,7 @@ export default function ScoutUnusedPage(_props: PageProps) {
         <input type="search" className="ctl" placeholder="企業名・担当で検索" aria-label="企業名・担当で検索" value={url.q} onChange={(e) => setUrl({ q: e.target.value })} />
         <span className="spacer" />
         <span className="muted small">
-          理由はプルダウン、補足は自由記述（500 文字まで）。保存すると企業ページの「スカウト未利用状況」に即時反映、BigQuery（scout_unused_companies_monthly）にも 1 行追加する <Help text="保存先は D1（アプリの DB）が正。BigQuery にはシート取込と同じ表に match_method = 'app' の行として書き、失敗しても保存は残り「BQ に再同期」で再試行できる。マート（翌朝 07:45）は同じ企業・月についてアプリの行をシートの行より優先する" />
+          理由はプルダウン、補足は自由記述（500 文字まで）。BQ に既にある記録（シート取込）は入力欄にそのまま出る。保存すると企業ページの「スカウト未利用状況」に即時反映、BigQuery（scout_unused_companies_monthly）にも書き込む <Help text="保存先は D1（アプリの DB）が正。BigQuery にはシート取込と同じ表に match_method = 'app' の行として書き、失敗しても保存は残り「BQ に再同期」で再試行できる。同じ企業・月にシートの記録がある場合もアプリの登録が優先され、重複して数えない。対象は契約中・送信 0 件・スカウト枠あり・DA / RPO 以外" />
         </span>
       </div>
       {!rows || !bm ? (
@@ -203,7 +210,8 @@ export default function ScoutUnusedPage(_props: PageProps) {
                 const d = draft(c.id);
                 const cur = entries.get(c.id) ?? null;
                 const sh = sheet.get(c.id) ?? null;
-                const dirty = !same(d, draftOf(cur));
+                const dirty = !same(d, base(c.id));
+                const empty = !d.reason && !d.remarks.trim();
                 const busy = saving.has(c.id);
                 const err = errors.get(c.id);
                 return (
@@ -212,7 +220,6 @@ export default function ScoutUnusedPage(_props: PageProps) {
                       <Link to={`/companies/${c.id}?month=${bm.month}`} className="nm">
                         {c.name}
                       </Link>
-                      {sh && !cur ? <SheetHint row={sh} onCopy={canEdit ? () => setDraft(c.id, { reason: sh.reason ?? '', remarks: sh.remarks ?? '' }) : undefined} /> : null}
                     </td>
                     <td>
                       <Badge tone="navy">{COMPANY_TYPE_SHORT[c.type] ?? c.type}</Badge>
@@ -233,8 +240,8 @@ export default function ScoutUnusedPage(_props: PageProps) {
                       <input type="text" className="ctl remarks" aria-label={`${c.name} の補足`} maxLength={500} value={d.remarks} disabled={!canEdit || busy} placeholder="補足（任意）" onChange={(e) => setDraft(c.id, { ...d, remarks: e.target.value })} />
                     </td>
                     <td className="nowrap">
-                      <Button size="sm" variant={dirty ? 'primary' : 'default'} disabled={!canEdit || !dirty} loading={busy} onClick={() => save(c.id)}>
-                        {cur && !d.reason && !d.remarks.trim() ? '削除' : '保存'}
+                      <Button size="sm" variant={dirty ? 'primary' : 'default'} disabled={!canEdit || !dirty || (!cur && empty)} loading={busy} onClick={() => save(c.id)} title={!cur && empty && sh ? 'シート取込の記録は画面からは消せません' : undefined}>
+                        {cur && empty ? '削除' : '保存'}
                       </Button>
                       <div className="status small">
                         {err ? (
@@ -244,6 +251,8 @@ export default function ScoutUnusedPage(_props: PageProps) {
                             <span className={cur.bqSyncedAt && cur.bqSyncedAt >= cur.updatedAt ? 'ok' : 'warn-text'}>{cur.bqSyncedAt && cur.bqSyncedAt >= cur.updatedAt ? 'BQ 反映済み' : 'BQ 未反映'}</span>
                             <span className="muted"> ・ {surname(cur.updatedBy.split('@')[0]) ?? cur.updatedBy} {isoToJstDisplay(cur.updatedAt) ?? ''}</span>
                           </>
+                        ) : sh ? (
+                          <span className="ok">BQ 登録済み（シート）</span>
                         ) : (
                           <span className="muted">未登録</span>
                         )}
@@ -257,20 +266,5 @@ export default function ScoutUnusedPage(_props: PageProps) {
         </div>
       )}
     </>
-  );
-}
-
-/** シート取込に既にある記録を薄く出し、「取り込む」で入力欄にコピー */
-function SheetHint({ row, onCopy }: { row: ScoutUnusedSheetRow; onCopy?: () => void }) {
-  return (
-    <div className="sheet-hint small muted">
-      シート: {row.reason ?? '–'}
-      {row.remarks ? ` / ${row.remarks}` : ''}
-      {onCopy ? (
-        <button type="button" className="btn ghost sm" onClick={onCopy}>
-          取り込む
-        </button>
-      ) : null}
-    </div>
   );
 }
