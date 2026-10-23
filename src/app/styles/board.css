@@ -48,6 +48,7 @@ table.board thead th.num { text-align: right; }
 table.board thead th.sortable { cursor: pointer; }
 table.board thead th.sortable:hover { color: var(--heading); }
 table.board thead th[aria-sort] { color: var(--heading); }
+table.board thead th.note { text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
 table.board thead th .sort-ind { font-size: 9px; margin-left: 2px; }
 table.board thead th .spark { display: block; margin-top: 2px; opacity: 0.7; margin-left: auto; }
 table.board td { padding: 0; height: var(--row-h); vertical-align: middle; }
