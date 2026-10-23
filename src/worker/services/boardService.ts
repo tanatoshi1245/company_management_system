@@ -49,6 +49,21 @@ interface MonthlyRow {
 
 const ZERO: MonthlyRow = { contracted: false, jobs: 0, newJobs: 0, sent: 0, sentManual: 0, sentAuto: 0, sentCtd: 0, int: 0, intReply: 0, apps: 0, views: 0, hires: 0, inSel: 0, noResp: 0, hired: 0, loginDays: null };
 
+/**
+ * 契約体系。Daijob プロファイルの contract_type（広告掲載型 / 採用成功報酬型）を正、無ければ SF のプラン名
+ * （成果報酬 / 採用成功 / 人材紹介 / RPO / CF → 成功報酬、DJ / WA → 広告掲載）。どちらも無ければ unknown
+ */
+export function contractKindOf(djContractType: string | null, planName: string | null): 'ad' | 'success' | 'unknown' {
+  const t = (djContractType ?? '').trim();
+  if (t === '広告掲載型') return 'ad';
+  if (t === '採用成功報酬型') return 'success';
+  const p = (planName ?? '').normalize('NFKC').toLowerCase();
+  if (!p) return 'unknown';
+  if (/成果報酬|採用成功|人材紹介|rpo|cf/.test(p)) return 'success';
+  if (/dj|wa/.test(p)) return 'ad';
+  return 'unknown';
+}
+
 /** マスタ 1 行 + 月次 + ログイン → ボードの企業 1 行（targets / isMine はあとで合成） */
 export function buildBoardCompany(r: Row, mm: Map<string, MonthlyRow>, lg: Row | undefined, month: string, months: string[]): BoardCompany {
   const id = String(r.company_id);
@@ -67,6 +82,7 @@ export function buildBoardCompany(r: Row, mm: Map<string, MonthlyRow>, lg: Row |
     state,
     plan: str(r.plan_name),
     planSrc: String(r.plan_source ?? 'none'),
+    contractKind: contractKindOf(str(r.dj_contract_type), str(r.plan_name)),
     owner: { email: ownerEmail, name: ownerName, src: ownerEmail || ownerName ? String(r.owner_source ?? 'none') : 'none' },
     sfOwnerName: str(r.sf_account_owner_name),
     salesStaff: str(r.sales_staff),

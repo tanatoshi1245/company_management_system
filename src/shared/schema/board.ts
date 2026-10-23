@@ -11,6 +11,8 @@ export const BoardCompanySchema = z.object({
   state: z.string(),
   plan: z.string().nullable(),
   planSrc: z.string(),
+  /** 契約体系: ad = 広告掲載 / success = 成功報酬 / unknown（プロファイルの contract_type を正、無ければ SF プラン名） */
+  contractKind: z.enum(['ad', 'success', 'unknown']),
   owner: z.object({ email: z.string().nullable(), name: z.string().nullable(), src: z.string() }),
   sfOwnerName: z.string().nullable(),
   salesStaff: z.string().nullable(),

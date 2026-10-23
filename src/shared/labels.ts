@@ -1,5 +1,9 @@
 /** 画面の日本語ラベルと並び順（マートの値 → 表示）。値そのものはマート README を参照 */
 
+/** 契約体系（KPI タイルの内訳と企業名の黄色ハイライト） */
+export type ContractKind = 'ad' | 'success' | 'unknown';
+export const CONTRACT_KIND_LABEL: Record<ContractKind, string> = { ad: '広告掲載', success: '成功報酬', unknown: '不明' };
+
 /** NW = Network 契約（直接 で DaijobAgent を含まず、求人枠 0・掲載 0・スカウト枠 0・当月送信 0。マートで判定） */
 export const COMPANY_TYPES = ['DA', 'RPO', 'NW', '直接', '紹介', '派遣', '不明'] as const;
 export type CompanyType = (typeof COMPANY_TYPES)[number];

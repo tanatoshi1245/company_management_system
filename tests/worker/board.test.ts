@@ -7,6 +7,7 @@ import { addMonths, monthOf, todayJst } from '../../src/shared/calendar/periods'
 import { makeContext, scoreCompany } from '../../src/shared/metrics/score';
 import { filterCompanies, isContracted, isNoLogin, kpiStrip, ownerKey, sortCompanies, DEFAULT_FILTERS } from '../../src/shared/metrics/board';
 import { companyMasterQuery } from '../../src/worker/sql/companyMaster';
+import { contractKindOf } from '../../src/worker/services/boardService';
 
 const get = (q = '', env = baseEnv) => app.fetch(new Request(`http://x/api/board${q}`), env, ctx);
 
@@ -85,6 +86,24 @@ describe('/api/board（モック）', () => {
     const active = tiles.find((t) => t.key === 'active')!;
     expect(active.value).toBe(all.filter((s) => isContracted(s.c, body.meta) && s.c.login.daysSince !== null && s.c.login.daysSince < 30).length);
     expect(tiles[1].label).toBe('アクティブ企業数（最終ログイン30日以内）');
+    // 契約体系の内訳: 広告掲載 + 成功報酬 + 不明 = 合計（契約企業）。消化率の内訳は率
+    const t0 = tiles[0];
+    expect((t0.split.ad ?? 0) + (t0.split.success ?? 0) + t0.split.unknown).toBe(t0.value);
+    expect(t0.split.ad).toBeGreaterThan(0);
+    expect(t0.split.success).toBeGreaterThan(0);
+    expect(tiles[2].split.ad).toBe(all.filter((s) => isContracted(s.c, body.meta) && s.c.contractKind === 'ad' && s.c.m.sent > 0).length);
+    const adUtil = tiles[3].split.ad;
+    expect(adUtil === null || (adUtil >= 0 && adUtil <= 2)).toBe(true);
+    // 契約体系の判定
+    expect(contractKindOf('広告掲載型', 'DJ_成果報酬')).toBe('ad');
+    expect(contractKindOf('採用成功報酬型', 'DJ')).toBe('success');
+    expect(contractKindOf(null, 'DJ_成果報酬')).toBe('success');
+    expect(contractKindOf(null, 'RPO')).toBe('success');
+    expect(contractKindOf(null, '人材紹介（採用成功）')).toBe('success');
+    expect(contractKindOf(null, 'DJ')).toBe('ad');
+    expect(contractKindOf(null, 'WA')).toBe('ad');
+    expect(contractKindOf(null, null)).toBe('unknown');
+    expect(contractKindOf('登録なし', '')).toBe('unknown');
     // 契約終了: 30 日以内 / 90 日以上先（無期限を含む）
     const soon = filterCompanies(scored, { ...DEFAULT_FILTERS, ending: '30' }, body.meta);
     expect(soon.every((s) => s.c.contract.daysToEnd !== null && s.c.contract.daysToEnd <= 30)).toBe(true);
