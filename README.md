@@ -23,6 +23,17 @@ CS（カスタマーサクセス）向けの社内 Web アプリ。契約中企�
 | M0〜M4 実装完了 | 足場・認証、マート 13 表（登録済み・毎日 07:45 JST）、ホームボード、企業詳細、目標・設定、ドキュメント |
 | 未実施 | 本番デプロイ（ユーザーのコンソール作業: [デプロイ手順](./docs/デプロイ手順.md)）、リリース後の curl 試験とログ確認（[セキュリティチェックリスト](./docs/セキュリティチェックリスト.md) §2.3） |
 
+## 次にユーザーが行う作業（本番デプロイ。所要 40 分。手順の詳細は [デプロイ手順](./docs/デプロイ手順.md)）
+
+| # | 作業 | 場所 | 詳細 |
+|---|---|---|---|
+| 1 | 専用 SA `cms-bq-reader@bq-hgt` を作り、**`roles/bigquery.jobUser`（プロジェクト）+ `roles/bigquery.dataViewer`（Worker が読む `cms_*` 9 表、表単位）** を付与し、鍵を 1 本発行して 1 行 JSON を Workers Secret `BQ_SA_KEY` に入れる。KEY_ID と発行日を台帳に記録（90 日でローテーション） | Cloud Shell / gcloud | [Google Cloud 認証情報の発行手順](./docs/Google_Cloud認証情報の発行手順.md)（権限の設計・コマンド・確認・ローテーション・新規アプリでの使い回し方） |
+| 2 | 本アプリ専用の OAuth クライアント（ウェブ アプリケーション、リダイレクト URI は本番 URL + `/auth/callback` のみ）を作り、`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `SESSION_SECRET` を Workers Secret に入れる | Google Auth Platform | 同上 §3、[ドメイン認証](./docs/ドメイン認証.md) |
+| 3 | D1 `company-management-system` と `company-management-system-preview` を作り、Database ID を `wrangler.jsonc` に書いて `main` にマージ、マイグレーションを適用 | Cloudflare D1 | [デプロイ手順](./docs/デプロイ手順.md) 3 |
+| 4 | Cloudflare の Git 連携で Worker `company-management-system` を作る（Production branch = `main`、Deploy command = `npx wrangler deploy`） | Workers & Pages | 同 4 |
+| 5 | Secret 4 つを入れて Deploy、`/api/health` と curl 試験（未ログイン 302 / 401、gmail 403、他オリジン PUT 403）を行い結果を記入 | Cloudflare | 同 5〜6、[セキュリティチェックリスト](./docs/セキュリティチェックリスト.md) §2.3 |
+| 6 | 台帳（claude_analysis `04_アプリケーション/セキュリティ要件.md` §5.1 / §5.2）のキー ID・発行日を埋め、リリース 1 週間後に Workers Logs を確認 | claude_analysis | 同 7 |
+
 ## 画面
 
 | ルート | 画面 | 主な内容 |
@@ -57,7 +68,7 @@ CS（カスタマーサクセス）向けの社内 Web アプリ。契約中企�
 ## ディレクトリ
 
 ```
-docs/                 指標定義 / データ紐付け / 画面設計 / デプロイ手順 / ドメイン認証 / セキュリティチェックリスト
+docs/                 指標定義 / データ紐付け / 画面設計 / デプロイ手順 / Google_Cloud認証情報の発行手順 / ドメイン認証 / セキュリティチェックリスト
 bq/marts/             日次マート cms_* の SQL（init.sql / scheduled_query.sql / steps）と各マートの README
 d1/migrations/        D1 スキーマ（0001_init / 0002_plan_defaults）、seed.local.sql
 scripts/              bq-dryrun.ts（各クエリのスキャン量）/ bq-smoke.ts（疎通）/ update-holidays.ts / put-secret.sh
@@ -135,5 +146,5 @@ BQ_SA_KEY_FILE=/tmp/bq-key.json npm run dryrun   # 各クエリのスキャン�
 | マートの SQL を変えたとき | `bq/marts/scheduled_query.sql` を直し、BigQuery Studio のスケジュールドクエリ（設定 ID は `bq/README.md`）に貼り替え。Worker 側の `src/worker/sql/*` と `DATA_VERSION` を合わせる |
 | マートを手動で再実行したとき | 設定 → 「Worker のキャッシュを捨てる」 |
 | 年 1 回（11 月頃） | `npm run holidays:update <内閣府 CSV>` で翌年の祝日を入れる（`tests/shared/businessDays.test.ts` が当年 + 翌年の存在を確認） |
-| 90 日ごと | SA `cms-bq-reader@` の鍵をローテーション（[デプロイ手順](./docs/デプロイ手順.md) 1）。台帳 §5.2 を更新 |
+| 90 日ごと | SA `cms-bq-reader@` の鍵をローテーション（[Google Cloud 認証情報の発行手順](./docs/Google_Cloud認証情報の発行手順.md) §5）。台帳 §5.2 を更新 |
 | 四半期 | 台帳（`claude_analysis/04_アプリケーション/セキュリティ要件.md` §5）と実環境の突合 |
