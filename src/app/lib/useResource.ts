@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { z } from 'zod';
-import { apiGet, ApiError } from './api';
+import { apiGet, ApiError, type Schema } from './api';
 
 interface Entry {
   data: unknown;
@@ -20,7 +19,7 @@ export function clearResourceCache(): void {
   cache.clear();
 }
 
-async function load<T>(url: string, schema?: z.ZodType<T>): Promise<T> {
+async function load<T>(url: string, schema?: Schema<T>): Promise<T> {
   const cur = inflight.get(url) as Promise<T> | undefined;
   if (cur) return cur;
   const p = apiGet<T>(url, schema)
@@ -34,7 +33,7 @@ async function load<T>(url: string, schema?: z.ZodType<T>): Promise<T> {
 }
 
 /** 行ホバー等での先読み。失敗は無視 */
-export function prefetch<T>(url: string, schema?: z.ZodType<T>): void {
+export function prefetch<T>(url: string, schema?: Schema<T>): void {
   if (cache.has(url) || inflight.has(url)) return;
   load(url, schema).catch(() => undefined);
 }
@@ -53,7 +52,7 @@ export interface Resource<T> {
  * fetch + モジュール内キャッシュ + stale-while-revalidate。url が null なら何もしない。
  * ttlMs より古いキャッシュは表示しつつ裏で取り直す
  */
-export function useResource<T>(url: string | null, schema?: z.ZodType<T>, opts: { ttlMs?: number } = {}): Resource<T> {
+export function useResource<T>(url: string | null, schema?: Schema<T>, opts: { ttlMs?: number } = {}): Resource<T> {
   const ttl = opts.ttlMs ?? 60_000;
   const cached = url ? (cache.get(url) as Entry | undefined) : undefined;
   const [data, setData] = useState<T | null>((cached?.data as T) ?? null);

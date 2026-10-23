@@ -1,0 +1,87 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { installFakeCache, uninstallFakeCache } from '../helpers/fakeCache';
+import app from '../../src/worker/index';
+import { baseEnv, ctx } from '../helpers/env';
+import { BoardResponseSchema } from '../../src/shared/schema/board';
+import { addMonths, monthOf, todayJst } from '../../src/shared/calendar/periods';
+import { makeContext, scoreCompany } from '../../src/shared/metrics/score';
+import { attentionLanes, filterCompanies, kpiStrip, sortCompanies, DEFAULT_FILTERS } from '../../src/shared/metrics/board';
+
+const get = (q = '', env = baseEnv) => app.fetch(new Request(`http://x/api/board${q}`), env, ctx);
+
+describe('/api/board（モック）', () => {
+  beforeAll(() => installFakeCache());
+  afterAll(() => uninstallFakeCache());
+
+  it('当月のボード: 企業・ベンチマーク・営業日を返し、形が合う。2 回目はキャッシュヒット', async () => {
+    const res = await get();
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-cache')).toBe('MISS');
+    const text = await res.text();
+    const body = BoardResponseSchema.parse(JSON.parse(text));
+    expect(body.meta.month).toBe(monthOf(todayJst()));
+    expect(body.meta.isCurrentMonth).toBe(true);
+    expect(body.meta.months).toHaveLength(14);
+    expect(body.meta.bizDays.total).toBeGreaterThan(15);
+    expect(body.companies.length).toBeGreaterThanOrEqual(30);
+    expect(body.companies.length).toBeLessThanOrEqual(40);
+    expect(body.benchmarks.length).toBeGreaterThan(20);
+    expect(body.benchmarks.some((b) => b.industry === '__ALL__' && b.companyType === '__ALL__' && b.metric === 'scout_utilization')).toBe(true);
+    for (const c of body.companies) {
+      expect(c.trend.sent).toHaveLength(14);
+      expect(['active', 'ending_30d', 'upcoming', 'ended_recent', 'ended']).toContain(c.state);
+      expect(c.targets).toBeNull(); // D1 未接続
+    }
+    // 40 社で 150 KB 未満（600 社で ≈ 2 MB 未満の目安。gzip で 1/5 程度）
+    expect(text.length).toBeLessThan(150_000);
+    const again = await get();
+    expect(again.headers.get('x-cache')).toBe('HIT');
+    expect((await again.json() as { meta: { cached: boolean } }).meta.cached).toBe(true);
+  });
+
+  it('担当=自分: ログイン者（DEV_USER_EMAIL）が担当の企業に isMine が付く', async () => {
+    const body = BoardResponseSchema.parse(await (await get('', { ...baseEnv, DEV_USER_EMAIL: 'preview@daijob.com' })).json());
+    const mine = body.companies.filter((c) => c.isMine);
+    expect(mine.length).toBeGreaterThan(0);
+    for (const c of mine) expect(c.owner.email).toBe('preview@daijob.com');
+    const other = BoardResponseSchema.parse(await (await get('', { ...baseEnv, DEV_USER_EMAIL: 'nobody@daijob.com' })).json());
+    expect(other.companies.some((c) => c.isMine)).toBe(false);
+  });
+
+  it('過去月は営業日消化率 1、範囲外・形式違いは 400', async () => {
+    const prev = addMonths(monthOf(todayJst()), -1);
+    const body = BoardResponseSchema.parse(await (await get(`?month=${prev}`)).json());
+    expect(body.meta.month).toBe(prev);
+    expect(body.meta.isCurrentMonth).toBe(false);
+    expect(body.meta.bizDays.rate).toBe(1);
+    for (const q of ['?month=2026/10', '?month=2020-01', `?month=${addMonths(monthOf(todayJst()), 1)}`]) {
+      const bad = await get(q);
+      expect(bad.status, q).toBe(400);
+      expect(await bad.json()).toMatchObject({ code: 'badRequest' });
+    }
+  });
+
+  it('共用の metrics でスコア・ヘルス・絞り込み・並べ替え・KPI が計算できる', async () => {
+    const body = BoardResponseSchema.parse(await (await get('', { ...baseEnv, DEV_USER_EMAIL: 'preview@daijob.com' })).json());
+    const ctx = makeContext(body.benchmarks, body.meta.benchMinN, body.meta.bizDays.rate, body.meta.bizDays.elapsed, body.meta.isCurrentMonth);
+    const scored = body.companies.map((c) => scoreCompany(c, ctx));
+    expect(scored.some((s) => s.pace.status === 'behind')).toBe(true);
+    expect(scored.some((s) => s.bench.scout_utilization?.score !== null)).toBe(true);
+    expect(scored.every((s) => s.health.target.level === 'none')).toBe(true); // 目標なし
+    const mine = filterCompanies(scored, { ...DEFAULT_FILTERS, mine: true }, 'industry');
+    expect(mine.length).toBeGreaterThan(0);
+    expect(mine.length).toBeLessThan(scored.length);
+    const byPace = sortCompanies(scored, 'pace', 'industry');
+    const ratios = byPace.map((s) => s.pace.ratio).filter((r): r is number => r !== null);
+    for (let i = 1; i < ratios.length; i++) expect(ratios[i]).toBeGreaterThanOrEqual(ratios[i - 1]);
+    const tiles = kpiStrip(scored, 'industry', body.meta);
+    expect(tiles).toHaveLength(5);
+    expect(tiles[0].value).toBeGreaterThan(20);
+    const lanes = attentionLanes(scored);
+    expect(lanes.behind.length).toBeGreaterThan(0);
+    expect(lanes.ending.length).toBeGreaterThan(0);
+    expect(lanes.noLogin.length).toBeGreaterThan(0);
+    const q = filterCompanies(scored, { ...DEFAULT_FILTERS, q: 'ｱｰｸ' }, 'industry');
+    expect(q.length).toBeGreaterThan(0);
+  });
+});

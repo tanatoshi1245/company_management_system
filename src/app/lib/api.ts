@@ -13,7 +13,9 @@ export class ApiError extends Error {
   }
 }
 
-async function handle<T>(res: Response, schema?: z.ZodType<T>): Promise<T> {
+export type Schema<T> = z.ZodType<T, z.ZodTypeDef, unknown>;
+
+async function handle<T>(res: Response, schema?: Schema<T>): Promise<T> {
   const text = await res.text();
   let json: unknown = null;
   try {
@@ -37,12 +39,12 @@ async function handle<T>(res: Response, schema?: z.ZodType<T>): Promise<T> {
   return json as T;
 }
 
-export async function apiGet<T>(url: string, schema?: z.ZodType<T>, signal?: AbortSignal): Promise<T> {
+export async function apiGet<T>(url: string, schema?: Schema<T>, signal?: AbortSignal): Promise<T> {
   return handle<T>(await fetch(url, { signal, headers: { accept: 'application/json' } }), schema);
 }
 
 /** 書き込み。同一オリジン判定のため Content-Type を付ける（Worker 側の sameOriginGuard） */
-export async function apiSend<T>(method: 'PUT' | 'POST' | 'DELETE', url: string, body?: unknown, schema?: z.ZodType<T>): Promise<T> {
+export async function apiSend<T>(method: 'PUT' | 'POST' | 'DELETE', url: string, body?: unknown, schema?: Schema<T>): Promise<T> {
   const res = await fetch(url, {
     method,
     headers: { accept: 'application/json', ...(body !== undefined ? { 'content-type': 'application/json' } : {}) },

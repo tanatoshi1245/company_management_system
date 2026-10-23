@@ -1,6 +1,7 @@
 import type { BuiltQuery } from '../params';
 import type { Row } from '../parseRows';
 import { todayJst } from '../../../shared/calendar/periods';
+import { mockCompanyLogin, mockCompanyMaster, mockCompanyMonthly, mockIndustryBenchmark } from './board';
 
 export function paramValue(q: BuiltQuery, name: string): string | null {
   const v = q.params.find((x) => x.name === name)?.parameterValue.value;
@@ -18,6 +19,14 @@ export function mockRows(q: BuiltQuery): Row[] {
   switch (q.label) {
     case 'refresh_log':
       return mockRefreshLog();
+    case 'company_master':
+      return mockCompanyMaster();
+    case 'company_monthly':
+      return mockCompanyMonthly();
+    case 'company_login':
+      return mockCompanyLogin();
+    case 'industry_benchmark':
+      return mockIndustryBenchmark(paramValue(q, 'month') ?? '');
     default:
       return [];
   }
