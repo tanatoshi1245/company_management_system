@@ -9,7 +9,7 @@ status: active
 # `bq-hgt.dwh.cms_company_master` — 企業マスタ
 
 **粒度**: 企業（`company_id` = `companies.id`）1 行。**更新**: 全件差し替え（CREATE OR REPLACE）。
-**対象**: `companies.active_from` / `active_to` が「13 か月前〜今日 + 30 日」に重なる企業（契約中 + 直近終了 + 開始間近 + ベンチマーク用の過去契約企業）。RA（4928 / 14508）・RDS（7080）のプロファイルは除外。`companies.publishing_sites` に `WAWW` を含む企業と、Network 契約（別管理）の企業 = `dm_network_contract_candidates.company_id` に載る企業、社内用テストアカウント（5542 Daijob.com、8980 レジュメ更新自動リクエスト専用）も除外（2026-10-23〜。ダッシュボードの対象外）。
+**対象**: `companies.active_from` / `active_to` が「13 か月前〜今日 + 30 日」に重なる企業（契約中 + 直近終了 + 開始間近 + ベンチマーク用の過去契約企業）。RA（4928 / 14508）・RDS（7080）のプロファイルは除外。`companies.publishing_sites` に `WAWW` を含む企業と、Network 契約（別管理）の企業 = `dm_network_contract_candidates.company_id` に載る企業、社内用テストアカウント（5542 Daijob.com、8980 レジュメ更新自動リクエスト専用、7277 Daijob Resume Search (Working Abroad Scout)）も除外（2026-10-23〜。ダッシュボードの対象外）。
 
 ## 列定義
 
