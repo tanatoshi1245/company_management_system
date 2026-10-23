@@ -34,6 +34,7 @@ BEGIN
     WITH companies_now AS (
       -- companies.contract_from / contract_to は 2026-10-23 のリロードで列が無くなった（ETL のスキーマ変更）。下流の列は残して NULL にする
       SELECT id AS company_id, internal_name, active_from, active_to, CAST(NULL AS DATE) AS contract_from, CAST(NULL AS DATE) AS contract_to,
+             resume_bank_scout_limit AS company_scout_limit, job_posting_limit AS company_job_limit,
              (active_from <= run_date AND run_date <= COALESCE(active_to, DATE '9999-12-31')) AS is_contracted_now,
              CASE
                WHEN active_from <= run_date AND run_date <= COALESCE(active_to, DATE '9999-12-31')
@@ -190,8 +191,9 @@ BEGIN
            IF(c.active_to IS NULL, NULL, DATE_DIFF(c.active_to, run_date, DAY)) AS days_to_contract_end,
            DATE_DIFF(run_date, c.active_from, DAY) AS days_since_contract_start,
            IF(c.active_to IS NULL, NULL, DATE_DIFF(c.active_to, c.active_from, DAY) + 1) AS contract_days_total,
-           COALESCE(ci.scout_limit_profiles, la.scout_limit) AS scout_limit,
-           COALESCE(ci.job_limit_profiles, la.job_limit) AS job_posting_limit,
+           -- 枠数: companies の企業単位の値（契約値）を優先。NULL のときだけプロファイル単位の MAX（company_profiles → company_profiles_all）で補う（2026-10-23）
+           COALESCE(c.company_scout_limit, ci.scout_limit_profiles, la.scout_limit) AS scout_limit,
+           COALESCE(c.company_job_limit, ci.job_limit_profiles, la.job_limit) AS job_posting_limit,
            scout_limit_period AS scout_limit_period_default,
            COALESCE(ci.dj_industry, a.sf_industry_norm, '(未設定)') AS industry,
            CASE WHEN ci.dj_industry IS NOT NULL THEN 'company_profiles' WHEN a.sf_industry_norm IS NOT NULL THEN 'sf_accounts' ELSE 'none' END AS industry_source,

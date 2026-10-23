@@ -25,7 +25,7 @@ status: active
 | is_contracted_now | BOOL | active_from ≤ 今日 ≤ COALESCE(active_to, 9999-12-31) |
 | contract_state | STRING | active / ending_30d（終了まで ≤30 日）/ ended_recent（終了後 ≤90 日）/ ended / upcoming（開始まで ≤30 日） |
 | days_to_contract_end / days_since_contract_start / contract_days_total | INT64 | 残日数（NULL = 無期限）/ 経過日数 / 契約日数 |
-| scout_limit / job_posting_limit | INT64 | 枠数。company_profiles（最新）の MAX、無ければ company_profiles_all の MAX。**SUM はしない** |
+| scout_limit / job_posting_limit | INT64 | 枠数。`companies.resume_bank_scout_limit` / `companies.job_posting_limit`（企業単位の契約値）を優先し、NULL のときだけ company_profiles（最新）の MAX、無ければ company_profiles_all の MAX で補う（2026-10-23〜。プロファイルが無い企業も枠数が出る）。**SUM はしない** |
 | scout_limit_period_default | STRING | 'month'（既定の枠の期間） |
 | industry / industry_source / dj_industry / sf_industry_raw / sf_industry_norm | STRING | 業種。company_profiles.industry（主プロファイル、(未選択) は無視）→ SF industry0413__c（cms_dim_industry_alias で正規化）→ (未設定) |
 | sf_link_status / sf_account_id / sf_account_name | STRING | sf_contracts.DJ_company_id__c で結合できたか、代表契約の取引先 |
