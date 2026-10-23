@@ -7,6 +7,8 @@ describe('日付ユーティリティ', () => {
     expect(todayJst(new Date('2026-10-22T14:59:00Z'))).toBe('2026-10-22');
     expect(isoToJstDisplay('2026-10-22T22:52:10Z')).toBe('2026-10-23 07:52');
     expect(isoToJstDisplay('2026-10-22 22:52:10')).toBe('2026-10-23 07:52');
+    expect(isoToJstDisplay('2026-10-23 10:22:08.190506+00')).toBe('2026-10-23 19:22');
+    expect(isoToJstDisplay('2026-10-23 10:22:08+09:00')).toBe('2026-10-23 10:22');
     expect(isoToJstDisplay(null)).toBeNull();
   });
   it('日・週・月', () => {

@@ -80,8 +80,10 @@ describe('/api/board（モック）', () => {
     const ratios = byPace.map((s) => s.pace.ratio).filter((r): r is number => r !== null);
     for (let i = 1; i < ratios.length; i++) expect(ratios[i]).toBeGreaterThanOrEqual(ratios[i - 1]);
     const tiles = kpiStrip(all, body.meta);
-    expect(tiles.map((t) => t.key)).toEqual(['contracted', 'scoutUtil', 'scoutUsage', 'behind', 'noLogin']);
-    expect(tiles[3].label).toBe('スカウトの消化率_進捗遅れ');
+    expect(tiles.map((t) => t.key)).toEqual(['contracted', 'active', 'scoutUtil', 'scoutUsage']);
+    const active = tiles.find((t) => t.key === 'active')!;
+    expect(active.value).toBe(all.filter((s) => isContracted(s.c, body.meta) && s.c.login.daysSince !== null && s.c.login.daysSince < 30).length);
+    expect(tiles[1].label).toBe('アクティブ企業数（最終ログイン30日以内）');
     // 契約終了: 30 日以内 / 90 日以上先（無期限を含む）
     const soon = filterCompanies(scored, { ...DEFAULT_FILTERS, ending: '30' }, body.meta);
     expect(soon.every((s) => s.c.contract.daysToEnd !== null && s.c.contract.daysToEnd <= 30)).toBe(true);
@@ -91,14 +93,13 @@ describe('/api/board（モック）', () => {
     expect(soon.length + far.length).toBeLessThanOrEqual(all.length);
     expect(tiles[0].value).toBe(all.length);
     expect(tiles[0].value).toBeGreaterThan(20);
-    // 30 日以上ログインなし（記録なしを含む）
-    expect(tiles[4].value).toBe(all.filter((s) => s.c.login.daysSince === null || s.c.login.daysSince >= 30).length);
+    // 30 日以上ログインなし（記録なしを含む）はセルの赤強調の判定にだけ使う
     expect(all.some((s) => s.c.login.daysSince !== null && s.c.login.daysSince >= 14 && s.c.login.daysSince < 30 && !isNoLogin(s.c))).toBe(true);
     // スカウト消化率 = Σ送信 ÷ Σ枠（枠のある契約企業）、利用率 = 1 件以上送信 ÷ 契約中
     const contracted = all.filter((s) => isContracted(s.c, body.meta));
     const withLimit = contracted.filter((s) => s.c.limits.scout);
-    expect(tiles[1].value).toBeCloseTo(withLimit.reduce((a, s) => a + s.c.m.sent, 0) / withLimit.reduce((a, s) => a + (s.c.limits.scout ?? 0), 0), 6);
-    expect(tiles[2].value).toBeCloseTo(contracted.filter((s) => s.c.m.sent > 0).length / contracted.length, 6);
+    expect(tiles[2].value).toBeCloseTo(withLimit.reduce((a, s) => a + s.c.m.sent, 0) / withLimit.reduce((a, s) => a + (s.c.limits.scout ?? 0), 0), 6);
+    expect(tiles[3].value).toBeCloseTo(contracted.filter((s) => s.c.m.sent > 0).length / contracted.length, 6);
     // CS 担当で絞り込み
     const key = ownerKey(scored.find((s) => s.c.owner.email)!.c);
     const byOwner = filterCompanies(scored, { ...DEFAULT_FILTERS, owner: [key] }, body.meta);

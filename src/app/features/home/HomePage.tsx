@@ -8,7 +8,7 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { Notice } from '../../components/ui/Notice';
 import { Icon } from '../../components/ui/Icon';
 import { BoardResponseSchema } from '../../../shared/schema/board';
-import { fmtMonthJa, isoToJstDisplay } from '../../../shared/calendar/periods';
+import { fmtMonthJa } from '../../../shared/calendar/periods';
 import type { BoardFilters, KpiTile } from '../../../shared/metrics/board';
 import { activeFilterCount, fromFilters, HOME_URL_DEFAULTS, HomeUrlSchema, toFilters } from './homeFilters';
 import { useHomeModel } from './homeModel';
@@ -30,14 +30,6 @@ export default function HomePage(_props: PageProps) {
   const setFilters = useCallback((patch: Partial<BoardFilters>) => setUrl(fromFilters(patch)), [setUrl]);
   const clear = useCallback(() => setUrl({ ...HOME_URL_DEFAULTS, sort: url.sort }), [setUrl, url.sort]);
   const onKpi = (t: KpiTile) => {
-    if (t.key === 'noLogin') {
-      setUrl({ sort: 'login' });
-      return;
-    }
-    if (t.key === 'behind') {
-      setUrl({ sort: 'pace' });
-      return;
-    }
     if (!t.filter) return;
     setFilters(t.filter);
   };
@@ -52,7 +44,7 @@ export default function HomePage(_props: PageProps) {
   };
   const bm = board.data?.meta;
   const context = bm
-    ? `${fmtMonthJa(bm.month)}（契約中の企業・営業日 ${bm.bizDays.elapsed}/${bm.bizDays.total} 経過・${Math.round(bm.bizDays.rate * 100)}%）・データは ${bm.dataDate} まで${meta?.refreshedAt ? `・マート更新 ${isoToJstDisplay(meta.refreshedAt)}` : ''}`
+    ? `${fmtMonthJa(bm.month)}（契約中の企業・営業日 ${bm.bizDays.elapsed}/${bm.bizDays.total} 経過・${Math.round(bm.bizDays.rate * 100)}%）・データは ${bm.dataDate} まで`
     : meta
       ? fmtMonthJa(meta.month)
       : null;
@@ -75,7 +67,7 @@ export default function HomePage(_props: PageProps) {
       {!model ? (
         <>
           <div className="kpi-strip" aria-hidden="true">
-            {Array.from({ length: 5 }, (_, i) => (
+            {Array.from({ length: 4 }, (_, i) => (
               <Skeleton key={i} variant="tile" />
             ))}
           </div>
@@ -85,7 +77,7 @@ export default function HomePage(_props: PageProps) {
         </>
       ) : (
         <div className={board.refreshing ? 'visually-dim' : ''}>
-          <KpiStrip tiles={model.kpis} onPick={onKpi} active={url.sort === 'login' ? 'noLogin' : url.sort === 'pace' ? 'behind' : null} />
+          <KpiStrip tiles={model.kpis} onPick={onKpi} active={null} />
           <BoardFilterBar
             filters={filters}
             onChange={setFilters}

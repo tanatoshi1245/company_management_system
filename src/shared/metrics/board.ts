@@ -10,16 +10,24 @@ export function matchesEnding(daysToEnd: number | null, f: EndingFilter): boolea
   return daysToEnd !== null && daysToEnd >= 0 && daysToEnd <= Number(f);
 }
 
+/** 有無の絞り込み（求人掲載・スカウト送信）: あり（> 0）/ なし（= 0） */
+export type YesNo = 'yes' | 'no';
+export const YES_NO_LABEL: Record<YesNo, string> = { yes: 'あり', no: 'なし' };
+
 export interface BoardFilters {
   mine: boolean;
   /** CS 担当（ownerKey の配列。空 = すべて） */
   owner: string[];
   type: string[];
   ending: EndingFilter | null;
+  /** 求人掲載の有無（当月の掲載求人数 > 0 / = 0） */
+  jobs: YesNo | null;
+  /** スカウト送信の有無（当月の送信数 > 0 / = 0） */
+  sent: YesNo | null;
   q: string;
 }
 
-export const DEFAULT_FILTERS: BoardFilters = { mine: false, owner: [], type: [], ending: null, q: '' };
+export const DEFAULT_FILTERS: BoardFilters = { mine: false, owner: [], type: [], ending: null, jobs: null, sent: null, q: '' };
 
 export const NO_OWNER_KEY = '(未設定)';
 /** 担当の絞り込みキー（メール優先。無ければ名前、どちらも無ければ (未設定)） */
@@ -51,6 +59,8 @@ export function filterCompanies(rows: ScoredCompany[], f: BoardFilters, meta: Pi
     if (f.owner.length && !f.owner.includes(ownerKey(c))) return false;
     if (f.type.length && !f.type.includes(c.type)) return false;
     if (f.ending !== null && !matchesEnding(c.contract.daysToEnd, f.ending)) return false;
+    if (f.jobs !== null && (c.m.jobs > 0) !== (f.jobs === 'yes')) return false;
+    if (f.sent !== null && (c.m.sent > 0) !== (f.sent === 'yes')) return false;
     if (q && !normalizeQuery(c.name).includes(q) && !String(c.id).includes(q)) return false;
     return true;
   });
@@ -69,7 +79,7 @@ export const BOARD_COLUMNS: BoardColumn[] = [
   { key: 'views', label: '閲覧', group: '応募', metric: 'views_per_active_job' },
   { key: 'apps', label: '応募', group: '応募', metric: 'apps_per_active_job' },
   { key: 'sent', label: '送信 / 枠', group: 'スカウト', metric: 'scout_utilization' },
-  { key: 'intReply', label: '返信（当月）', group: 'スカウト' },
+  { key: 'intReply', label: '返信', group: 'スカウト' },
   { key: 'inSel', label: '選考中', group: '選考' },
   { key: 'hires', label: '採用', group: '選考', metric: 'hires' },
   { key: 'login', label: '最終ログイン', group: '接点', metric: 'login_days' },
@@ -123,9 +133,6 @@ export interface KpiTile {
   label: string;
   value: number | null;
   unit: 'count' | 'rate';
-  sub: string;
-  /** 13 か月 + 当月のスパークライン（古い順） */
-  spark: number[];
   /** クリックで適用するフィルタ */
   filter: Partial<BoardFilters> | null;
   tone: 'neutral' | 'bad' | 'warn' | 'good';
@@ -157,10 +164,15 @@ export function isNoLogin(c: Pick<BoardCompany, 'login'>): boolean {
   return c.login.daysSince === null || c.login.daysSince >= NO_LOGIN_DAYS;
 }
 
+/** アクティブ企業 = CT 画面への最終ログインが 30 日以内（記録なしは含まない） */
+export function isActiveLogin(c: Pick<BoardCompany, 'login'>): boolean {
+  return c.login.daysSince !== null && c.login.daysSince < NO_LOGIN_DAYS;
+}
+
+/** KPI タイル（4 枚: 契約企業 / アクティブ企業数 / スカウト消化率 / スカウト利用率）。数字だけを出す */
 export function kpiStrip(rows: ScoredCompany[], meta: BoardMeta): KpiTile[] {
   const contracted = rows.filter((r) => isContracted(r.c, meta));
-  const behind = rows.filter((r) => r.pace.status === 'behind');
-  const noLogin = rows.filter((r) => isNoLogin(r.c));
+  const active = contracted.filter((r) => isActiveLogin(r.c));
   // スカウト消化率 = 月間送信実績の合計 ÷ 月間送信枠の合計（枠のある契約企業）
   const withLimit = contracted.filter((r) => r.c.limits.period === 'month' && r.c.limits.scout !== null && r.c.limits.scout > 0);
   const sentSum = withLimit.reduce((a, r) => a + r.c.m.sent, 0);
@@ -171,10 +183,9 @@ export function kpiStrip(rows: ScoredCompany[], meta: BoardMeta): KpiTile[] {
   const using = contracted.filter((r) => r.c.m.sent > 0).length;
   const usage = contracted.length ? using / contracted.length : null;
   return [
-    { key: 'contracted', label: '契約企業', value: contracted.length, unit: 'count', sub: `${meta.month.replace('-', '年')}月に契約中`, spark: portfolioTrend(rows, 'sent'), filter: null, tone: 'neutral' },
-    { key: 'scoutUtil', label: 'スカウト消化率', value: util, unit: 'rate', sub: `送信 ${sentSum.toLocaleString('ja-JP')} / 枠 ${limitSum.toLocaleString('ja-JP')}（枠あり ${withLimit.length} 社）${meta.isCurrentMonth ? `・営業日 ${Math.round(meta.bizDays.rate * 100)}% 経過` : ''}`, spark: portfolioTrend(rows, 'sent'), filter: null, tone: utilRatio === null || !meta.isCurrentMonth ? 'neutral' : utilRatio < 0.8 ? 'bad' : utilRatio < 1 ? 'warn' : 'good' },
-    { key: 'scoutUsage', label: 'スカウト利用率', value: usage, unit: 'rate', sub: `${using} / ${contracted.length} 社が 1 件以上送信`, spark: [], filter: null, tone: usage === null ? 'neutral' : usage < 0.5 ? 'bad' : usage < 0.7 ? 'warn' : 'good' },
-    { key: 'behind', label: 'スカウトの消化率_進捗遅れ', value: behind.length, unit: 'count', sub: `${rows.filter((r) => r.pace.status !== 'na').length} 社中（期待の 80% 未満）`, spark: [], filter: null, tone: behind.length ? 'bad' : 'good' },
-    { key: 'noLogin', label: `${NO_LOGIN_DAYS} 日以上ログインなし`, value: noLogin.length, unit: 'count', sub: 'CT 画面への最終ログイン（記録なしを含む）', spark: [], filter: null, tone: noLogin.length ? 'bad' : 'good' },
+    { key: 'contracted', label: '契約企業', value: contracted.length, unit: 'count', filter: null, tone: 'neutral' },
+    { key: 'active', label: `アクティブ企業数（最終ログイン${NO_LOGIN_DAYS}日以内）`, value: active.length, unit: 'count', filter: null, tone: 'neutral' },
+    { key: 'scoutUtil', label: 'スカウト消化率', value: util, unit: 'rate', filter: null, tone: utilRatio === null || !meta.isCurrentMonth ? 'neutral' : utilRatio < 0.8 ? 'bad' : utilRatio < 1 ? 'warn' : 'good' },
+    { key: 'scoutUsage', label: 'スカウト利用率', value: usage, unit: 'rate', filter: null, tone: usage === null ? 'neutral' : usage < 0.5 ? 'bad' : usage < 0.7 ? 'warn' : 'good' },
   ];
 }

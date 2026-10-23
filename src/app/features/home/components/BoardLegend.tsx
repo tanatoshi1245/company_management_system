@@ -13,7 +13,7 @@ export function BoardLegend({ meta }: { meta: BoardMeta }) {
       <div>
         契約中の企業のみ
         {meta.isCurrentMonth ? `・営業日 ${meta.bizDays.elapsed}/${meta.bizDays.total} 日経過（データは ${meta.dataDate} まで）` : '・月の全期間'}
-        ・返信（当月）は返信月基準・ログインは 2026-05-15 以降の CT 画面
+        ・返信は返信月基準（その月に興味あり返信があった数。送信月は問わない）・ログインは 2026-05-15 以降の CT 画面
       </div>
     </div>
   );
