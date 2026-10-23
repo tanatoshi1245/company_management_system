@@ -16,10 +16,13 @@ status: active
 |---|---|---|
 | 鮮度 | `GET /api/meta` | cms_refresh_log、祝日 JSON |
 | 設定の有無 | `GET /api/health` | Worker の変数（値は出ない） |
-| 担当上書き・プラン既定値 | `GET/PUT /api/settings/*`（M3） | D1 company_settings / plan_target_defaults |
+| 担当・枠の上書き一覧 | `GET /api/settings/overrides` + `GET /api/board?month=`（企業名） | D1 company_settings |
+| プラン別の既定目標（行 = ボードに出ているプラン ∪ 登録済み） | `GET/PUT /api/settings/plan-defaults`（PUT は verified） | D1 plan_target_defaults + audit_log |
+| Worker のキャッシュを捨てる | `POST /api/admin/cache/bump`（verified） | D1 app_meta.cache_epoch |
+| ヘルプ: 指標の定義一覧 | — | `src/shared/metrics/definitions.ts`（METRICS / DERIVED_DEFINITIONS） |
 
 ## 編集するときの入口
-SettingsPage.tsx / HelpPage.tsx → components/。
+SettingsPage.tsx / HelpPage.tsx → components/（PlanDefaultsEditor, OwnerOverrideList, CacheBumpButton, DefinitionsList）。Worker 側は `routes/settings.ts` / `routes/admin.ts`。
 
 ## テスト
-tests/app/settings.test.tsx
+tests/app/settings.test.tsx, tests/worker/settings.test.ts

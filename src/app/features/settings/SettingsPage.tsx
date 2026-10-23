@@ -5,6 +5,9 @@ import { PageHeader } from '../../components/ui/PageHeader';
 import { isoToJstDisplay } from '../../../shared/calendar/periods';
 import { fmtYmd } from '../../lib/format';
 import type { HealthResponse } from '../../../shared/schema/me';
+import { OwnerOverrideList } from './components/OwnerOverrideList';
+import { PlanDefaultsEditor } from './components/PlanDefaultsEditor';
+import { CacheBumpButton } from './components/CacheBumpButton';
 
 function Flag({ ok, label }: { ok: boolean; label: string }) {
   return (
@@ -14,9 +17,9 @@ function Flag({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
-/** 設定: データの鮮度・認証情報の有無（値は出ない）。担当上書き一覧・プラン既定値は M3 で追加 */
+/** 設定: データの鮮度・認証情報の有無（値は出ない）・担当上書き一覧・プラン既定値・キャッシュ */
 export default function SettingsPage(_props: PageProps) {
-  const { meta } = useSession();
+  const { meta, me } = useSession();
   const health = useResource<HealthResponse>('/api/health');
   return (
     <>
@@ -64,10 +67,13 @@ export default function SettingsPage(_props: PageProps) {
                 認証方式: {health.data.authMode} / 許可ドメイン: {health.data.allowedDomains.join(', ') || '（制限なし）'} / 個別許可 {health.data.allowedEmailsCount} 件
                 {health.data.mock ? ' / サンプルデータで動作中' : ''}
               </p>
+              <CacheBumpButton canEdit={Boolean(me?.canEdit)} />
             </div>
           ) : null}
         </section>
       </div>
+      <PlanDefaultsEditor month={meta?.month ?? null} canEdit={Boolean(me?.canEdit)} />
+      <OwnerOverrideList month={meta?.month ?? null} />
     </>
   );
 }
