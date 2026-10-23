@@ -9,6 +9,8 @@ import { COMPANY_TYPE_SHORT, CONTRACT_STATE_LABEL, type ContractState } from '..
 import { HeatCell } from '../../../components/charts/HeatCell';
 import { TimelineBar } from '../../../components/charts/TimelineBar';
 import { navigate } from '../../../router';
+import { prefetch } from '../../../lib/useResource';
+import { CompanyDetailResponseSchema } from '../../../../shared/schema/company';
 import { fmtDaysAgo, fmtInt, fmtNum, fmtRate, fmtRatio } from '../../../lib/format';
 
 export const PAGE_SIZE = 200;
@@ -137,7 +139,7 @@ export function CompanyBoard({ rows, mode, meta, sort, onSort }: Props) {
             const h = s.health[mode];
             const soon = c.contract.daysToEnd !== null && c.contract.daysToEnd >= 0 && c.contract.daysToEnd <= 60;
             return (
-              <tr key={c.id} tabIndex={0} onClick={(e) => onRowClick(e, c.id)} onKeyDown={(e) => onRowKey(e, c.id)} aria-label={`${c.name} の詳細を開く`}>
+              <tr key={c.id} tabIndex={0} onClick={(e) => onRowClick(e, c.id)} onKeyDown={(e) => onRowKey(e, c.id)} onMouseEnter={() => prefetch(`/api/companies/${c.id}?month=${meta.month}`, CompanyDetailResponseSchema)} aria-label={`${c.name} の詳細を開く`}>
                 <td className={`company h-${h.level}`}>
                   <div className="co-strip">
                     <span className="nm" title={c.name}>

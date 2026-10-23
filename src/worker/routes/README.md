@@ -17,7 +17,9 @@ status: active
 | GET /api/health | session | — | 設定の有無 | Worker の変数 |
 | GET /api/me | session | — | ログイン者 | セッション |
 | GET /api/meta | session | ?refresh=1 | 鮮度・営業日・注記 | cms_refresh_log（300 秒キャッシュ）、祝日 JSON |
-| （M1〜M3 で追記）| | | | |
+| GET /api/board | session | ?month=YYYY-MM（直近 14 か月）, ?refresh=1 | 企業 × 当月の実績・契約・担当・ベンチマーク（`BoardResponse`） | cms_company_master, cms_company_monthly, cms_company_login, cms_industry_benchmark_monthly（マート部分をキャッシュ）+ D1 company_targets / company_settings |
+| GET /api/companies/:id | session | :id `^\d{1,12}$`, ?month=, ?refresh=1 | 1 社の詳細（`CompanyDetailResponse`。無ければ 404） | 上記 + cms_company_daily_usage, cms_scout_cohort_status, cms_application_cohort_status, cms_scout_member_attributes_monthly |
+| （M3 で追記: targets / settings / admin）| | | | |
 
 ## 編集するときの入口
 routes/<resource>.ts → services/ → sql/ or d1/。応答の形は `src/shared/schema/`。

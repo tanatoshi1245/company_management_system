@@ -49,6 +49,42 @@ interface MonthlyRow {
 
 const ZERO: MonthlyRow = { contracted: false, jobs: 0, newJobs: 0, sent: 0, sentManual: 0, sentAuto: 0, sentCtd: 0, int: 0, intReply: 0, apps: 0, views: 0, hires: 0, inSel: 0, noResp: 0, hired: 0, loginDays: null };
 
+/** マスタ 1 行 + 月次 + ログイン → ボードの企業 1 行（targets / isMine はあとで合成） */
+export function buildBoardCompany(r: Row, mm: Map<string, MonthlyRow>, lg: Row | undefined, month: string, months: string[]): BoardCompany {
+  const id = String(r.company_id);
+  const m = mm.get(month) ?? ZERO;
+  const prev = mm.get(addMonths(month, -1)) ?? ZERO;
+  const state = String(r.contract_state ?? 'ended');
+  const series = (k: keyof MonthlyRow): number[] => months.map((ym) => num(mm.get(ym)?.[k] ?? 0));
+  const ownerEmail = str(r.cs_owner_email_default);
+  const ownerName = str(r.cs_owner_name_default);
+  return {
+    id,
+    name: String(r.company_name ?? r.internal_name ?? id),
+    type: String(r.company_type ?? '不明'),
+    ind: String(r.industry ?? '(未設定)'),
+    indSrc: String(r.industry_source ?? 'none'),
+    state,
+    plan: str(r.plan_name),
+    planSrc: String(r.plan_source ?? 'none'),
+    owner: { email: ownerEmail, name: ownerName, src: ownerEmail || ownerName ? String(r.owner_source ?? 'none') : 'none' },
+    sfOwnerName: str(r.sf_account_owner_name),
+    salesStaff: str(r.sales_staff),
+    contract: { from: String(r.active_from), to: str(r.active_to), daysToEnd: numOrNull(r.days_to_contract_end), daysSinceStart: num(r.days_since_contract_start), daysTotal: numOrNull(r.contract_days_total) },
+    limits: { scout: numOrNull(r.scout_limit), job: numOrNull(r.job_posting_limit), period: 'month' },
+    signals: { dj: bool(r.is_contracted_now), sfActive: bool(r.sf_active_contract), sfWon: bool(r.sf_live_won_opp), da: bool(r.da_active_profile), sfLinked: r.sf_link_status === 'linked', noticeCheck: bool(r.sf_notice_check) },
+    m,
+    prev: { jobs: prev.jobs, sent: prev.sent, int: prev.int, apps: prev.apps, views: prev.views, hires: prev.hires },
+    login: { last: str(lg?.last_login_date), daysSince: numOrNull(lg?.days_since_login), days30: num(lg?.login_days_30d), daysMtd: num(lg?.login_days_mtd) },
+    trend: { sent: series('sent'), int: series('int'), apps: series('apps'), views: series('views'), jobs: series('jobs'), hires: series('hires') },
+    targets: null,
+    isMine: false,
+  };
+}
+
+export { toMonthly, ZERO as ZERO_MONTHLY, num, numOrNull, str, bool };
+export type { MonthlyRow as MonthlyAgg };
+
 function toMonthly(r: Row): MonthlyRow {
   return {
     contracted: bool(r.is_contracted_in_month),
@@ -95,33 +131,7 @@ export async function loadBoardCore(client: BqClient, month: string, refresh: Re
     const m = mm.get(month) ?? ZERO;
     const state = String(r.contract_state ?? 'ended');
     if (!CURRENT_STATES.has(state) && !m.contracted) continue;
-    const prev = mm.get(prevMonth) ?? ZERO;
-    const lg = loginById.get(id);
-    const series = (k: keyof MonthlyRow): number[] => months.map((ym) => num(mm.get(ym)?.[k] ?? 0));
-    const ownerEmail = str(r.cs_owner_email_default);
-    const ownerName = str(r.cs_owner_name_default);
-    companies.push({
-      id,
-      name: String(r.company_name ?? r.internal_name ?? id),
-      type: String(r.company_type ?? '不明'),
-      ind: String(r.industry ?? '(未設定)'),
-      indSrc: String(r.industry_source ?? 'none'),
-      state,
-      plan: str(r.plan_name),
-      planSrc: String(r.plan_source ?? 'none'),
-      owner: { email: ownerEmail, name: ownerName, src: ownerEmail || ownerName ? String(r.owner_source ?? 'none') : 'none' },
-      sfOwnerName: str(r.sf_account_owner_name),
-      salesStaff: str(r.sales_staff),
-      contract: { from: String(r.active_from), to: str(r.active_to), daysToEnd: numOrNull(r.days_to_contract_end), daysSinceStart: num(r.days_since_contract_start), daysTotal: numOrNull(r.contract_days_total) },
-      limits: { scout: numOrNull(r.scout_limit), job: numOrNull(r.job_posting_limit), period: 'month' },
-      signals: { dj: bool(r.is_contracted_now), sfActive: bool(r.sf_active_contract), sfWon: bool(r.sf_live_won_opp), da: bool(r.da_active_profile), sfLinked: r.sf_link_status === 'linked', noticeCheck: bool(r.sf_notice_check) },
-      m,
-      prev: { jobs: prev.jobs, sent: prev.sent, int: prev.int, apps: prev.apps, views: prev.views, hires: prev.hires },
-      login: { last: str(lg?.last_login_date), daysSince: numOrNull(lg?.days_since_login), days30: num(lg?.login_days_30d), daysMtd: num(lg?.login_days_mtd) },
-      trend: { sent: series('sent'), int: series('int'), apps: series('apps'), views: series('views'), jobs: series('jobs'), hires: series('hires') },
-      targets: null,
-      isMine: false,
-    });
+    companies.push(buildBoardCompany(r, mm, loginById.get(id), month, months));
   }
 
   const benchmarks: BenchRow[] = bench.rows.map((b) => ({
@@ -172,12 +182,14 @@ export async function getBoardCore(client: BqClient, month: string, refresh: Ref
 /** リクエストごとの合成: D1 の設定（担当上書き・枠）と目標、ログイン者の isMine */
 export function mergeBoard(core: BoardCore, targets: Map<string, TargetRow>, settings: Map<string, SettingsRow>, viewerEmail: string | null, benchMinN: number): BoardCore {
   const me = viewerEmail?.trim().toLowerCase() ?? null;
-  const companies = core.companies.map((c) => {
-    const s = settings.get(c.id);
-    const t = targets.get(c.id);
-    const owner = s?.cs_owner_email ? { email: s.cs_owner_email.toLowerCase(), name: s.cs_owner_name ?? s.cs_owner_email, src: 'override' } : c.owner;
-    const limits = { scout: s?.scout_limit_override ?? c.limits.scout, job: s?.job_limit_override ?? c.limits.job, period: (s?.scout_limit_period ?? 'month') as 'month' | 'contract' };
-    return { ...c, owner, limits, targets: t ? rowToValues(t) : null, isMine: Boolean(me && owner.email && owner.email.toLowerCase() === me) };
-  });
+  const companies = core.companies.map((c) => mergeCompany(c, settings.get(c.id) ?? null, targets.get(c.id) ?? null, me));
   return { meta: { ...core.meta, benchMinN }, companies, benchmarks: core.benchmarks };
+}
+
+/** 企業 1 行に D1 の設定（担当上書き・枠）と目標、ログイン者の isMine を合成 */
+export function mergeCompany(c: BoardCompany, s: SettingsRow | null, t: TargetRow | null, viewerEmail: string | null): BoardCompany {
+  const me = viewerEmail?.trim().toLowerCase() ?? null;
+  const owner = s?.cs_owner_email ? { email: s.cs_owner_email.toLowerCase(), name: s.cs_owner_name ?? s.cs_owner_email, src: 'override' } : c.owner;
+  const limits = { scout: s?.scout_limit_override ?? c.limits.scout, job: s?.job_limit_override ?? c.limits.job, period: (s?.scout_limit_period ?? 'month') as 'month' | 'contract' };
+  return { ...c, owner, limits, targets: t ? rowToValues(t) : null, isMine: Boolean(me && owner.email && owner.email.toLowerCase() === me) };
 }

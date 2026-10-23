@@ -1,0 +1,65 @@
+/* 企業詳細 */
+.co-head { padding: var(--s4) var(--s5) var(--s3); }
+.co-head-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--s3); }
+.co-title h1 { font-size: var(--fs-20); margin: 2px 0 6px; }
+.co-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-12); }
+.chip-text { color: var(--ink-soft); border: 1px solid var(--rule); padding: 1px 7px; border-radius: var(--radius); }
+.co-head-actions .field > span { font-size: var(--fs-11); font-weight: 700; color: var(--muted); }
+.co-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s2) var(--s4); margin-top: var(--s3); padding-top: var(--s3); border-top: 1px solid var(--rule); }
+@media (max-width: 1000px) { .co-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.fact { min-width: 0; }
+.fact .k { display: block; font-size: var(--fs-11); font-weight: 700; color: var(--muted); letter-spacing: 0.03em; }
+.fact .v { display: block; font-size: var(--fs-13); color: var(--ink); margin-top: 2px; }
+.fact .v .btn { margin-left: 6px; vertical-align: middle; }
+.co-timeline { margin-top: var(--s3); padding-top: var(--s3); border-top: 1px solid var(--rule); }
+.co-timeline-head { display: flex; justify-content: space-between; font-size: var(--fs-12); color: var(--ink-soft); margin-bottom: 4px; }
+.co-timeline .timeline { width: 100%; height: 14px; }
+.co-signals { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.warn-text { color: var(--warn); font-weight: 700; }
+
+/* ゲージ */
+.bullet { min-width: 0; }
+.bullet-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+.bullet-label { font-size: var(--fs-12); font-weight: 700; color: var(--ink-soft); }
+.bullet-val { font-size: var(--fs-16); font-weight: 600; color: var(--heading); display: flex; align-items: baseline; gap: 6px; }
+.bullet-val .muted { font-size: var(--fs-12); font-weight: 400; }
+.bullet svg .tick { fill: var(--muted); font-size: 11px; font-family: var(--font-body); }
+.bullet-foot { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--fs-12); color: var(--ink-soft); align-items: center; }
+
+/* 小さな折れ線の並び */
+.multiples { display: grid; gap: 12px; }
+.panel { min-width: 0; }
+.panel-label { font-size: var(--fs-11); font-weight: 700; color: var(--muted); margin-bottom: 2px; }
+.chart .value { font-family: var(--font-body); }
+
+/* コホート */
+table.cohort td.cohort-cell { min-width: 44px; }
+.seq-1 { background: color-mix(in srgb, var(--seq-1) 45%, var(--surface)); }
+.seq-2 { background: var(--seq-1); }
+.seq-3 { background: var(--seq-2); }
+.seq-4 { background: var(--seq-3); color: #fff; }
+.seq-5 { background: var(--seq-4); color: #fff; }
+.seq-6 { background: var(--seq-5); color: #fff; }
+
+/* 属性の横棒 */
+.tabs { display: flex; flex-wrap: wrap; gap: 0; border-bottom: 1px solid var(--rule); margin-bottom: 10px; }
+.tabs button { border: 0; background: transparent; padding: 6px 10px; color: var(--muted); font-weight: 600; font-size: var(--fs-12); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button.on { color: var(--heading); border-bottom-color: var(--dj-gold); }
+.attr-bars { display: flex; flex-direction: column; gap: 3px; }
+.attr-row { display: grid; grid-template-columns: 150px minmax(0, 1fr) 90px 54px; align-items: center; gap: 8px; font-size: var(--fs-12); }
+.attr-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.attr-track { height: 10px; background: var(--surface-sunken); position: relative; }
+.attr-fill { position: absolute; left: 0; top: 0; height: 100%; background: var(--seq-4); }
+.attr-num { text-align: right; }
+.attr-reply { text-align: right; color: var(--ink-soft); }
+
+/* 目標の進捗 */
+.progress { display: inline-block; position: relative; width: 140px; height: 10px; background: var(--surface-sunken); vertical-align: middle; }
+.progress .fill { position: absolute; left: 0; top: 0; height: 100%; }
+.progress .fill.heat-n2 { background: var(--heat-n2); }
+.progress .fill.heat-n1 { background: var(--heat-n1); }
+.progress .fill.heat-0 { background: var(--seq-3); }
+.progress .fill.heat-p1 { background: var(--heat-p1); }
+.progress .fill.heat-p2 { background: var(--heat-p2); }
+.progress .fill.heat-na { background: var(--de-emphasis); }
+.progress .mark { position: absolute; top: -3px; width: 2px; height: 16px; background: var(--ink); }

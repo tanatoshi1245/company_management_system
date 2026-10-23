@@ -15,7 +15,11 @@ status: active
 | ビルダー | マート | 元テーブル（マート README 参照） |
 |---|---|---|
 | refreshLog.ts | cms_refresh_log | （スクリプトの実行記録） |
-| （M1〜M2 で追記） | | |
+| companyMaster.ts | cms_company_master | companies, company_profiles(_all), sf_contracts, sf_accounts, sf_opportunities, sf_users, active_companies, cms_dim_industry_alias |
+| companyMonthly.ts | cms_company_monthly | scouts, scout_histories, member_applications, member_job_detail_views, job_publish_history, jobs_all, cms_company_login_daily |
+| companyLogin.ts | cms_company_login | GA4 analytics_*（`get_ID`） |
+| industryBenchmark.ts | cms_industry_benchmark_monthly | cms_company_monthly, cms_company_master |
+| companyDetail.ts（8 ビルダー: company_master_one / company_monthly_one / daily_usage / scout_cohort / application_cohort / member_attributes / bench_series / company_login_one） | cms_company_master, cms_company_monthly, cms_company_daily_usage, cms_scout_cohort_status, cms_application_cohort_status, cms_scout_member_attributes_monthly, cms_industry_benchmark_monthly, cms_company_login | 各マート README |
 
 ## テスト
 tests/worker/sql.test.ts（@param 以外のリテラルが無いこと）

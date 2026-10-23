@@ -13,6 +13,7 @@ import './styles/layout.css';
 import './styles/components.css';
 import './styles/charts.css';
 import './styles/board.css';
+import './styles/company.css';
 import App from './App';
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(

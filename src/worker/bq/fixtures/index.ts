@@ -2,6 +2,7 @@ import type { BuiltQuery } from '../params';
 import type { Row } from '../parseRows';
 import { todayJst } from '../../../shared/calendar/periods';
 import { mockCompanyLogin, mockCompanyMaster, mockCompanyMonthly, mockIndustryBenchmark } from './board';
+import { mockApplicationCohort, mockBenchSeries, mockCompanyLoginOne, mockCompanyMasterOne, mockCompanyMonthlyOne, mockDailyUsage, mockMemberAttributes, mockScoutCohort } from './company';
 
 export function paramValue(q: BuiltQuery, name: string): string | null {
   const v = q.params.find((x) => x.name === name)?.parameterValue.value;
@@ -27,6 +28,22 @@ export function mockRows(q: BuiltQuery): Row[] {
       return mockCompanyLogin();
     case 'industry_benchmark':
       return mockIndustryBenchmark(paramValue(q, 'month') ?? '');
+    case 'company_master_one':
+      return mockCompanyMasterOne(paramValue(q, 'id') ?? '');
+    case 'company_monthly_one':
+      return mockCompanyMonthlyOne(paramValue(q, 'id') ?? '');
+    case 'company_login_one':
+      return mockCompanyLoginOne(paramValue(q, 'id') ?? '');
+    case 'daily_usage':
+      return mockDailyUsage(paramValue(q, 'id') ?? '');
+    case 'scout_cohort':
+      return mockScoutCohort(paramValue(q, 'id') ?? '');
+    case 'application_cohort':
+      return mockApplicationCohort(paramValue(q, 'id') ?? '');
+    case 'member_attributes':
+      return mockMemberAttributes(paramValue(q, 'id') ?? '', paramValue(q, 'from') ?? '2000-01-01');
+    case 'bench_series':
+      return mockBenchSeries(paramValue(q, 'industry') ?? '', paramValue(q, 'company_type') ?? '');
     default:
       return [];
   }
