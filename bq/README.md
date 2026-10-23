@@ -54,6 +54,7 @@ companies / company_profiles(_all) / active_companies / active_jobs / scouts / s
 
 | 日付 | 変更 | スキャン | 反映 |
 |---|---|---|---|
+| 2026-10-23 | `cms_company_master` に `scout_unused_json`（`scout_unused_companies_monthly` の契約期間中の記録を JSON 配列で。(月, 理由, 補足) で重複排除）を追加。企業ページの「スカウト未利用状況」用 | 手動実行 919.9 MB | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 10 |
 | 2026-10-23 | 社内用テストアカウント 7196（Daijob Resume Search (Potential Non-Japanese Scouting Service)）を追加で除外 | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 9 |
 | 2026-10-23 | 社内用テストアカウント 7277（Daijob Resume Search (Working Abroad Scout)）を追加で除外 | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 8 |
 | 2026-10-23 | 社内用テストアカウント（5542 Daijob.com、8980 レジュメ更新自動リクエスト専用）を `companies_now` で除外。企業名に DaijobAGENT を含む企業は `company_type` を DA、CS 担当（`cs_owner_name_default`）を `DA`（メール NULL）に固定 | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 7 |

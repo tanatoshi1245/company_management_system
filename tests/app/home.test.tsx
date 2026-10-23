@@ -48,7 +48,11 @@ describe('ホーム（ボード）', () => {
     expect(rowsBefore).toBeGreaterThan(20);
     expect(screen.getByText('契約企業')).toBeTruthy();
     expect(screen.getByText('スカウト消化率')).toBeTruthy();
-    expect(screen.getByText('スカウト利用率')).toBeTruthy();
+    expect(screen.getByText('スカウト利用社数（利用率）')).toBeTruthy();
+    expect(screen.queryByText('スカウト利用率')).toBeNull();
+    // 並び: 契約企業 → アクティブ企業数 → スカウト利用社数（利用率）→ スカウト消化率。利用社数は「n 社（xx%）」
+    expect(Array.from(document.querySelectorAll('.kpi .t')).map((e) => e.textContent)).toEqual(['契約企業', 'アクティブ企業数（最終ログイン30日以内）', 'スカウト利用社数（利用率）', 'スカウト消化率']);
+    expect(document.querySelectorAll('.kpi')[2].querySelector('.v')?.textContent).toMatch(/^[\d,]+社（\d+%）$/);
     expect(screen.queryByText('求人枠消化率（中央値）')).toBeNull();
     expect(screen.queryByText(/注目/)).toBeNull();
     expect(screen.queryByRole('button', { name: '目標比' })).toBeNull();

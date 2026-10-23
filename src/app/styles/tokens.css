@@ -56,6 +56,9 @@
   --axis: #C3C2B7;
   --target-line: #4D4635;
   --band: rgba(65, 74, 178, 0.1);
+  /* 2 系列の折れ線（識別色。validate_palette.js で検証済み: charts/README.md） */
+  --cat-1: #414AB2;
+  --cat-2: #B8860B;
   --tooltip-bg: #1B1C1C;
   --tooltip-ink: #FFFFFF;
 

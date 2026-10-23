@@ -14,7 +14,7 @@ SELECT CAST(company_id AS STRING) AS company_id, company_name, internal_name, co
        plan_name, plan_source, sf_active_contract, sf_live_won_opp, da_active_profile, sf_notice_check,
        sf_account_owner_name, sf_account_owner_email, sf_account_owner_position,
        sf_contract_owner_name, sf_contract_owner_email, sf_contract_owner_position,
-       sales_staff, cs_owner_email_default, cs_owner_name_default, owner_source, active_jobs_now
+       sales_staff, cs_owner_email_default, cs_owner_name_default, owner_source, active_jobs_now, scout_unused_json
 FROM \`bq-hgt.dwh.cms_company_master\`
 WHERE company_id = @id`,
     params: [p.int('id', Number(companyId))],

@@ -8,7 +8,19 @@ export function mockCompanyMasterOne(id: string, today = todayJst()): Row[] {
   const c = mockCompanies(today).find((x) => String(x.id) === id);
   const row = mockCompanyMaster(today).find((r) => r.company_id === id);
   if (!c || !row) return [];
-  return [{ ...row, profile_count: 2, contract_from: c.from, contract_to: c.to, sf_account_name: c.owner ? `${c.name}（SF）` : null }];
+  return [{ ...row, profile_count: 2, contract_from: c.from, contract_to: c.to, sf_account_name: c.owner ? `${c.name}（SF）` : null, scout_unused_json: mockScoutUnusedJson(id, today) }];
+}
+
+const UNUSED_REASONS = ['1. 企業担当者の作業時間取れず未利用', '2. そもそもスカウト対象が1人もいなく、1通も送れない', '5. 応募で十分間に合うのでスカウト不要', '7. その他の理由', null];
+const UNUSED_REMARKS = ['運用開始直後', '先方事情でスカウト送付不可', null, null];
+
+/** スカウト未利用の記録（3 社に 1 社、直近 1〜4 か月分）。JSON 配列の文字列で返す（マートと同じ形） */
+export function mockScoutUnusedJson(id: string, today = todayJst()): string {
+  const n = Number(id);
+  if (n % 3 !== 0) return '[]';
+  const rand = seeded(n * 13);
+  const months = mockMonths(today).slice(-5, -1).reverse().slice(0, 1 + between(rand, 0, 3));
+  return JSON.stringify(months.map((month) => ({ month, reason: pick(rand, UNUSED_REASONS), remarks: pick(rand, UNUSED_REMARKS) })));
 }
 
 /** 月次（1 社）。ステータス別の列も付ける */

@@ -12,17 +12,18 @@ import { CompanyDetailResponseSchema } from '../../../shared/schema/company';
 import { ApiError } from '../../lib/api';
 import { useCompanyModel } from './companyModel';
 import { CompanyHeader } from './components/CompanyHeader';
-import { UtilizationPanel } from './components/UtilizationPanel';
-import { TrendPanel } from './components/TrendPanel';
+import { CurrentMonthPanel } from './components/CurrentMonthPanel';
+import { CumulativePanel } from './components/CumulativePanel';
+import { ScoutTrendPanel } from './components/ScoutTrendPanel';
 import { ScoutTargetPanel } from './components/ScoutTargetPanel';
-import { CohortPanel } from './components/CohortPanel';
+import { ScoutUnusedPanel } from './components/ScoutUnusedPanel';
 import { TargetVsActualPanel } from './components/TargetVsActualPanel';
 import { CaveatFootnotes } from './components/CaveatFootnotes';
 
-const UrlSchema = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).or(z.literal('')).default(''), tab: z.enum(['', 'scout', 'application']).default(''), attr: z.string().default('') });
-const URL_DEFAULTS = { month: '', tab: '' as const, attr: '' };
+const UrlSchema = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).or(z.literal('')).default(''), attr: z.string().default('') });
+const URL_DEFAULTS = { month: '', attr: '' };
 
-/** 企業詳細: ヘッダ → 利用状況 → 推移 → スカウト対象 → 選考コホート → 目標比較 → 注意点 */
+/** 企業詳細: ヘッダ → 当月の実績 → 左: 累積（閲覧・応募）/ 右: 送信・返信の推移 + スカウト対象 → スカウト未利用状況 → 目標比較 → 注意点 */
 export default function CompanyPage({ params }: PageProps) {
   const { meta } = useSession();
   const [url, setUrl] = useUrlState(UrlSchema, URL_DEFAULTS);
@@ -53,12 +54,17 @@ export default function CompanyPage({ params }: PageProps) {
   return (
     <div className={res.refreshing ? 'visually-dim' : ''}>
       <CompanyHeader d={d} onMonth={(m) => setUrl({ month: m === (meta?.month ?? '') ? '' : m })} onEditOwner={() => navigate(`/targets/${d.company.id}?from=${d.meta.month}#settings`)} />
-      <UtilizationPanel d={d} m={model} />
-      <TrendPanel m={model} />
-      <div className="grid-2">
-        <ScoutTargetPanel m={model} initial={url.attr} onChange={(t) => setUrl({ attr: t === 'japanese_level' ? '' : t })} />
-        <CohortPanel m={model} initial={url.tab} onChange={(t) => setUrl({ tab: t === 'scout' ? '' : t })} />
+      <CurrentMonthPanel d={d} m={model} />
+      <div className="grid-2 co-lower">
+        <div className="stack">
+          <CumulativePanel m={model} />
+        </div>
+        <div className="stack">
+          <ScoutTrendPanel m={model} />
+          <ScoutTargetPanel m={model} initial={url.attr} onChange={(t) => setUrl({ attr: t === 'japanese_level' ? '' : t })} />
+        </div>
       </div>
+      <ScoutUnusedPanel rows={d.scoutUnused} />
       <TargetVsActualPanel d={d} m={model} />
       <CaveatFootnotes ids={model.caveatIds} />
     </div>

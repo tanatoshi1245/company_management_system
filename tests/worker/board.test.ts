@@ -80,7 +80,7 @@ describe('/api/board（モック）', () => {
     const ratios = byPace.map((s) => s.pace.ratio).filter((r): r is number => r !== null);
     for (let i = 1; i < ratios.length; i++) expect(ratios[i]).toBeGreaterThanOrEqual(ratios[i - 1]);
     const tiles = kpiStrip(all, body.meta);
-    expect(tiles.map((t) => t.key)).toEqual(['contracted', 'active', 'scoutUtil', 'scoutUsage']);
+    expect(tiles.map((t) => t.key)).toEqual(['contracted', 'active', 'scoutUsers', 'scoutUtil']);
     const active = tiles.find((t) => t.key === 'active')!;
     expect(active.value).toBe(all.filter((s) => isContracted(s.c, body.meta) && s.c.login.daysSince !== null && s.c.login.daysSince < 30).length);
     expect(tiles[1].label).toBe('アクティブ企業数（最終ログイン30日以内）');
@@ -98,8 +98,10 @@ describe('/api/board（モック）', () => {
     // スカウト消化率 = Σ送信 ÷ Σ枠（枠のある契約企業）、利用率 = 1 件以上送信 ÷ 契約中
     const contracted = all.filter((s) => isContracted(s.c, body.meta));
     const withLimit = contracted.filter((s) => s.c.limits.scout);
-    expect(tiles[2].value).toBeCloseTo(withLimit.reduce((a, s) => a + s.c.m.sent, 0) / withLimit.reduce((a, s) => a + (s.c.limits.scout ?? 0), 0), 6);
-    expect(tiles[3].value).toBeCloseTo(contracted.filter((s) => s.c.m.sent > 0).length / contracted.length, 6);
+    expect(tiles[3].value).toBeCloseTo(withLimit.reduce((a, s) => a + s.c.m.sent, 0) / withLimit.reduce((a, s) => a + (s.c.limits.scout ?? 0), 0), 6);
+    expect(tiles[2].value).toBe(contracted.filter((s) => s.c.m.sent > 0).length);
+    expect(tiles[2].rate).toBeCloseTo(contracted.filter((s) => s.c.m.sent > 0).length / contracted.length, 6);
+    expect(tiles[2].label).toBe('スカウト利用社数（利用率）');
     // CS 担当で絞り込み
     const key = ownerKey(scored.find((s) => s.c.owner.email)!.c);
     const byOwner = filterCompanies(scored, { ...DEFAULT_FILTERS, owner: [key] }, body.meta);

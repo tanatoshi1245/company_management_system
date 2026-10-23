@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import app from '../../src/worker/index';
 import { baseEnv, ctx } from '../helpers/env';
 import { installFakeCache, uninstallFakeCache } from '../helpers/fakeCache';
+import { parseScoutUnused } from '../../src/worker/services/companyService';
 import { CompanyDetailResponseSchema } from '../../src/shared/schema/company';
 import { BoardResponseSchema } from '../../src/shared/schema/board';
 import { addMonths, monthOf, todayJst } from '../../src/shared/calendar/periods';
@@ -36,6 +37,11 @@ describe('/api/companies/:id（モック）', () => {
     expect(attrMonths.size).toBeLessThanOrEqual(3);
     for (const t of ATTRIBUTE_TYPES) expect(body.attributes.some((a) => a.type === t), t).toBe(true);
     expect(body.benchSeries.some((b) => b.industry === '__ALL__' && b.companyType === '__ALL__')).toBe(true);
+    // スカウト未利用の記録（マートの JSON 列を配列に。モックは 3 社に 1 社）
+    expect(Array.isArray(body.scoutUnused)).toBe(true);
+    for (const r of body.scoutUnused) expect(r.month).toMatch(/^\d{4}-\d{2}$/);
+    const withUnused = await Promise.all(board.companies.slice(0, 6).map(async (c) => CompanyDetailResponseSchema.parse(await (await get(c.id)).json()).scoutUnused.length));
+    expect(withUnused.some((n) => n > 0)).toBe(true);
     expect(body.settings).toBeNull();
     expect(body.targetsByMonth).toEqual({});
     expect(text.length).toBeLessThan(200_000);
@@ -55,5 +61,18 @@ describe('/api/companies/:id（モック）', () => {
     const mine = board.companies.find((c) => c.isMine)!;
     const body = CompanyDetailResponseSchema.parse(await (await get(mine.id, { ...baseEnv, DEV_USER_EMAIL: 'preview@daijob.com' })).json());
     expect(body.company.isMine).toBe(true);
+  });
+});
+
+describe('parseScoutUnused', () => {
+  it('JSON 配列を行にし、壊れた JSON・形の違う要素・NULL は空にする', () => {
+    expect(parseScoutUnused('[{"month":"2026-09","reason":"7. その他の理由","remarks":"運用開始直後"},{"month":"2026-08","reason":null,"remarks":null}]')).toEqual([
+      { month: '2026-09', reason: '7. その他の理由', remarks: '運用開始直後' },
+      { month: '2026-08', reason: null, remarks: null },
+    ]);
+    expect(parseScoutUnused('[]')).toEqual([]);
+    expect(parseScoutUnused(null)).toEqual([]);
+    expect(parseScoutUnused('not json')).toEqual([]);
+    expect(parseScoutUnused('[{"x":1}]')).toEqual([]);
   });
 });

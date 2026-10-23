@@ -26,20 +26,30 @@
 .bullet svg .tick { fill: var(--muted); font-size: 11px; font-family: var(--font-body); }
 .bullet-foot { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--fs-12); color: var(--ink-soft); align-items: center; }
 
-/* 小さな折れ線の並び */
-.multiples { display: grid; gap: 12px; }
-.panel { min-width: 0; }
-.panel-label { font-size: var(--fs-11); font-weight: 700; color: var(--muted); margin-bottom: 2px; }
-.chart .value { font-family: var(--font-body); }
+/* 当月の実績（数値タイル） */
+.stat-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: var(--s2); }
+@media (max-width: 1100px) { .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.stat { border: 1px solid var(--rule); padding: 6px 10px 8px; min-width: 0; }
+.stat .t { display: block; font-size: var(--fs-11); font-weight: 700; color: var(--muted); letter-spacing: 0.02em; }
+.stat .v { display: block; font-size: var(--fs-20); font-weight: 600; color: var(--heading); line-height: 1.2; white-space: nowrap; }
+.stat.zero { background: var(--heat-n1); }
+.stat.zero .v { color: var(--heat-n2); }
 
-/* コホート */
-table.cohort td.cohort-cell { min-width: 44px; }
-.seq-1 { background: color-mix(in srgb, var(--seq-1) 45%, var(--surface)); }
-.seq-2 { background: var(--seq-1); }
-.seq-3 { background: var(--seq-2); }
-.seq-4 { background: var(--seq-3); color: #fff; }
-.seq-5 { background: var(--seq-4); color: #fff; }
-.seq-6 { background: var(--seq-5); color: #fff; }
+/* 下半分: 左 = 累積（閲覧・応募）/ 右 = 送信・返信 + 属性 */
+.co-lower { align-items: start; }
+.stack { display: flex; flex-direction: column; min-width: 0; }
+.stack .card:last-child { margin-bottom: var(--s4); }
+
+/* 2 系列の折れ線 */
+.chart .value { font-family: var(--font-body); }
+.chart.dual svg .tick { fill: var(--muted); font-size: 11px; font-family: var(--font-body); }
+.chart.dual .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--fs-12); color: var(--ink-soft); margin-bottom: 4px; }
+.chart.dual .legend .sw { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
+.chart-tooltip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; }
+
+/* スカウト未利用状況 */
+table.unused td:nth-child(2) { min-width: 220px; }
+table.unused td:nth-child(3) { color: var(--ink-soft); }
 
 /* 属性の横棒 */
 .tabs { display: flex; flex-wrap: wrap; gap: 0; border-bottom: 1px solid var(--rule); margin-bottom: 10px; }
