@@ -29,6 +29,8 @@ async function setup() {
     return boards.get(m)!;
   };
   const entries = new Map<string, ScoutUnusedEntry>();
+  /** BQ に既にある記録（シート取込）: 前月の未使用企業のうち先頭 2 社 */
+  const sheet = new Map<string, { companyId: string; reason: string | null; remarks: string | null }>();
   const calls: string[] = [];
   const bodies: unknown[] = [];
   const me = { email: VIEWER, name: 'テスト', verified: true, authMode: 'google', mock: true, ownerUserId: null, overrideCompanyIds: [], canEdit: true };
@@ -42,7 +44,7 @@ async function setup() {
     let m = url.match(/^\/api\/board\?month=(\d{4}-\d{2})/);
     if (m) return Response.json(await boardFor(m[1]));
     m = url.match(/^\/api\/scout-unused\?month=(\d{4}-\d{2})$/);
-    if (m) return Response.json({ month: m[1], entries: Array.from(entries.values()).filter((e) => e.month === m![1]), sheet: [] });
+    if (m) return Response.json({ month: m[1], entries: Array.from(entries.values()).filter((e) => e.month === m![1]), sheet: m[1] === prev ? Array.from(sheet.values()) : [] });
     m = url.match(/^\/api\/scout-unused\/(\d+)\/(\d{4}-\d{2})$/);
     if (m && method === 'PUT') {
       const body = JSON.parse(String(init?.body)) as { reason: string | null; remarks: string | null };
@@ -58,7 +60,11 @@ async function setup() {
     if (url === '/api/scout-unused/sync') return Response.json({ synced: 0, failed: 0, pending: 0 });
     return Response.json({ error: 'nf', code: 'notFound' }, { status: 404 });
   }) as typeof fetch;
-  return { cur, prev, boardFor, entries, calls, bodies };
+  const b = await boardFor(prev);
+  const unused = b.companies.filter((c) => isScoutUnused(c, b.meta)).sort((a, x) => (a.owner.name ?? '～').localeCompare(x.owner.name ?? '～', 'ja') || a.name.localeCompare(x.name, 'ja'));
+  sheet.set(unused[0].id, { companyId: unused[0].id, reason: SCOUT_UNUSED_REASONS[3], remarks: '先方事情' });
+  sheet.set(unused[1].id, { companyId: unused[1].id, reason: null, remarks: null });
+  return { cur, prev, boardFor, entries, sheet, calls, bodies, unused };
 }
 
 describe('スカウト未利用の登録ページ', () => {
@@ -87,7 +93,15 @@ describe('スカウト未利用の登録ページ', () => {
     const sel = within(first as HTMLElement).getByRole('combobox') as HTMLSelectElement;
     expect(Array.from(sel.options).map((o) => o.value)).toEqual(['', ...SCOUT_UNUSED_REASONS]);
     expect(sel.options[1].text).toBe('8. どうしても連絡つかず不明');
-    // 保存ボタンは変更するまで無効
+    // BQ に既にある記録（シート取込）は入力欄にそのまま出る。「取り込む」ボタンは無い。保存ボタンは変更するまで無効
+    expect(sel.value).toBe(SCOUT_UNUSED_REASONS[3]);
+    expect((within(first as HTMLElement).getByRole('textbox') as HTMLInputElement).value).toBe('先方事情');
+    expect(within(first as HTMLElement).getByText('BQ 登録済み（シート）')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '取り込む' })).toBeNull();
+    expect(screen.getByText(/登録済み 2 社/)).toBeTruthy();
+    // DA / RPO は対象外
+    for (const tr of rows) expect(['DA', 'RPO']).not.toContain(within(tr as HTMLElement).getAllByRole('cell')[1].textContent);
+    expect(board.companies.some((c) => (c.type === 'DA' || c.type === 'RPO') && c.m.sent === 0 && c.limits.scout)).toBe(true);
     const save = within(first as HTMLElement).getByRole('button', { name: '保存' }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
     fireEvent.change(sel, { target: { value: SCOUT_UNUSED_REASONS[4] } });
@@ -98,13 +112,14 @@ describe('スカウト未利用の登録ページ', () => {
     await waitFor(() => expect(f.calls).toContain(`PUT /api/scout-unused/${id}/${f.prev}`));
     expect(f.bodies[0]).toEqual({ reason: '4. サイトの機能が分かりづらく使い勝手が悪い等、技術的な問題で未利用', remarks: '運用開始直後' });
     await waitFor(() => expect(within(first as HTMLElement).getByText('BQ 反映済み')).toBeTruthy());
-    expect(screen.getByText(/登録済み 1 社/)).toBeTruthy();
-    // 空にして保存 → DELETE
+    expect(screen.getByText(/登録済み 2 社/)).toBeTruthy();
+    // 空にして保存 → DELETE（アプリの登録は消え、シートの記録が再び入力欄に出る）
     fireEvent.change(sel, { target: { value: '' } });
     fireEvent.change(within(first as HTMLElement).getByRole('textbox'), { target: { value: '' } });
     fireEvent.click(within(first as HTMLElement).getByRole('button', { name: '削除' }));
     await waitFor(() => expect(f.calls).toContain(`DELETE /api/scout-unused/${id}/${f.prev}`));
-    await waitFor(() => expect(within(first as HTMLElement).getByText('未登録')).toBeTruthy());
+    await waitFor(() => expect(within(first as HTMLElement).getByText('BQ 登録済み（シート）')).toBeTruthy());
+    expect(sel.value).toBe(SCOUT_UNUSED_REASONS[3]);
   });
 
   it('登録済みの行をもう一度編集して保存すると更新（PUT）される', async () => {
