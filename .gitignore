@@ -1,0 +1,17 @@
+# Cloudflare Worker + Vite
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+work/
+/tmp/
+*.log
+# 鍵・認証情報はリポジトリに置かない（git ls-files でも確認する）
+*.pem
+*.p12
+*-key.json
+*key*.json
+!package.json
+!package-lock.json
+!tsconfig*.json
+!src/shared/calendar/jp-holidays.json

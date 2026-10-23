@@ -1,0 +1,99 @@
+/* 複製元: sales_dashboard_IS-FS_ver2 の src/app/styles/tokens.css（Daijob ブランドトークン）。変更点: 間隔・文字サイズ・動き・ヒートマップ／順序ランプのトークンを追加。ダークは v1 では使わない */
+:root {
+  color-scheme: light;
+  /* ブランド（Daijob Design System） */
+  --dj-navy: #000066;
+  --dj-navy-deep: #000044;
+  --dj-navy-soft: #333399;
+  --dj-gold: #D4AF37;
+  --dj-gold-deep: #735C00;
+  --dj-gold-pale: #FFF3C4;
+
+  /* 面・文字（暖色グレー） */
+  --page: #F6F3F2;
+  --surface: #FFFFFF;
+  --surface-low: #FCF9F8;
+  --surface-sunken: #EFECEA;
+  --ink: #1B1C1C;
+  --ink-soft: #4D4635;
+  --muted: #7F7663;
+  --rule: #E0E0E0;
+  --rule-strong: #C8C8C8;
+  --hairline: rgba(27, 28, 28, 0.1);
+  --heading: var(--dj-navy);
+  --link: var(--dj-navy);
+
+  /* 単一系列のマーク色（白地 3:1 以上を検証済み） */
+  --accent: #414AB2;
+  --accent-soft: rgba(65, 74, 178, 0.12);
+  --de-emphasis: #C8C8C8;
+  /* 順序ランプ（1 色・明→暗。validate_palette --ordinal 合格） */
+  --seq-1: #A9ACE6;
+  --seq-2: #8489D8;
+  --seq-3: #6167C8;
+  --seq-4: #414AB2;
+  --seq-5: #232C95;
+  --seq-6: #0A1070;
+  /* ヒートマップ 5 段階（悪い ← 中立 → 良い）。暖色の中立から赤（悪化）・紺（改善）へ */
+  --heat-n2: #B3261E;
+  --heat-n1: #EFB3AE;
+  --heat-0: #ECE9E4;
+  --heat-p1: #AFBCEA;
+  --heat-p2: #2B3AA4;
+  --heat-ink-strong: #FFFFFF;
+  --heat-na: repeating-linear-gradient(45deg, transparent 0 3px, var(--rule) 3px 4px);
+
+  /* 状態色（必ずラベルと併用する） */
+  --good: #006300;
+  --warn: #8A5A00;
+  --bad: #BA1A1A;
+  --good-bg: #E6F4E6;
+  --warn-bg: #FFF3C4;
+  --bad-bg: #FDECEC;
+
+  /* チャートの地 */
+  --grid: #E9E8E4;
+  --axis: #C3C2B7;
+  --target-line: #4D4635;
+  --band: rgba(65, 74, 178, 0.1);
+  --tooltip-bg: #1B1C1C;
+  --tooltip-ink: #FFFFFF;
+
+  /* 文字 */
+  --font-body: 'Inter', 'Noto Sans JP', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-jp: 'Noto Sans JP', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-20: 20px;
+  --fs-28: 28px;
+  --lh-tight: 1.2;
+  --lh-body: 1.5;
+
+  /* 8px グリッド */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+  --radius: 3px;
+  --row-h: 36px;
+  --cell-gap: 2px;
+  --rail-w: 232px;
+
+  /* 動き・フォーカス */
+  --motion: 150ms cubic-bezier(0.2, 0, 0, 1);
+  --motion-slow: 250ms cubic-bezier(0.2, 0, 0, 1);
+  --focus: 2px solid var(--dj-gold);
+  --shadow-pop: 0 8px 24px rgba(0, 0, 102, 0.1);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion: 0ms;
+    --motion-slow: 0ms;
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "name": "company-management-system",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:split": "wrangler dev --assets ./dist/client",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
+    "test": "vitest run",
+    "dryrun": "tsx scripts/bq-dryrun.ts",
+    "smoke": "tsx scripts/bq-smoke.ts",
+    "d1:migrate:local": "wrangler d1 migrations apply CMS_DB --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply CMS_DB --remote",
+    "seed:local": "wrangler d1 execute CMS_DB --local --file d1/seed.local.sql",
+    "holidays:update": "tsx scripts/update-holidays.ts"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.2.0",
+    "@fontsource/noto-sans-jp": "^5.2.0",
+    "hono": "^4.13.8",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.54.10",
+    "@cloudflare/workers-types": "^5.20260916.1",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^22.18.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "jsdom": "^30.0.1",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.132.0"
+  }
+}

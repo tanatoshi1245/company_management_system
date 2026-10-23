@@ -1,0 +1,15 @@
+# ローカル開発用の秘密・設定（このファイルをコピーして .dev.vars を作る。.dev.vars は gitignore 済み）
+# 1 = BigQuery を呼ばずフィクスチャ（サンプルデータ）で動かす。UI 開発・デモ用。未ログインでも閲覧できる（書き込みは不可）
+BQ_MOCK=1
+# モック時のログイン者（担当=自分 の確認用）
+DEV_USER_EMAIL=preview@daijob.com
+# 実データで動かす場合: 専用 SA（cms-bq-reader@bq-hgt）の鍵 JSON を 1 行にして貼る（共用鍵は使わない）
+# BQ_SA_KEY={"type":"service_account",...}
+# Google ログイン（本番は Worker の Secret。ローカルで試す場合は開発用 OAuth クライアントに http://localhost:5173/auth/callback を登録して入れる）
+# GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
+# GOOGLE_CLIENT_SECRET=...
+# SESSION_SECRET=（32 文字以上のランダム文字列: openssl rand -base64 32）
+# ドメイン認証（本番は wrangler.jsonc の vars。ローカルで入れると他ドメインのメールが 403 になる）
+# ALLOWED_EMAIL_DOMAINS=daijob.com
+# 個別に許可するメール（@partner.example のようにドメインも書ける）
+# ALLOWED_EMAILS=a@daijob.com,b@daijob.com
