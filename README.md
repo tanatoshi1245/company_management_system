@@ -15,7 +15,7 @@ status: active
 CS（カスタマーサクセス）向けの社内 Web アプリ。契約中企業ごとの **契約・担当・利用状況（求人枠 / スカウト枠の消化率と営業日ペース）・最終ログイン・スカウト対象の会員属性・コホート別の選考状況** を、ボード（ヒートマップ）と企業詳細で可視化し、**業界ベンチマーク** または **契約時に登録した目標** との比較で良し悪しを示す。
 
 - Cloudflare Workers（Hono）+ React 19 / Vite 7 / TypeScript、BigQuery REST（日次マート `bq-hgt.dwh.cms_*` だけを読む）、Cloudflare D1（目標・企業設定・監査ログ）
-- Worker 内蔵の Google ログインによるドメイン認証（`@daijob.com`）。未設定なら fail-closed（503）
+- Worker 内蔵の Google ログインによるドメイン認証（`@daijob.com` / `@athuman.com`）。未設定なら fail-closed（503）
 - BQ 接続・テーブル定義・ビジネス定義・セキュリティ要件は分析リポジトリ [`tanatoshi1245/claude_analysis`](https://github.com/tanatoshi1245/claude_analysis) の `CLAUDE.md` / `04_アプリケーション/セキュリティ要件.md` を正とする。マートの登録記録は `02_データエンジニアリング/cms_marts/README.md`
 
 | 状態（2026-10-23） | 内容 |
@@ -100,7 +100,7 @@ tests/                vitest（worker / shared / app / repo）。helpers/fakeD1.
 
 ## セキュリティ（要約。チェックリストは [docs/セキュリティチェックリスト.md](./docs/セキュリティチェックリスト.md)）
 
-- **認証**: 全パスの先頭で Google ログインのセッション Cookie（`cms_session`、HttpOnly / Secure / SameSite=Lax、7 日）を検証。許可ドメイン `daijob.com`。未設定は 503（「URL を知っていれば誰でも」は無い）。[ドメイン認証](./docs/ドメイン認証.md)
+- **認証**: 全パスの先頭で Google ログインのセッション Cookie（`cms_session`、HttpOnly / Secure / SameSite=Lax、7 日）を検証。許可ドメイン `daijob.com` / `athuman.com`。未設定は 503（「URL を知っていれば誰でも」は無い）。[ドメイン認証](./docs/ドメイン認証.md)
 - **認可の前提（v1）**: ログインした社内の人は全企業を閲覧でき、どの企業の目標・設定も編集できる（CS は互いに代理）。企業 ID は形式検証 + マスタ存在確認、`company_id` は URL からだけ、書き込みは Google で確かめた人だけ、すべて監査ログに残る。担当だけに編集を限るのは将来の変更点
 - **入力**: zod の strict スキーマ（未知キー拒否・上限）、BigQuery は `@param`、D1 は `prepare().bind()`、`sort` 等は許可リスト、書き込みは同一オリジンのみ
 - **外部通信**: `safeFetch` のホスト許可リスト。ユーザー入力の URL を fetch しない。`eval` 不使用
