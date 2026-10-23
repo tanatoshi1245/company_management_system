@@ -18,7 +18,7 @@ status: active
 | company_id | INT64 | companies.id |
 | company_name / internal_name | STRING | 主プロファイルの企業名（無ければ internal_name）/ companies.internal_name |
 | profile_ids / profile_count | ARRAY<INT64> / INT64 | 企業のプロファイル（RA/RDS 除く） |
-| company_type | STRING | DA / RPO / 直接 / 紹介（派遣含む） / 不明（dmt_company_daily と同じ判定） |
+| company_type | STRING | DA / RPO / NW / 直接 / 紹介 / 派遣 / 不明。DA = 企業名に DaijobAgent またはプロファイル名で判定、NW = Network 契約（直接 で DaijobAgent を含まず、求人枠 0 かつ当日の掲載 0、スカウト枠 0 かつ当月送信 0。2026-10-23〜）、他は dmt_company_daily と同じ判定 |
 | dj_contract_type | STRING | company_profiles.contract_type（登録なし は NULL） |
 | active_from / active_to | DATE | 契約期間（Daijob。契約中判定の正） |
 | contract_from / contract_to | DATE | companies の別列（参考） |

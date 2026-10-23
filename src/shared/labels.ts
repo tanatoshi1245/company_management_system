@@ -1,8 +1,9 @@
 /** 画面の日本語ラベルと並び順（マートの値 → 表示）。値そのものはマート README を参照 */
 
-export const COMPANY_TYPES = ['DA', 'RPO', '直接', '紹介', '派遣', '不明'] as const;
+/** NW = Network 契約（直接 で DaijobAgent を含まず、求人枠 0・掲載 0・スカウト枠 0・当月送信 0。マートで判定） */
+export const COMPANY_TYPES = ['DA', 'RPO', 'NW', '直接', '紹介', '派遣', '不明'] as const;
 export type CompanyType = (typeof COMPANY_TYPES)[number];
-export const COMPANY_TYPE_SHORT: Record<string, string> = { DA: 'DA', RPO: 'RPO', 直接: '直接', 紹介: '紹介', 派遣: '派遣', '紹介（派遣含む）': '紹介', 不明: '不明' };
+export const COMPANY_TYPE_SHORT: Record<string, string> = { DA: 'DA', RPO: 'RPO', NW: 'NW', 直接: '直接', 紹介: '紹介', 派遣: '派遣', '紹介（派遣含む）': '紹介', 不明: '不明' };
 
 /** 担当の表示名（苗字だけ）。「田辺 真美」→「田辺」、「JUNG KYOUNGJOON」→「JUNG」。空白が無ければそのまま */
 export function surname(name: string | null | undefined): string | null {

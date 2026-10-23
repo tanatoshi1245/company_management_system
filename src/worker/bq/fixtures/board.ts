@@ -7,7 +7,7 @@ import { between, pick, seeded } from './random';
  * ペース遅れ・ログインなし・契約終了間近・目標未設定が必ず混ざるようにしてある
  */
 const INDUSTRIES = ['通信・情報サービス関連', 'ソフトウェアベンダー', 'ITコンサルティング', '人材紹介会社', '商社・卸', '教育・学校', '旅行・ホテル・レジャー・外食', '機械メーカー'];
-const TYPES = ['直接', '直接', '直接', '直接', '直接', '直接', '紹介', '派遣', 'RPO', 'DA'];
+const TYPES = ['直接', '直接', '直接', '直接', '直接', '直接', '紹介', '派遣', 'RPO', 'DA', 'NW'];
 const PLANS = ['DJ', 'DJ_成果報酬', 'RPO', 'WA', 'DJ_成果報酬（採用成功）'];
 const OWNERS: { email: string; name: string; position: string }[] = [
   { email: 'preview@daijob.com', name: 'サンプル 利用者', position: 'CS' },
@@ -61,8 +61,9 @@ export function mockCompanies(today = todayJst()): MockCompany[] {
       from = addDays(today, -between(rand, 30, 500));
       to = i % 7 === 0 ? null : addDays(from, pick(rand, [182, 365, 365, 730]));
     }
-    const scoutLimit = i % 9 === 8 ? null : pick(rand, [50, 100, 150, 200, 300]);
-    const jobLimit = i % 11 === 10 ? null : pick(rand, [5, 10, 15, 20, 30]);
+    // NW（Network 契約）は求人枠もスカウト枠も 0 で、掲載・送信が無い
+    const scoutLimit = type === 'NW' ? 0 : i % 9 === 8 ? null : pick(rand, [50, 100, 150, 200, 300]);
+    const jobLimit = type === 'NW' ? 0 : i % 11 === 10 ? null : pick(rand, [5, 10, 15, 20, 30]);
     const activity = i % 5 === 0 ? 0.35 : i % 5 === 1 ? 0.7 : i % 5 === 2 ? 1.1 : 0.9;
     const loginLag = i % 6 === 5 ? null : i % 6 === 4 ? between(rand, 15, 60) : between(rand, 0, 6);
     const owner = i % 8 === 7 ? null : OWNERS[i % OWNERS.length];
@@ -152,7 +153,7 @@ export function mockCompanyMonthly(today = todayJst()): Row[] {
       const sent = contracted && !skipMonth ? Math.round(limit * c.activity * frac * (0.75 + rand() * 0.5)) : 0;
       const manual = Math.round(sent * (0.5 + rand() * 0.4));
       const interested = Math.round(sent * (0.06 + rand() * 0.14));
-      const jobs = contracted ? Math.min(c.jobLimit ?? 12, Math.max(1, Math.round((c.jobLimit ?? 12) * c.activity * (0.8 + rand() * 0.3)))) : 0;
+      const jobs = contracted && c.jobLimit !== 0 ? Math.min(c.jobLimit ?? 12, Math.max(1, Math.round((c.jobLimit ?? 12) * c.activity * (0.8 + rand() * 0.3)))) : 0;
       const apps = contracted ? Math.round(jobs * (0.3 + rand() * 1.2) * frac) : 0;
       const views = contracted ? Math.round(jobs * (15 + rand() * 40) * frac) : 0;
       const hires = contracted && rand() < 0.12 * c.activity ? 1 : 0;

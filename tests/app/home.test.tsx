@@ -170,6 +170,7 @@ describe('ホーム（ボード）', () => {
     const total = table0.querySelectorAll('tbody tr').length;
     // 企業種別のプルダウンは外側のクリック・Esc で閉じ、中のクリックでは閉じない
     const typeGroup = screen.getByRole('group', { name: '企業種別' });
+    expect(Array.from(typeGroup.querySelectorAll('label')).some((l) => l.textContent?.includes('NW'))).toBe(true);
     const details = typeGroup.closest('details') as HTMLDetailsElement;
     details.open = true;
     fireEvent(details, new Event('toggle', { bubbles: false }));

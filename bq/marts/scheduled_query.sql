@@ -117,6 +117,12 @@ BEGIN
         AND u.month <= COALESCE(c.active_to, DATE '9999-12-31')
       GROUP BY u.company_id
     ),
+    -- 当月にスカウトを 1 件でも送った企業（NW 判定用）
+    scouts_cur AS (
+      SELECT DISTINCT pcm.company_id
+      FROM `bq-hgt.dwh.scouts` s JOIN pcm USING (profile_id)
+      WHERE s.sent_at >= cur_month
+    ),
     -- 当日の掲載求人（企業単位で set_id 重複排除。日英プロファイルにまたがる）
     active_jobs_company AS (
       SELECT pcm.company_id, COUNT(DISTINCT COALESCE(a.set_id, a.job_id)) AS n
@@ -211,7 +217,14 @@ BEGIN
            c.internal_name,
            ci.profile_ids,
            IFNULL(ci.profile_count, 0) AS profile_count,
-           COALESCE(IF(c.is_da_name, 'DA', ci.company_type), '不明') AS company_type,
+           -- 企業種別。NW（Network 契約。たまにある特殊な契約）= 直接 で企業名に DaijobAgent を含まず、求人枠 0 かつ掲載 0、スカウト枠 0 かつ当月送信 0（2026-10-23）
+           CASE
+             WHEN c.is_da_name OR ci.company_type = 'DA' THEN 'DA'
+             WHEN ci.company_type = '直接'
+                  AND IFNULL(COALESCE(c.company_job_limit, ci.job_limit_profiles, la.job_limit), 0) = 0 AND IFNULL(aj.n, 0) = 0
+                  AND IFNULL(COALESCE(c.company_scout_limit, ci.scout_limit_profiles, la.scout_limit), 0) = 0 AND scur.company_id IS NULL THEN 'NW'
+             ELSE COALESCE(ci.company_type, '不明')
+           END AS company_type,
            ci.dj_contract_type,
            c.active_from, c.active_to, c.contract_from, c.contract_to,
            c.is_contracted_now, c.contract_state,
@@ -256,6 +269,7 @@ BEGIN
     LEFT JOIN company_info ci USING (company_id)
     LEFT JOIN limits_all la USING (company_id)
     LEFT JOIN active_jobs_company aj USING (company_id)
+    LEFT JOIN scouts_cur scur USING (company_id)
     LEFT JOIN sf_contract_pick sc USING (company_id)
     LEFT JOIN sf_signal1 s1 USING (company_id)
     LEFT JOIN sf_signal2 s2 USING (company_id)

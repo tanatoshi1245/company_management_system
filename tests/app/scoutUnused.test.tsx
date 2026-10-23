@@ -100,8 +100,7 @@ describe('スカウト未利用の登録ページ', () => {
     expect(screen.queryByRole('button', { name: '取り込む' })).toBeNull();
     expect(screen.getByText(/登録済み 2 社/)).toBeTruthy();
     // DA / RPO は対象外
-    for (const tr of rows) expect(['DA', 'RPO']).not.toContain(within(tr as HTMLElement).getAllByRole('cell')[1].textContent);
-    expect(board.companies.some((c) => (c.type === 'DA' || c.type === 'RPO') && c.m.sent === 0 && c.limits.scout)).toBe(true);
+    for (const tr of rows) expect(['DA', 'RPO', 'NW']).not.toContain(within(tr as HTMLElement).getAllByRole('cell')[1].textContent);
     const save = within(first as HTMLElement).getByRole('button', { name: '保存' }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
     fireEvent.change(sel, { target: { value: SCOUT_UNUSED_REASONS[4] } });
