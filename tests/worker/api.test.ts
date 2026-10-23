@@ -90,8 +90,9 @@ describe('設定不足の例外を分かるメッセージにする', () => {
       expect(res.status).toBe(503);
       const body = (await res.json()) as { code: string; error: string };
       expect(body.code).toBe('storage');
-      expect(body.error).toContain('マイグレーション');
-      expect(body.error).not.toMatch(/SELECT|company_targets/);
+      expect(body.error).toContain('0001_init.sql');
+      expect(body.error).toMatch(/表 (company_targets|company_settings|app_meta) がありません/);
+      expect(body.error).not.toMatch(/SELECT|FROM/);
       const bad = await app.fetch(new Request('http://x/api/board'), { ...baseEnv, BQ_MOCK: '0', GOOGLE_CLIENT_ID: 'x', GOOGLE_CLIENT_SECRET: 'y', SESSION_SECRET: 's'.repeat(40), BQ_SA_KEY: '{"type":"service_account"}' }, ctx);
       // 未ログインなので 401（鍵の検査はログイン後）。ログイン済みの経路は board.test で担保
       expect(bad.status).toBe(401);

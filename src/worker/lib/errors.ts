@@ -36,9 +36,14 @@ export function errorResponse(err: unknown, c: Context): Response {
   }
   const msg = err instanceof Error ? err.message : String(err);
   // D1 の表が無い = マイグレーション未適用（設定不足を画面で分かるようにする。SQL やスタックは出さない）
-  if (/no such table|D1_ERROR/i.test(msg)) {
+  if (/no such table/i.test(msg)) {
     console.error(`D1 error: ${msg}`);
-    return c.json({ error: 'D1 のマイグレーションが適用されていません。D1 コンソールで d1/migrations/0001_init.sql と 0002_plan_defaults.sql を順に実行してください（docs/デプロイ手順.md 3）', code: 'storage' }, 503);
+    const table = /no such table: ?([A-Za-z0-9_]+)/i.exec(msg)?.[1];
+    return c.json({ error: `D1 に表 ${table ?? '(不明)'} がありません。Worker に束ねた D1（Settings → Bindings → CMS_DB）に d1/migrations/0001_init.sql と 0002_plan_defaults.sql を順に実行してください（docs/デプロイ手順.md 3）`, code: 'storage', detail: table ? `missing_table:${table}` : undefined }, 503);
+  }
+  if (/D1_ERROR/i.test(msg)) {
+    console.error(`D1 error: ${msg}`);
+    return c.json({ error: `D1 でエラーが発生しました（${msg.replace(/^D1_ERROR:\s*/i, '').slice(0, 120)}）`, code: 'storage' }, 503);
   }
   // SA 鍵の形式不正（Secret の貼り間違い）
   if (/^BQ_SA_KEY/.test(msg)) {
