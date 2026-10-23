@@ -1,6 +1,6 @@
 import type { ScoutUnusedRow } from '../../../../shared/schema/company';
 import { Help } from '../../../components/ui/Help';
-import { fmtMonthShort } from '../../../../shared/calendar/periods';
+import { fmtMonthJa } from '../../../../shared/calendar/periods';
 
 /** スカウト未利用状況（CS が月次で記入した理由と補足。契約期間中の全月） */
 export function ScoutUnusedPanel({ rows }: { rows: ScoutUnusedRow[] }) {
@@ -25,7 +25,7 @@ export function ScoutUnusedPanel({ rows }: { rows: ScoutUnusedRow[] }) {
             <tbody>
               {rows.map((r, i) => (
                 <tr key={`${r.month}-${i}`}>
-                  <td className="nowrap">{fmtMonthShort(r.month)}</td>
+                  <td className="nowrap">{fmtMonthJa(r.month)}</td>
                   <td>{r.reason ?? <span className="muted">–</span>}</td>
                   <td>{r.remarks ?? <span className="muted">–</span>}</td>
                 </tr>
