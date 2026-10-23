@@ -125,6 +125,8 @@ describe('企業詳細', () => {
       const table = screen.getByRole('table', { name: 'スカウト未利用の記録' });
       expect(table.querySelectorAll('tbody tr').length).toBe(f.unused.length);
       expect(table.textContent).toContain(f.unused[0].reason ?? '–');
+      // 対象月は年月（例: 2026年9月）
+      expect(table.querySelector('tbody tr td')?.textContent).toMatch(/^\d{4}年\d{1,2}月$/);
     } else {
       expect(unused.textContent).toContain('未利用の記録はありません');
     }
