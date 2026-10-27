@@ -25,7 +25,6 @@ export interface CompanyModel {
   scoutTrend: SeriesByMonth & { sent: number[]; intReply: number[] };
   attributes: Record<string, AttrBar[]>;
   attrMonths: string[];
-  caveatIds: string[];
 }
 
 /** 値の先頭の番号（"6. ネイティヴ" → 6）。無ければ null */
@@ -71,11 +70,6 @@ export function useCompanyModel(d: CompanyDetailResponse | null): CompanyModel |
         return b.scouts - a.scouts;
       });
     }
-    const caveatIds = ['status_current_only', 'member_attr_current', 'scout_lag'];
-    if (d.company.login.last === null) caveatIds.push('login_from');
-    if (Object.values(scored.bench).some((b) => b.level > 0)) caveatIds.push('benchmark_small_n');
-    if (d.company.limits.scout !== null) caveatIds.push('scout_quota_period');
-    if (byMonth.get(month)?.hires) caveatIds.push('hire_month');
     return {
       scored,
       months,
@@ -83,7 +77,6 @@ export function useCompanyModel(d: CompanyDetailResponse | null): CompanyModel |
       scoutTrend: { ...base, sent: inContract.map((m) => byMonth.get(m)?.sent ?? 0), intReply: inContract.map((m) => byMonth.get(m)?.intReply ?? 0) },
       attributes,
       attrMonths,
-      caveatIds,
     };
   }, [d]);
 }

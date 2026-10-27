@@ -78,6 +78,8 @@ describe('ホーム（ボード）', () => {
     expect(document.querySelectorAll('.kpi').length).toBe(4);
     // サブメニューに「指標の定義」は無い。見出しに「マート更新」は出さない
     expect(screen.queryByRole('link', { name: /指標の定義/ })).toBeNull();
+    // 目標・設定もメニューに出さない（ページは URL 直打ちで開ける）
+    expect(Array.from(document.querySelectorAll('.rail-nav a')).map((a) => a.textContent?.trim())).toEqual(['ボード', 'スカウト未利用']);
     expect(document.querySelector('.page-header')?.textContent ?? '').not.toContain('マート更新');
     expect(screen.queryByLabelText('並べ替え')).toBeNull();
     expect(screen.queryByLabelText('期間')).toBeNull();

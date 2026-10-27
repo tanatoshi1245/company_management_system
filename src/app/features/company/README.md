@@ -21,7 +21,6 @@ status: active
 | 誰にスカウトを送っているか（属性タブ 8 種、構成比、興味あり率。右列） | 同上 | `cms_scout_member_attributes_monthly`（選択月を含む 3 か月。語学レベルは番号の降順） | scouts × member_details × member_profile_latest |
 | スカウト未利用状況（対象月・理由・補足・出所。契約期間中の全月。「理由を登録する」→ `/scout-unused`） | 同上 + D1 `scout_unused_entries`（API が重ねる） | `cms_company_master.scout_unused_json` | scout_unused_companies_monthly（シート取込 + アプリの行） |
 | 契約時の目標との比較 | 同上（D1 `company_targets` の当月行） | 目標 × 営業日消化率 vs `cms_company_monthly` の当月列 | — |
-| この画面の注意点 | `GET /api/meta` | `caveats` | — |
 
 全体の表は [`docs/データ紐付け.md`](../../../../docs/データ紐付け.md)。
 
