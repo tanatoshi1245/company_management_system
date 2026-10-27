@@ -4,7 +4,7 @@
 
 1. [`README.md`](./README.md)（全体像・API・セキュリティの前提）
 2. 触る画面の `src/app/features/<feature>/README.md`、触るマートの `bq/marts/<table>/README.md`
-3. 数字の式を変えるなら [`docs/指標定義.md`](./docs/指標定義.md) と `src/shared/metrics/definitions.ts`（同じ内容を両方に書く）
+3. 数字の式を変えるなら [`docs/指標定義.md`](./docs/指標定義.md) と `src/shared/metrics/definitions.ts`（同じ内容を両方に書く）。マートのロジック（結合・絞り込み・重複排除・期間）や元の列を変えたら [`docs/数値の出所.md`](./docs/数値の出所.md) も直す
 4. BQ 接続・テーブル定義・ビジネス定義（RA/RDS 除外、興味あり判定、スナップショット重複排除）は `tanatoshi1245/claude_analysis` の `CLAUDE.md` を正とする
 
 ## 守ること
