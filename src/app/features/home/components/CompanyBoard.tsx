@@ -94,7 +94,7 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
   const sortInd = (k: string) => (sortKey === k ? <span className="sort-ind">{sortDesc ? '▼' : '▲'}</span> : null);
   const ariaSort = (k: string) => (sortKey === k ? (sortDesc ? 'descending' : 'ascending') : undefined);
   const shown = rows.slice(0, limit);
-  const loginNote = `CT 画面へのログイン（GA4）。データは ${meta.loginAvailableFrom} 以降のみ。それ以前のログインは「記録なし」になる`;
+  const loginNote = `CT 画面へのログイン（GA4）。データは ${meta.loginAvailableFrom} 以降のみ。それ以前のログインは「記録なし」になる。前日分は速報値（3 日以内に確定値で置き換え）`;
   return (
     <div className="board-wrap" id="board">
       <table className="board" aria-label="契約企業の実績一覧">
