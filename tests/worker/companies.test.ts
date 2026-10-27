@@ -36,6 +36,12 @@ describe('/api/companies/:id（モック）', () => {
     const attrMonths = new Set(body.attributes.map((a) => a.month));
     expect(attrMonths.size).toBeLessThanOrEqual(3);
     for (const t of ATTRIBUTE_TYPES) expect(body.attributes.some((a) => a.type === t), t).toBe(true);
+    // スカウトを送った会員と求人を閲覧した会員の両方（kind）。閲覧は興味あり 0
+    expect(body.attributes.some((a) => a.kind === 'scout')).toBe(true);
+    expect(body.attributes.some((a) => a.kind === 'view')).toBe(true);
+    expect(body.attributes.filter((a) => a.kind === 'view').every((a) => a.interested === 0)).toBe(true);
+    expect(typeof body.extra.jobsWindowDistinct).toBe('number');
+    expect(body.monthly.every((m) => m.hiresApp + m.hiresScout >= m.hires || m.hires === 0 || m.hiresApp + m.hiresScout >= 1)).toBe(true);
     expect(body.benchSeries.some((b) => b.industry === '__ALL__' && b.companyType === '__ALL__')).toBe(true);
     // スカウト未利用の記録（マートの JSON 列を配列に。モックは 3 社に 1 社）
     expect(Array.isArray(body.scoutUnused)).toBe(true);

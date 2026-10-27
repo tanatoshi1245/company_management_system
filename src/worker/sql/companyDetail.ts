@@ -14,7 +14,7 @@ SELECT CAST(company_id AS STRING) AS company_id, company_name, internal_name, co
        plan_name, plan_source, sf_active_contract, sf_live_won_opp, da_active_profile, sf_notice_check,
        sf_account_owner_name, sf_account_owner_email, sf_account_owner_position,
        sf_contract_owner_name, sf_contract_owner_email, sf_contract_owner_position,
-       sales_staff, cs_owner_email_default, cs_owner_name_default, owner_source, active_jobs_now, scout_unused_json
+       sales_staff, cs_owner_email_default, cs_owner_name_default, owner_source, active_jobs_now, scout_unused_json, jobs_window_distinct
 FROM \`bq-hgt.dwh.cms_company_master\`
 WHERE company_id = @id`,
     params: [p.int('id', Number(companyId))],
@@ -27,7 +27,7 @@ export function companyMonthlyByIdQuery(companyId: string): BuiltQuery {
     sql: `
 SELECT month_ym, is_current_month, is_contracted_in_month, scout_limit, job_posting_limit, active_jobs_eom, new_jobs,
        scout_sent, scout_sent_manual, scout_sent_auto, scout_sent_contract_to_date,
-       interested_by_send_month, interested_by_reply_month, applications, job_views, hires, in_selection, login_days,
+       interested_by_send_month, interested_by_reply_month, applications, job_views, hires, hires_from_application, hires_from_scout, in_selection, login_days,
        st01_no_response, st02_contact_planned, st03_pass_planned, st04_contacted, st05_rejected, st06_interview_adjusting,
        st07_interview_1st, st08_interview_2nd, st09_interview_3rd, st10_interview_final, st11_hired, st12_declined
 FROM \`bq-hgt.dwh.cms_company_monthly\`
@@ -79,7 +79,7 @@ export function memberAttributesQuery(companyId: string, fromMonthFirstDay: stri
   return {
     label: 'member_attributes',
     sql: `
-SELECT FORMAT_DATE('%Y-%m', sent_month) AS month_ym, attribute_type, attribute_value, scouts, members, interested_scouts
+SELECT FORMAT_DATE('%Y-%m', sent_month) AS month_ym, kind, attribute_type, attribute_value, scouts, members, interested_scouts
 FROM \`bq-hgt.dwh.cms_scout_member_attributes_monthly\`
 WHERE company_id = @id AND sent_month >= @from
 ORDER BY sent_month, attribute_type, scouts DESC`,

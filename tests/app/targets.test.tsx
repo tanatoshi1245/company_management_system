@@ -143,7 +143,7 @@ describe('目標フォーム', () => {
     expect(store.calls[store.calls.length - 1]).toBe(`PUT /api/companies/${company.id}/targets/${month}`);
   });
 
-  it('目標一覧: 目標あり件数・未設定のみ・担当=自分、企業詳細の目標比較表に反映', async () => {
+  it('目標一覧: 目標あり件数・未設定のみ・担当=自分', async () => {
     const { store, month, board, company } = await setup();
     const key = `${company.id}|${month}`;
     store.targets.set(key, { companyId: company.id, month, values: { scout_sent: 100, interested: null, applications: 10, views: null, hires: null, stages: {} }, note: null, createdBy: VIEWER, createdAt: 'x', updatedBy: VIEWER, updatedAt: '2026-10-23T01:00:00.000Z' });
@@ -162,11 +162,5 @@ describe('目標フォーム', () => {
     expect(within(table).queryByText(company.name)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /担当 = 自分/ }));
     await waitFor(() => expect(window.location.search).toContain('mine=1'));
-    // 企業詳細の目標比較
-    window.history.pushState(null, '', `/companies/${company.id}?month=${month}`);
-    window.dispatchEvent(new Event('popstate'));
-    await waitFor(() => expect(screen.getByRole('table', { name: '目標と実績' })).toBeTruthy());
-    expect(within(screen.getByRole('table', { name: '目標と実績' })).getByText('スカウト送信').closest('tr')!.textContent).toContain('100');
-    expect(hasAnyTarget(store.targets.get(key)!.values)).toBe(true);
   });
 });

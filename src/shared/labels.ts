@@ -1,5 +1,9 @@
 /** 画面の日本語ラベルと並び順（マートの値 → 表示）。値そのものはマート README を参照 */
 
+/** 属性の円グラフの識別色（dataviz スキルの参照パレット 8 色。validate_palette.js で検証済み: charts/README.md）。9 番目以降は「その他」にまとめる */
+export const PIE_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'] as const;
+export const PIE_OTHER_COLOR = '#B8B4AB';
+
 /** 契約体系（KPI タイルの内訳と企業名の黄色ハイライト） */
 export type ContractKind = 'ad' | 'success' | 'unknown';
 export const CONTRACT_KIND_LABEL: Record<ContractKind, string> = { ad: '広告掲載', success: '成功報酬', unknown: '不明' };

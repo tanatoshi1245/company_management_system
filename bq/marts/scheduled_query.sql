@@ -335,19 +335,19 @@ BEGIN
     GROUP BY 1, 2;
 
     -- 08. job_month: 月末（当月は今日）時点の掲載求人数と新規掲載数（set_id で日英重複排除） ----------------------
+    CREATE TEMP TABLE jph AS
+    SELECT pcm.company_id, COALESCE(ja.set_id, j.job_id) AS job_key, j.job_publish_start_date AS s, j.job_publish_end_date AS e
+    FROM `bq-hgt.dwh.job_publish_history` j
+    JOIN pcm USING (profile_id)
+    LEFT JOIN (SELECT DISTINCT job_id, set_id FROM `bq-hgt.dwh.jobs_all`) ja USING (job_id)
+    WHERE j.job_publish_start_date IS NOT NULL
+      AND j.job_publish_start_date <= run_date
+      AND (j.job_publish_end_date IS NULL OR j.job_publish_end_date >= window_start);
+
     CREATE TEMP TABLE job_month AS
     WITH months AS (
       SELECT m AS month, IF(m = cur_month, run_date, LAST_DAY(m)) AS as_of
       FROM UNNEST(GENERATE_DATE_ARRAY(window_start, cur_month, INTERVAL 1 MONTH)) AS m
-    ),
-    jph AS (
-      SELECT pcm.company_id, COALESCE(ja.set_id, j.job_id) AS job_key, j.job_publish_start_date AS s, j.job_publish_end_date AS e
-      FROM `bq-hgt.dwh.job_publish_history` j
-      JOIN pcm USING (profile_id)
-      LEFT JOIN (SELECT DISTINCT job_id, set_id FROM `bq-hgt.dwh.jobs_all`) ja USING (job_id)
-      WHERE j.job_publish_start_date IS NOT NULL
-        AND j.job_publish_start_date <= run_date
-        AND (j.job_publish_end_date IS NULL OR j.job_publish_end_date >= window_start)
     ),
     active_m AS (
       SELECT mo.month, x.company_id,
@@ -363,6 +363,12 @@ BEGIN
     SELECT COALESCE(a.month, n.month) AS month, COALESCE(a.company_id, n.company_id) AS company_id,
            IFNULL(a.active_jobs_eom, 0) AS active_jobs_eom, IFNULL(n.new_jobs, 0) AS new_jobs
     FROM active_m a FULL OUTER JOIN new_m n USING (month, company_id);
+
+    -- 08b. 窓（13 か月前〜今日）に掲載期間が重なる求人の数（set_id で日英重複排除）。企業ページの「掲載求人数（直近 13 か月）」用（2026-10-27）
+    ALTER TABLE `bq-hgt.dwh.cms_company_master` ADD COLUMN IF NOT EXISTS jobs_window_distinct INT64;
+    UPDATE `bq-hgt.dwh.cms_company_master` m
+    SET jobs_window_distinct = IFNULL((SELECT COUNT(DISTINCT job_key) FROM jph j WHERE j.company_id = m.company_id), 0)
+    WHERE TRUE;
 
     -- 09. hire_fact: 11.採用 を会員 × 企業で重複排除（応募経路・スカウト経路） ----------------------------------
     CREATE TEMP TABLE hire_fact AS
@@ -610,54 +616,64 @@ BEGIN
     --   語学・年収帯・年代・職種 12 区分はビュー member_profile_latest を流用（導出ロジックの唯一の定義場所）
     CREATE OR REPLACE TABLE `bq-hgt.dwh.cms_scout_member_attributes_monthly`
     CLUSTER BY company_id, attribute_type
-    OPTIONS (description = '契約企業マネジメントシステム: スカウトを送った会員の属性の内訳（企業 × 送信月 × 属性種別 × 値）。属性は現在のプロフィール') AS
+    OPTIONS (description = '契約企業マネジメントシステム: スカウトを送った会員（kind = scout。企業 × 送信月）と求人を閲覧した会員（kind = view。企業 × 閲覧月）の属性の内訳（× 属性種別 × 値）。scouts = 送信数 / 閲覧数、members = 会員数、interested_scouts = 興味あり返信（view は 0）。属性は現在のプロフィール') AS
     WITH latest_raw AS (
       SELECT member_id, member_category, country_of_residence, experienced_occupation, desired_occupation, desired_annual_income_yen
       FROM `bq-hgt.dwh.member_details`
       QUALIFY ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY recorded_on DESC NULLS LAST) = 1
     ),
+    -- 対象: スカウト（送信月）と求人閲覧（閲覧月）。2026-10-27 に閲覧を追加
+    subj AS (
+      SELECT 'scout' AS kind, sf.company_id, sf.sent_month, CAST(sf.scout_id AS STRING) AS subj_id, sf.member_id, sf.interested_date IS NOT NULL AS interested
+      FROM scout_fact sf
+      WHERE sf.sent_month >= window_start
+      UNION ALL
+      SELECT 'view', pcm.company_id, DATE_TRUNC(DATE(v.viewed_at), MONTH), CAST(v.view_id AS STRING), v.member_id, FALSE
+      FROM `bq-hgt.dwh.member_job_detail_views` v
+      JOIN pcm USING (profile_id)
+      WHERE DATE(v.viewed_at) BETWEEN window_start AND data_date AND v.member_id IS NOT NULL
+    ),
     sm AS (
-      SELECT sf.company_id, sf.sent_month, sf.scout_id, sf.member_id, sf.interested_date IS NOT NULL AS interested,
+      SELECT s.kind, s.company_id, s.sent_month, s.subj_id AS scout_id, s.member_id, s.interested,
              v.japanese_level, v.english_level, v.last_occupation AS last_occupation_group, v.annual_income_range AS current_income_range, v.age_group,
              r.member_category, r.country_of_residence, r.experienced_occupation, r.desired_occupation, r.desired_annual_income_yen
-      FROM scout_fact sf
+      FROM subj s
       LEFT JOIN `bq-hgt.dwh.member_profile_latest` v USING (member_id)
       LEFT JOIN latest_raw r USING (member_id)
-      WHERE sf.sent_month >= window_start
     ),
     long AS (
-      SELECT company_id, sent_month, scout_id, member_id, interested, 'japanese_level' AS attribute_type, IFNULL(japanese_level, '(未入力)') AS attribute_value FROM sm
-      UNION ALL SELECT company_id, sent_month, scout_id, member_id, interested, 'english_level', IFNULL(english_level, '(未入力)') FROM sm
-      UNION ALL SELECT company_id, sent_month, scout_id, member_id, interested, 'residence_prefecture',
+      SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'japanese_level' AS attribute_type, IFNULL(japanese_level, '(未入力)') AS attribute_value FROM sm
+      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'english_level', IFNULL(english_level, '(未入力)') FROM sm
+      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'residence_prefecture',
         CASE
           WHEN country_of_residence IS NULL OR TRIM(country_of_residence) = '' THEN '(未入力)'
           WHEN NOT STARTS_WITH(country_of_residence, '日本') THEN '日本以外'
           ELSE COALESCE(NULLIF(REGEXP_EXTRACT(country_of_residence, r'^日本[\s\x{3000}]+(\S+)'), ''), '日本（都道府県不明）')
         END FROM sm
-      UNION ALL SELECT company_id, sent_month, scout_id, member_id, interested, 'last_occupation_group', IFNULL(last_occupation_group, '(未入力)') FROM sm
-      UNION ALL SELECT company_id, sent_month, scout_id, member_id, interested, 'current_income_range', IFNULL(current_income_range, '(未入力)') FROM sm
-      UNION ALL SELECT company_id, sent_month, scout_id, member_id, interested, 'desired_income_range',
+      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'last_occupation_group', IFNULL(last_occupation_group, '(未入力)') FROM sm
+      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'current_income_range', IFNULL(current_income_range, '(未入力)') FROM sm
+      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'desired_income_range',
         CASE WHEN SAFE_CAST(desired_annual_income_yen AS FLOAT64) IS NULL OR SAFE_CAST(desired_annual_income_yen AS FLOAT64) <= 0 THEN '(未入力)'
              WHEN SAFE_CAST(desired_annual_income_yen AS FLOAT64) <= 3000000 THEN '300万円以下'
              WHEN SAFE_CAST(desired_annual_income_yen AS FLOAT64) <= 5000000 THEN '301万円〜500万円'
              WHEN SAFE_CAST(desired_annual_income_yen AS FLOAT64) <= 8000000 THEN '501万円〜800万円'
              ELSE '801万円以上' END FROM sm
-      UNION ALL SELECT company_id, sent_month, scout_id, member_id, interested, 'member_category', IFNULL(member_category, '(未入力)') FROM sm
-      UNION ALL SELECT company_id, sent_month, scout_id, member_id, interested, 'target_flag',
+      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'member_category', IFNULL(member_category, '(未入力)') FROM sm
+      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'target_flag',
         CASE WHEN member_category IN ('A', 'B', 'C', 'I') THEN 'ターゲット' WHEN member_category IS NULL OR member_category = '' THEN '(未入力)' ELSE 'ターゲット外' END FROM sm
-      UNION ALL SELECT company_id, sent_month, scout_id, member_id, interested, 'age_group', IFNULL(age_group, '(未入力)') FROM sm
-      UNION ALL SELECT company_id, sent_month, scout_id, member_id, interested, 'experienced_occupation', occ
+      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'age_group', IFNULL(age_group, '(未入力)') FROM sm
+      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'experienced_occupation', occ
         FROM sm, UNNEST(IF(experienced_occupation IS NULL OR TRIM(experienced_occupation) = '', ['(未入力)'],
           ARRAY(SELECT DISTINCT TRIM(SPLIT(x, ' - ')[SAFE_OFFSET(0)]) FROM UNNEST(SPLIT(experienced_occupation, ',')) x WHERE TRIM(x) != ''))) AS occ
-      UNION ALL SELECT company_id, sent_month, scout_id, member_id, interested, 'desired_occupation', occ
+      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'desired_occupation', occ
         FROM sm, UNNEST(IF(desired_occupation IS NULL OR TRIM(desired_occupation) = '', ['(未入力)'],
           ARRAY(SELECT DISTINCT TRIM(SPLIT(x, ' - ')[SAFE_OFFSET(0)]) FROM UNNEST(SPLIT(desired_occupation, ',')) x WHERE TRIM(x) != ''))) AS occ
     )
-    SELECT company_id, sent_month, attribute_type, attribute_value,
+    SELECT company_id, sent_month, kind, attribute_type, attribute_value,
            COUNT(DISTINCT scout_id) AS scouts, COUNT(DISTINCT member_id) AS members,
            COUNT(DISTINCT IF(interested, scout_id, NULL)) AS interested_scouts, CURRENT_TIMESTAMP() AS refreshed_at
     FROM long
-    GROUP BY 1, 2, 3, 4;
+    GROUP BY 1, 2, 3, 4, 5;
 
     -- 15. 業界ベンチマーク（月 × 業種 × 企業種別 × 指標。__ALL__ のロールアップ行付き） -----------------------------
     CREATE OR REPLACE TABLE `bq-hgt.dwh.cms_industry_benchmark_monthly`

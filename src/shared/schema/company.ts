@@ -15,6 +15,9 @@ export const MonthlyRowSchema = z.object({
   apps: z.number(),
   views: z.number(),
   hires: z.number(),
+  /** 採用のうち応募経由 / スカウト経由（両方に立つことがある） */
+  hiresApp: z.number().default(0),
+  hiresScout: z.number().default(0),
   inSel: z.number(),
   loginDays: z.number().nullable(),
   /** ステータス別の現在件数（st01_no_response … st12_declined） */
@@ -42,7 +45,8 @@ export type DailyPoint = z.infer<typeof DailyPointSchema>;
 export const CohortCellSchema = z.object({ month: z.string(), status: z.string(), count: z.number(), members: z.number() });
 export type CohortCell = z.infer<typeof CohortCellSchema>;
 
-export const AttributeRowSchema = z.object({ month: z.string(), type: z.string(), value: z.string(), scouts: z.number(), members: z.number(), interested: z.number() });
+/** kind: scout = スカウトを送った会員（scouts = 送信数、interested = 興味あり返信）/ view = 求人を閲覧した会員（scouts = 閲覧数、interested = 0） */
+export const AttributeRowSchema = z.object({ month: z.string(), type: z.string(), value: z.string(), scouts: z.number(), members: z.number(), interested: z.number(), kind: z.enum(['scout', 'view']).default('scout') });
 export type AttributeRow = z.infer<typeof AttributeRowSchema>;
 
 /** スカウト未利用の記録（cms_company_master.scout_unused_json。契約期間に入る月だけ、月の降順） */
@@ -65,6 +69,8 @@ export const CompanyExtraSchema = z.object({
   sfContractOwner: z.object({ name: z.string().nullable(), position: z.string().nullable() }),
   profileCount: z.number(),
   activeJobsNow: z.number(),
+  /** 直近 13 か月 + 当月の窓に掲載期間が重なる求人数（set_id で日英重複排除） */
+  jobsWindowDistinct: z.number().nullable(),
   login: z.object({ last: z.string().nullable(), lastAt: z.string().nullable(), daysSince: z.number().nullable(), days30: z.number(), days90: z.number(), daysMtd: z.number(), throughDate: z.string().nullable() }),
 });
 

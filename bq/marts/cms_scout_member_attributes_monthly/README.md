@@ -24,3 +24,6 @@ scouts, scout_histories, member_details（最新スナップショット）, mem
 
 ## 更新
 `bq/marts/scheduled_query.sql`（毎日 22:45 UTC = 07:45 JST）。生成ロジックの変更時は Worker の `src/worker/sql/` と `src/shared/schema/` を合わせ、`DATA_VERSION` を +1 する。
+
+## 2026-10-27 の変更: `kind` 列
+`kind = 'scout'`（従来。企業 × 送信月。scouts = 送信数、interested_scouts = 興味あり返信）に加え、`kind = 'view'`（企業 × 閲覧月。`member_job_detail_views` の閲覧。scouts = 閲覧数、members = 閲覧した会員数、interested_scouts = 0）を同じ表に持つ。企業ページの「誰が求人を見ているか」用。Worker の照会は `kind` を返し、画面側で分ける。

@@ -76,6 +76,7 @@ export async function loadCompanyCore(client: BqClient, companyId: string, month
       sfContractOwner: { name: str(master.sf_contract_owner_name), position: str(master.sf_contract_owner_position) },
       profileCount: num(master.profile_count),
       activeJobsNow: num(master.active_jobs_now),
+      jobsWindowDistinct: numOrNull(master.jobs_window_distinct),
       login: { last: str(lg?.last_login_date), lastAt: str(lg?.last_login_at), daysSince: numOrNull(lg?.days_since_login), days30: num(lg?.login_days_30d), days90: num(lg?.login_days_90d), daysMtd: num(lg?.login_days_mtd), throughDate: str(lg?.data_through_date) },
     },
     monthly: months.map((ym) => {
@@ -83,14 +84,14 @@ export async function loadCompanyCore(client: BqClient, companyId: string, month
       const a = r ? toMonthly(r) : null;
       const st: Record<string, number> = {};
       for (const k of STATUS_KEYS) st[k] = num(r?.[k]);
-      return { month: ym, contracted: a?.contracted ?? false, jobs: a?.jobs ?? 0, newJobs: a?.newJobs ?? 0, sent: a?.sent ?? 0, sentManual: a?.sentManual ?? 0, sentAuto: a?.sentAuto ?? 0, int: a?.int ?? 0, intReply: a?.intReply ?? 0, apps: a?.apps ?? 0, views: a?.views ?? 0, hires: a?.hires ?? 0, inSel: a?.inSel ?? 0, loginDays: a?.loginDays ?? null, st };
+      return { month: ym, contracted: a?.contracted ?? false, jobs: a?.jobs ?? 0, newJobs: a?.newJobs ?? 0, sent: a?.sent ?? 0, sentManual: a?.sentManual ?? 0, sentAuto: a?.sentAuto ?? 0, int: a?.int ?? 0, intReply: a?.intReply ?? 0, apps: a?.apps ?? 0, views: a?.views ?? 0, hires: a?.hires ?? 0, hiresApp: num(r?.hires_from_application), hiresScout: num(r?.hires_from_scout), inSel: a?.inSel ?? 0, loginDays: a?.loginDays ?? null, st };
     }),
     daily: daily.rows.map((r) => ({ date: String(r.usage_date), month: String(r.month_ym), day: num(r.day_of_month), sent: num(r.scout_sent), sentCum: num(r.scout_sent_cum), apps: num(r.applications), appsCum: num(r.applications_cum), int: num(r.interested), intCum: num(r.interested_cum), views: num(r.job_views), viewsCum: num(r.job_views_cum), jobs: num(r.active_jobs), login: num(r.login_events) })),
     cohorts: {
       scout: scoutCohort.rows.map((r) => ({ month: String(r.month_ym), status: String(r.status), count: num(r.cnt), members: num(r.members) })),
       application: appCohort.rows.map((r) => ({ month: String(r.month_ym), status: String(r.status), count: num(r.cnt), members: num(r.members) })),
     },
-    attributes: attrs.rows.map((r) => ({ month: String(r.month_ym), type: String(r.attribute_type), value: String(r.attribute_value), scouts: num(r.scouts), members: num(r.members), interested: num(r.interested_scouts) })),
+    attributes: attrs.rows.map((r) => ({ month: String(r.month_ym), type: String(r.attribute_type), value: String(r.attribute_value), scouts: num(r.scouts), members: num(r.members), interested: num(r.interested_scouts), kind: r.kind === 'view' ? ('view' as const) : ('scout' as const) })),
     scoutUnused: parseScoutUnused(master.scout_unused_json),
     benchSeries: bench.rows.map((b) => ({ month: String(b.month_ym), industry: String(b.industry), companyType: String(b.company_type), metric: String(b.metric), n: num(b.n_companies), mean: numOrNull(b.mean), p25: numOrNull(b.p25), median: numOrNull(b.median), p75: numOrNull(b.p75) })),
   };

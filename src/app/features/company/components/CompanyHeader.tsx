@@ -1,16 +1,17 @@
 import type { CompanyDetailResponse } from '../../../../shared/schema/company';
-import { COMPANY_TYPE_SHORT, CONTRACT_STATE_LABEL, INDUSTRY_SOURCE_LABEL, OWNER_SOURCE_LABEL, PLAN_SOURCE_LABEL, type ContractState } from '../../../../shared/labels';
-import { fmtMonthJa, isoToJstDisplay } from '../../../../shared/calendar/periods';
-import { TimelineBar } from '../../../components/charts/TimelineBar';
+import { COMPANY_TYPE_SHORT, CONTRACT_STATE_LABEL, INDUSTRY_SOURCE_LABEL, PLAN_SOURCE_LABEL, type ContractState } from '../../../../shared/labels';
+import { NO_LOGIN_DAYS, isNoLogin } from '../../../../shared/metrics/board';
+import { fmtMonthJa } from '../../../../shared/calendar/periods';
 import { Badge } from '../../../components/ui/Badge';
-import { Icon } from '../../../components/ui/Icon';
 import { Link } from '../../../router';
-import { fmtDaysAgo, fmtDaysLeft, fmtInt, fmtYmd } from '../../../lib/format';
+import { fmtDaysLeft, fmtInt, fmtYmd } from '../../../lib/format';
 
-export function CompanyHeader({ d, onMonth, onEditOwner }: { d: CompanyDetailResponse; onMonth: (m: string) => void; onEditOwner: () => void }) {
+/** 企業ページのヘッダ: 名前・状態・種別・業種・プラン・ID、月セレクタ、その下にカード 3 枚（契約期間 / 契約残 / 最終ログイン） */
+export function CompanyHeader({ d, onMonth }: { d: CompanyDetailResponse; onMonth: (m: string) => void }) {
   const c = d.company;
-  const x = d.extra;
   const stateTone = c.state === 'active' ? 'good' : c.state === 'ending_30d' || c.state === 'ended_recent' ? 'warn' : c.state === 'ended' ? 'bad' : 'neutral';
+  const noLogin = isNoLogin(c);
+  const soon = c.contract.daysToEnd !== null && c.contract.daysToEnd >= 0 && c.contract.daysToEnd <= 60;
   return (
     <header className="co-head card">
       <div className="co-head-top">
@@ -46,59 +47,20 @@ export function CompanyHeader({ d, onMonth, onEditOwner }: { d: CompanyDetailRes
           </label>
         </div>
       </div>
-      <div className="co-facts">
-        <div className="fact">
-          <span className="k">担当 CS</span>
-          <span className="v">
-            {c.owner.name ?? <span className="muted">未設定</span>}
-            {c.owner.src === 'override' ? <span className="muted small"> （画面で上書き。既定: {c.salesStaff ?? '–'}）</span> : c.owner.src !== 'none' ? <span className="muted small"> （{OWNER_SOURCE_LABEL[c.owner.src] ?? c.owner.src}{c.owner.src === 'sf_account_owner' && x.sfAccountOwner.position ? `・${x.sfAccountOwner.position}` : ''}）</span> : null}
-            <button type="button" className="btn ghost sm" onClick={onEditOwner} title="担当を上書き">
-              <Icon name="edit" size={14} /> 変更
-            </button>
+      <div className="co-cards" aria-label="契約と接点">
+        <div className="stat" data-stat="contractPeriod">
+          <span className="t">契約期間</span>
+          <span className="v num period">
+            {fmtYmd(c.contract.from)} <span className="u">〜</span> {c.contract.to ? fmtYmd(c.contract.to) : '無期限'}
           </span>
         </div>
-        <div className="fact">
-          <span className="k">SF 取引先の所有者</span>
-          <span className="v">{c.sfOwnerName ?? <span className="muted">未設定</span>}{x.sfAccountOwner.position ? <span className="muted small">（{x.sfAccountOwner.position}）</span> : null}</span>
+        <div className={`stat${soon ? ' soon' : ''}`} data-stat="daysToEnd">
+          <span className="t">契約終了まで</span>
+          <span className="v num">{fmtDaysLeft(c.contract.daysToEnd)}</span>
         </div>
-        <div className="fact">
-          <span className="k">最終ログイン（CT）</span>
-          <span className="v">
-            {c.login.last ? (
-              <>
-                {fmtDaysAgo(c.login.last, d.meta.asOf)} <span className="muted small">（{fmtYmd(c.login.last)}・30 日で {fmtInt(c.login.days30)} 日・90 日で {fmtInt(x.login.days90)} 日）</span>
-              </>
-            ) : (
-              <span className="muted">記録なし（2026-05-15 以降のデータ）</span>
-            )}
-          </span>
-        </div>
-        <div className="fact">
-          <span className="k">Salesforce</span>
-          <span className="v">
-            {c.signals.sfLinked ? (
-              <>
-                {x.sfAccountName ?? '–'} <span className="muted small">（契約 {x.sfContractStatus ?? '–'}{x.sfContractStart ? `・${fmtYmd(x.sfContractStart)} 〜 ${x.sfContractEnd ? fmtYmd(x.sfContractEnd) : '–'}` : ''}）</span>
-              </>
-            ) : (
-              <span className="muted">未紐付け（DJ_company_id__c なし）</span>
-            )}
-            {c.signals.noticeCheck ? <Badge tone="warn">接触中</Badge> : null}
-          </span>
-        </div>
-      </div>
-      <div className="co-timeline">
-        <div className="co-timeline-head">
-          <span>
-            契約期間 <b className="num">{fmtYmd(c.contract.from)}</b> 〜 <b className="num">{c.contract.to ? fmtYmd(c.contract.to) : '無期限'}</b>
-          </span>
-          <span className={`num ${c.contract.daysToEnd !== null && c.contract.daysToEnd >= 0 && c.contract.daysToEnd <= 60 ? 'warn-text' : ''}`}>{fmtDaysLeft(c.contract.daysToEnd)}</span>
-        </div>
-        <TimelineBar start={c.contract.from} end={c.contract.to} today={d.meta.asOf} />
-        <div className="co-signals small muted">
-          契約中の根拠: <Badge tone={c.signals.dj ? 'good' : 'neutral'}>Daijob 契約期間</Badge> <Badge tone={c.signals.sfActive ? 'good' : 'neutral'}>SF 有効契約</Badge> <Badge tone={c.signals.sfWon ? 'good' : 'neutral'}>SF 成立商談</Badge> <Badge tone={c.signals.da ? 'good' : 'neutral'}>DA 掲載中</Badge>
-          {d.meta.cached ? null : null}
-          <span style={{ marginLeft: 8 }}>マート更新 {isoToJstDisplay(d.meta.generatedAt) ?? ''}</span>
+        <div className={`stat${noLogin ? ' zero' : ''}`} data-stat="lastLogin" title={`CT 画面へのログイン（GA4）。データは ${d.meta.loginAvailableFrom} 以降のみ。${NO_LOGIN_DAYS} 日以上ログインなし（記録なしを含む）は赤。直近 30 日のログイン日数 ${fmtInt(c.login.days30)} 日`}>
+          <span className="t">最終ログイン（CT）</span>
+          <span className="v num">{c.login.last ? fmtYmd(c.login.last) : '記録なし'}</span>
         </div>
       </div>
     </header>
