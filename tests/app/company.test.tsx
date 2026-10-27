@@ -106,6 +106,14 @@ describe('企業詳細', () => {
       expect(ch.querySelectorAll('.legend > span').length).toBe(2);
       expect(ch.querySelectorAll('svg g[data-series] > path').length).toBe(2);
     }
+    // 閲覧・応募は左右 2 軸（左 = 閲覧、右 = 応募。目盛の文字は系列の色）、送信・返信は 1 軸
+    const vaChart = cols[0].querySelector('.chart.dual')!;
+    expect(vaChart.querySelectorAll('svg text.tick.left').length).toBe(5);
+    expect(vaChart.querySelectorAll('svg text.tick.right').length).toBe(5);
+    expect(vaChart.querySelector('svg text.tick.right')?.getAttribute('fill')).toBe('var(--cat-2)');
+    expect(vaChart.textContent).toContain('左軸');
+    const st = cols[1].querySelector('.chart.dual')!;
+    expect(st.querySelectorAll('svg text.tick.right').length).toBe(0);
     fireEvent.click(screen.getAllByRole('button', { name: '表で見る' })[0]);
     const va = screen.getByRole('table', { name: '閲覧と応募の推移の表' });
     // 単月の値（累積ではない）: 最後の行 = 当月の閲覧・応募がボードの値と一致
@@ -140,9 +148,8 @@ describe('企業詳細', () => {
     // 目標未登録の CTA
     expect(screen.getByText('この月の目標は未登録です')).toBeTruthy();
     expect(screen.getByRole('link', { name: '目標を編集' }).getAttribute('href')).toBe(`/targets/${c.id}?from=${f.month}`);
-    // 注意点
-    expect(screen.getByText('この画面の注意点')).toBeTruthy();
-    expect(document.querySelectorAll('.caveat-list li').length).toBeGreaterThan(0);
+    // 注意点のブロックは無い（2026-10-27 に廃止）
+    expect(screen.queryByText('この画面の注意点')).toBeNull();
     // 詳細の取得は 1 回
     expect(calls.filter((u) => u.startsWith(`/api/companies/${c.id}`)).length).toBe(1);
   });

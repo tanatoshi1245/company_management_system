@@ -18,12 +18,11 @@ import { ScoutTrendPanel } from './components/ScoutTrendPanel';
 import { ScoutTargetPanel } from './components/ScoutTargetPanel';
 import { ScoutUnusedPanel } from './components/ScoutUnusedPanel';
 import { TargetVsActualPanel } from './components/TargetVsActualPanel';
-import { CaveatFootnotes } from './components/CaveatFootnotes';
 
 const UrlSchema = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).or(z.literal('')).default(''), attr: z.string().default('') });
 const URL_DEFAULTS = { month: '', attr: '' };
 
-/** 企業詳細: ヘッダ → 当月の実績 → 左: 閲覧・応募の推移 / 右: 送信・返信の推移 + スカウト対象 → スカウト未利用状況 → 目標比較 → 注意点 */
+/** 企業詳細: ヘッダ → 当月の実績 → 左: 閲覧・応募の推移 / 右: 送信・返信の推移 + スカウト対象 → スカウト未利用状況 → 目標比較 */
 export default function CompanyPage({ params }: PageProps) {
   const { meta } = useSession();
   const [url, setUrl] = useUrlState(UrlSchema, URL_DEFAULTS);
@@ -66,7 +65,6 @@ export default function CompanyPage({ params }: PageProps) {
       </div>
       <ScoutUnusedPanel rows={d.scoutUnused} month={d.meta.month} />
       <TargetVsActualPanel d={d} m={model} />
-      <CaveatFootnotes ids={model.caveatIds} />
     </div>
   );
 }
