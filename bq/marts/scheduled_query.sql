@@ -17,7 +17,8 @@ BEGIN
   DECLARE owner_source STRING DEFAULT 'sales_staff';   -- 'sales_staff'（企業管理ツール active_companies.sales_staff。2026-10-23〜） | 'sf_account_owner' | 'sf_contract_owner'（Worker の OWNER_SOURCE と合わせる）
   DECLARE scout_limit_period STRING DEFAULT 'month';         -- スカウト枠の既定の期間（企業ごとの切替は D1 company_settings）
   DECLARE ga4_datasets ARRAY<STRING> DEFAULT ['analytics_258261950', 'analytics_553479599'];  -- 旧CT / 新CT
-  DECLARE login_backfill_days INT64 DEFAULT 3;               -- GA4 は 1〜2 日遅れて届くので直近 3 日を取り直す
+  DECLARE login_backfill_days INT64 DEFAULT 3;               -- GA4 の確定表は翌朝 09〜10 時台に届くので直近 3 日を取り直す（前日分は速報表 events_intraday_* から先に取り込む）
+  DECLARE n_intraday INT64 DEFAULT 0;                        -- データセットに速報表があるか（無いと events_intraday_* の参照がエラーになる）
   DECLARE t0 TIMESTAMP DEFAULT CURRENT_TIMESTAMP();
 
   BEGIN
@@ -377,22 +378,47 @@ BEGIN
     GROUP BY member_id, company_id;
 
     -- 10. GA4 ログイン（直近 N 日を取り直し）→ cms_company_login -------------------------------------------------
+    --   確定表 events_YYYYMMDD は翌朝 09〜10 時台に作られ 07:45 の実行では前日分が無いので、前日分は速報表 events_intraday_YYYYMMDD からも読む
+    --   （確定表ができると GA4 がその日の速報表を消す）。同じ (日, 企業) は確定表を優先。速報値は 3 日以内の取り直しで確定値に置き換わる（2026-10-27）
     DELETE FROM `bq-hgt.dwh.cms_company_login_daily` WHERE login_date >= DATE_SUB(run_date, INTERVAL login_backfill_days DAY);
     FOR ds IN (SELECT d FROM UNNEST(ga4_datasets) AS d) DO
       EXECUTE IMMEDIATE FORMAT("""
+        SELECT COUNT(*) FROM `bq-hgt.%s.INFORMATION_SCHEMA.TABLES` WHERE table_name LIKE 'events_intraday_%%'
+      """, ds.d) INTO n_intraday;
+      EXECUTE IMMEDIATE FORMAT("""
         INSERT INTO `bq-hgt.dwh.cms_company_login_daily` (login_date, company_id, login_events, last_event_ts, source_dataset, loaded_at)
-        SELECT DATE(TIMESTAMP_MICROS(event_timestamp), 'Asia/Tokyo') AS login_date,
-               COALESCE((SELECT ep.value.int_value FROM UNNEST(event_params) ep WHERE ep.key = 'company_id'),
-                        SAFE_CAST((SELECT ep.value.string_value FROM UNNEST(event_params) ep WHERE ep.key = 'company_id') AS INT64)) AS company_id,
-               COUNT(*) AS login_events,
-               MAX(TIMESTAMP_MICROS(event_timestamp)) AS last_event_ts,
-               '%s' AS source_dataset, CURRENT_TIMESTAMP() AS loaded_at
-        FROM `bq-hgt.%s.events_*`
-        WHERE _TABLE_SUFFIX BETWEEN '%s' AND '%s'
-          AND event_name = 'get_ID'
-        GROUP BY 1, 2
-        HAVING company_id IS NOT NULL
-      """, ds.d, ds.d, FORMAT_DATE('%Y%m%d', DATE_SUB(run_date, INTERVAL login_backfill_days DAY)), FORMAT_DATE('%Y%m%d', run_date));
+        SELECT login_date, company_id, login_events, last_event_ts, source_dataset, loaded_at
+        FROM (
+          SELECT DATE(TIMESTAMP_MICROS(event_timestamp), 'Asia/Tokyo') AS login_date,
+                 COALESCE((SELECT ep.value.int_value FROM UNNEST(event_params) ep WHERE ep.key = 'company_id'),
+                          SAFE_CAST((SELECT ep.value.string_value FROM UNNEST(event_params) ep WHERE ep.key = 'company_id') AS INT64)) AS company_id,
+                 COUNT(*) AS login_events,
+                 MAX(TIMESTAMP_MICROS(event_timestamp)) AS last_event_ts,
+                 '%s' AS source_dataset, CURRENT_TIMESTAMP() AS loaded_at, 1 AS prio
+          FROM `bq-hgt.%s.events_*`
+          WHERE _TABLE_SUFFIX BETWEEN '%s' AND '%s'
+            AND event_name = 'get_ID'
+          GROUP BY 1, 2
+          HAVING company_id IS NOT NULL
+          %s
+        )
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY login_date, company_id ORDER BY prio) = 1
+      """, ds.d, ds.d, FORMAT_DATE('%Y%m%d', DATE_SUB(run_date, INTERVAL login_backfill_days DAY)), FORMAT_DATE('%Y%m%d', run_date),
+        IF(n_intraday > 0, FORMAT("""
+          UNION ALL
+          -- 速報表（前日まで。当日分の途中データは入れない）
+          SELECT DATE(TIMESTAMP_MICROS(event_timestamp), 'Asia/Tokyo') AS login_date,
+                 COALESCE((SELECT ep.value.int_value FROM UNNEST(event_params) ep WHERE ep.key = 'company_id'),
+                          SAFE_CAST((SELECT ep.value.string_value FROM UNNEST(event_params) ep WHERE ep.key = 'company_id') AS INT64)) AS company_id,
+                 COUNT(*) AS login_events,
+                 MAX(TIMESTAMP_MICROS(event_timestamp)) AS last_event_ts,
+                 '%s' AS source_dataset, CURRENT_TIMESTAMP() AS loaded_at, 2 AS prio
+          FROM `bq-hgt.%s.events_intraday_*`
+          WHERE _TABLE_SUFFIX BETWEEN '%s' AND '%s'
+            AND event_name = 'get_ID'
+          GROUP BY 1, 2
+          HAVING company_id IS NOT NULL
+        """, ds.d, ds.d, FORMAT_DATE('%Y%m%d', DATE_SUB(run_date, INTERVAL login_backfill_days DAY)), FORMAT_DATE('%Y%m%d', data_date)), ''));
     END FOR;
 
     CREATE OR REPLACE TABLE `bq-hgt.dwh.cms_company_login`
