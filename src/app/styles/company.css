@@ -5,8 +5,11 @@
 .co-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-12); }
 .chip-text { color: var(--ink-soft); border: 1px solid var(--rule); padding: 1px 7px; border-radius: var(--radius); }
 .co-head-actions .field > span { font-size: var(--fs-11); font-weight: 700; color: var(--muted); }
-.co-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s2) var(--s4); margin-top: var(--s3); padding-top: var(--s3); border-top: 1px solid var(--rule); }
-@media (max-width: 1000px) { .co-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.co-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); margin-top: var(--s3); padding-top: var(--s3); border-top: 1px solid var(--rule); }
+@media (max-width: 760px) { .co-cards { grid-template-columns: 1fr; } }
+.co-cards .stat .v.period { font-size: var(--fs-16); }
+.co-cards .stat.soon { background: var(--warn-bg); }
+.co-cards .stat.soon .v { color: var(--warn); }
 .fact { min-width: 0; }
 .fact .k { display: block; font-size: var(--fs-11); font-weight: 700; color: var(--muted); letter-spacing: 0.03em; }
 .fact .v { display: block; font-size: var(--fs-13); color: var(--ink); margin-top: 2px; }
@@ -28,7 +31,10 @@
 
 /* 当月の実績（数値タイル） */
 .stat-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: var(--s2); }
+.stat-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 @media (max-width: 1100px) { .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .stat-grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat .v .u { font-size: var(--fs-12); color: var(--muted); font-weight: 600; margin-left: 3px; }
 .stat { border: 1px solid var(--rule); padding: 6px 10px 8px; min-width: 0; }
 .stat .t { display: block; font-size: var(--fs-11); font-weight: 700; color: var(--muted); letter-spacing: 0.02em; }
 .stat .v { display: block; font-size: var(--fs-20); font-weight: 600; color: var(--heading); line-height: 1.2; white-space: nowrap; }
@@ -82,3 +88,16 @@ table.unused-reg input.remarks { width: 100%; min-width: 220px; }
 table.unused-reg tr.dirty td { background: var(--surface-low); }
 table.unused-reg .status { margin-top: 4px; white-space: nowrap; }
 table.unused-reg .status .ok { color: var(--good); font-weight: 600; }
+
+/* 属性の円グラフ（同一サイズのドーナツ + 凡例） */
+.pie { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--s3); align-items: center; }
+@media (max-width: 560px) { .pie { grid-template-columns: 1fr; justify-items: center; } }
+.pie svg { display: block; }
+.pie-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-12); }
+.pie-legend li { display: grid; grid-template-columns: 12px minmax(0, 1fr) 56px 52px; gap: 6px; align-items: center; padding: 1px 4px; border-radius: 2px; }
+.pie-legend li.on { background: var(--surface-low); }
+.pie-legend .sw { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+.pie-legend .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.pie-legend .val { text-align: right; }
+.pie-legend .pct { text-align: right; color: var(--ink-soft); }
+.card-head .segmented { margin-left: auto; }

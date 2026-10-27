@@ -8,7 +8,7 @@ export function mockCompanyMasterOne(id: string, today = todayJst()): Row[] {
   const c = mockCompanies(today).find((x) => String(x.id) === id);
   const row = mockCompanyMaster(today).find((r) => r.company_id === id);
   if (!c || !row) return [];
-  return [{ ...row, profile_count: 2, contract_from: c.from, contract_to: c.to, sf_account_name: c.owner ? `${c.name}（SF）` : null, scout_unused_json: mockScoutUnusedJson(id, today) }];
+  return [{ ...row, profile_count: 2, contract_from: c.from, contract_to: c.to, sf_account_name: c.owner ? `${c.name}（SF）` : null, scout_unused_json: mockScoutUnusedJson(id, today), jobs_window_distinct: c.jobLimit === 0 ? 0 : (c.jobLimit ?? 12) * 2 + (Number(id) % 5) }];
 }
 
 const UNUSED_REASONS = ['1. 企業担当者の作業時間取れず未利用', '2. そもそもスカウト対象が1人もいなく、1通も送れない', '5. 応募で十分間に合うのでスカウト不要', '7. その他の理由', null];
@@ -35,7 +35,9 @@ export function mockCompanyMonthlyOne(id: string, today = todayJst()): Row[] {
       const st: Row = {};
       keys.forEach((k, i) => (st[k] = parts[i]));
       st.st11_hired = Number(r.hires);
-      return { ...r, ...st, in_selection: parts[5] + parts[6] + parts[7] + parts[8] + parts[9] };
+      const hires = Number(r.hires);
+      const viaScout = hires > 0 && rand() < 0.4 ? 1 : 0;
+      return { ...r, ...st, hires_from_application: Math.max(0, hires - viaScout), hires_from_scout: viaScout, in_selection: parts[5] + parts[6] + parts[7] + parts[8] + parts[9] };
     });
 }
 
@@ -130,7 +132,12 @@ export function mockMemberAttributes(id: string, fromYmd: string, today = todayJ
         const share = i === 0 ? 0.3 : i === values.length - 1 ? 0.08 : 0.6 / Math.max(1, values.length - 2);
         const n = Math.min(remaining, Math.round(total * share * (0.5 + rand())));
         remaining -= n;
-        if (n > 0) out.push({ month_ym: ym, attribute_type: type, attribute_value: v, scouts: n, members: n, interested_scouts: Math.round(n * (0.05 + rand() * 0.15)) });
+        if (n > 0) {
+          out.push({ month_ym: ym, kind: 'scout', attribute_type: type, attribute_value: v, scouts: n, members: n, interested_scouts: Math.round(n * (0.05 + rand() * 0.15)) });
+          // 閲覧した会員（スカウトより多く、構成比は少し違う）
+          const vn = Math.round(n * (1.5 + rand() * 2) + (i % 2 === 0 ? 3 : 0));
+          out.push({ month_ym: ym, kind: 'view', attribute_type: type, attribute_value: v, scouts: vn, members: Math.round(vn * 0.8), interested_scouts: 0 });
+        }
       });
     }
   }

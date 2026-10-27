@@ -54,6 +54,7 @@ companies / company_profiles(_all) / active_companies / active_jobs / scouts / s
 
 | 日付 | 変更 | スキャン | 反映 |
 |---|---|---|---|
+| 2026-10-27 | `cms_scout_member_attributes_monthly` に `kind`（scout / view）を追加し、求人を閲覧した会員の属性（`member_job_detail_views` × 会員属性）も同じ表に入れる（企業ページ「誰が求人を見ているか」）。`cms_company_master` に `jobs_window_distinct`（窓に掲載期間が重なる求人数。set_id 重複排除） | 手動実行 1,029 MB | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 16 |
 | 2026-10-27 | GA4 ログインの取り込みに速報表 `events_intraday_*`（前日分まで）を追加。確定表 `events_YYYYMMDD` は翌朝 09〜10 時台に作られ 07:45 の実行では前日分が無かったため。同じ (日, 企業) は確定表を優先、直近 3 日の取り直しはそのまま。速報表が無いデータセットは `INFORMATION_SCHEMA.TABLES` で確認して飛ばす | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 15 |
 | 2026-10-23 | 枠数（`scout_limit` / `job_posting_limit`）はどこにも値が無ければ 0 に（Equinix のように `companies` 側も NULL の企業）。NW 判定はプロファイルが無い企業（種別 不明）も対象に。ボードの照会（Worker）は NW を除く | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 13 |
 | 2026-10-23 | 企業種別に `NW`（Network 契約）を追加: 直接 で企業名に DaijobAgent を含まず、求人枠 0 かつ掲載 0、スカウト枠 0 かつ当月送信 0（`scouts` の当月分 26 MB を追加で読む）。契約中 7 社が該当 | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 12 |
