@@ -25,7 +25,7 @@ BEGIN
     -- 01. profile → company（RA 4928 / 14508・RDS 7080 は契約企業ではないので除外） ------------------------
     CREATE TEMP TABLE pcm AS
     SELECT DISTINCT profile_id, company_id
-    FROM `bq-hgt.dwh.company_profiles`
+    FROM `bq-hgt.dwh.company_profiles_full`
     WHERE profile_id IS NOT NULL AND company_id IS NOT NULL AND profile_id NOT IN (4928, 14508, 7080);
 
     -- 02. company_base: 対象企業 + 企業情報 + 枠数 + Salesforce 結合 + 担当 + 業種 -------------------------
@@ -59,10 +59,10 @@ BEGIN
         AND active_from <= DATE_ADD(run_date, INTERVAL 30 DAY)
         AND COALESCE(active_to, DATE '9999-12-31') >= window_start
         -- RA（4928 / 14508）・RDS（7080）の企業は契約企業として扱わない（CLAUDE.md §3）
-        AND id NOT IN (SELECT DISTINCT company_id FROM `bq-hgt.dwh.company_profiles` WHERE profile_id IN (4928, 14508, 7080) AND company_id IS NOT NULL)
+        AND id NOT IN (SELECT DISTINCT company_id FROM `bq-hgt.dwh.company_profiles_full` WHERE profile_id IN (4928, 14508, 7080) AND company_id IS NOT NULL)
     ),
     latest_profiles AS (
-      SELECT * FROM `bq-hgt.dwh.company_profiles`
+      SELECT * FROM `bq-hgt.dwh.company_profiles_full`
       QUALIFY ROW_NUMBER() OVER (PARTITION BY profile_id ORDER BY recorded_on DESC NULLS LAST) = 1
     ),
     profile_job_counts AS (
@@ -71,18 +71,18 @@ BEGIN
     -- 企業情報（主プロファイル = 掲載求人が最多、同数なら最新のスナップショット）
     company_info AS (
       SELECT p.company_id,
-             ARRAY_AGG(p.company_name IGNORE NULLS ORDER BY IFNULL(j.n, 0) DESC, p.recorded_on DESC LIMIT 1)[SAFE_OFFSET(0)] AS company_name,
+             ARRAY_AGG(p.company_name IGNORE NULLS ORDER BY IFNULL(j.n, 0) DESC, p.recorded_on DESC, p.profile_id LIMIT 1)[SAFE_OFFSET(0)] AS company_name,
              ARRAY_AGG(p.profile_id ORDER BY p.profile_id) AS profile_ids,
              COUNT(*) AS profile_count,
              CASE
                WHEN LOGICAL_OR(REGEXP_CONTAINS(LOWER(NORMALIZE(IFNULL(p.company_name, '') || IFNULL(p.profile_name, ''), NFKC)), r'daijob\s*agent')) THEN 'DA'
                WHEN LOGICAL_OR(p.rpo_contract = TRUE) THEN 'RPO'
-               WHEN ARRAY_AGG(p.company_type ORDER BY IFNULL(j.n, 0) DESC, p.recorded_on DESC LIMIT 1)[SAFE_OFFSET(0)] = '直接' THEN '直接'
-               WHEN ARRAY_AGG(p.company_type ORDER BY IFNULL(j.n, 0) DESC, p.recorded_on DESC LIMIT 1)[SAFE_OFFSET(0)] = '派遣' THEN '派遣'
+               WHEN ARRAY_AGG(p.company_type ORDER BY IFNULL(j.n, 0) DESC, p.recorded_on DESC, p.profile_id LIMIT 1)[SAFE_OFFSET(0)] = '直接' THEN '直接'
+               WHEN ARRAY_AGG(p.company_type ORDER BY IFNULL(j.n, 0) DESC, p.recorded_on DESC, p.profile_id LIMIT 1)[SAFE_OFFSET(0)] = '派遣' THEN '派遣'
                ELSE '紹介'
              END AS company_type,
-             ARRAY_AGG(NULLIF(p.contract_type, '登録なし') IGNORE NULLS ORDER BY IFNULL(j.n, 0) DESC, p.recorded_on DESC LIMIT 1)[SAFE_OFFSET(0)] AS dj_contract_type,
-             ARRAY_AGG(NULLIF(NULLIF(TRIM(p.industry), ''), '(未選択)') IGNORE NULLS ORDER BY IFNULL(j.n, 0) DESC, p.recorded_on DESC LIMIT 1)[SAFE_OFFSET(0)] AS dj_industry,
+             ARRAY_AGG(NULLIF(p.contract_type, '登録なし') IGNORE NULLS ORDER BY IFNULL(j.n, 0) DESC, p.recorded_on DESC, p.profile_id LIMIT 1)[SAFE_OFFSET(0)] AS dj_contract_type,
+             ARRAY_AGG(NULLIF(NULLIF(TRIM(p.industry), ''), '(未選択)') IGNORE NULLS ORDER BY IFNULL(j.n, 0) DESC, p.recorded_on DESC, p.profile_id LIMIT 1)[SAFE_OFFSET(0)] AS dj_industry,
              MAX(p.resume_bank_scout_limit) AS scout_limit_profiles,
              MAX(p.job_postiong_limit) AS job_limit_profiles
       FROM latest_profiles p

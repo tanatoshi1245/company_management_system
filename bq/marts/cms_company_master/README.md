@@ -43,7 +43,7 @@ status: active
 
 ## 元テーブル（依存するデータ）
 
-companies, company_profiles（最新スナップショット）, company_profiles_all, active_jobs, active_companies, scout_unused_companies_monthly, sf_contracts, sf_accounts, sf_opportunities, sf_users, cms_dim_industry_alias
+companies, company_profiles_full（全プロファイル・日次全件洗い替え。2026-10-29 に company_profiles から変更）, company_profiles_all, active_jobs, active_companies, scout_unused_companies_monthly, sf_contracts, sf_accounts, sf_opportunities, sf_users, cms_dim_industry_alias
 
 ## 更新
 `bq/marts/scheduled_query.sql`（毎日 22:45 UTC = 07:45 JST）。生成ロジックの変更時は Worker の `src/worker/sql/` と `src/shared/schema/` を合わせ、`DATA_VERSION` を +1 する。
