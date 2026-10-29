@@ -12,7 +12,7 @@ status: active
 Worker がリクエスト時に読む日次マート（`cms_*` 13 表）の SQL と定義。生テーブルは毎朝 1 本のスケジュールドスクリプトが 1 回ずつ走査し、**Worker は生テーブルを読まない**（各クエリ < 10 MB、上限 200 MB）。
 
 ## 依存するデータ（元テーブル）
-companies / company_profiles(_all) / active_companies / active_jobs / scouts / scout_histories / member_applications / member_details / member_profile_latest / member_job_detail_views / job_publish_history / jobs_all / sf_contracts / sf_accounts / sf_opportunities / sf_users / GA4 analytics_258261950（旧CT）・analytics_553479599（新CT）。各マートの列は `marts/<table>/README.md`。
+companies / company_profiles_full / company_profiles_all / active_companies / active_jobs / scouts / scout_histories / member_applications / member_details / member_profile_latest / member_job_detail_views / job_publish_history / jobs_all / sf_contracts / sf_accounts / sf_opportunities / sf_users / GA4 analytics_258261950（旧CT）・analytics_553479599（新CT）。各マートの列は `marts/<table>/README.md`。
 
 | マート | 粒度 | 更新 |
 |---|---|---|
@@ -54,6 +54,7 @@ companies / company_profiles(_all) / active_companies / active_jobs / scouts / s
 
 | 日付 | 変更 | スキャン | 反映 |
 |---|---|---|---|
+| 2026-10-29 | 企業情報の元を `company_profiles`（差分・求人掲載のあるプロファイルのみ）から **`company_profiles_full`（全プロファイル・日次全件洗い替え）** に変更（`pcm` / RA・RDS 除外 / `latest_profiles`）。求人未掲載の契約企業（A-Gold・FP GLOBAL・サイエンテックス等）の企業種別が「不明」になっていた問題を解消。1 企業に複数プロファイルがあり掲載数・日付が同点のときは `profile_id` 最小の行を採用（全件表は `recorded_on` が同一のため順序を固定） | 手動実行 920 MB 級 | 設定 `6aee95cf-…` に反映済み・手動実行 ok（master 880 行のまま、`company_type = '不明'` 12 → 0、契約中 5 → 0）。変更前の `cms_company_master` は `cms_company_master_bak_20261029` に保存 |
 | 2026-10-27 | `cms_scout_member_attributes_monthly` に `kind`（scout / view）を追加し、求人を閲覧した会員の属性（`member_job_detail_views` × 会員属性）も同じ表に入れる（企業ページ「誰が求人を見ているか」）。`cms_company_master` に `jobs_window_distinct`（窓に掲載期間が重なる求人数。set_id 重複排除） | 手動実行 1,029 MB | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 16 |
 | 2026-10-27 | GA4 ログインの取り込みに速報表 `events_intraday_*`（前日分まで）を追加。確定表 `events_YYYYMMDD` は翌朝 09〜10 時台に作られ 07:45 の実行では前日分が無かったため。同じ (日, 企業) は確定表を優先、直近 3 日の取り直しはそのまま。速報表が無いデータセットは `INFORMATION_SCHEMA.TABLES` で確認して飛ばす | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 15 |
 | 2026-10-23 | 枠数（`scout_limit` / `job_posting_limit`）はどこにも値が無ければ 0 に（Equinix のように `companies` 側も NULL の企業）。NW 判定はプロファイルが無い企業（種別 不明）も対象に。ボードの照会（Worker）は NW を除く | 手動実行（下記） | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 13 |
