@@ -7,6 +7,7 @@
 --   設計: company_management_system/bq/README.md、列定義: bq/marts/<table>/README.md
 --   2026-10-30: account_type（アカウント種別 = プロファイルの 直接 / 紹介 / 派遣）を cms_company_monthly（'__ALL__' + 種別の行）・属性・master（account_types / accounts_json / jobs_json）に追加
 --   2026-10-30: 求人単位 cms_company_job_monthly（企業 × 種別 × 求人 × 月）を新設、属性に job_key を追加。jobs_all は jobs_latest で 1 回だけ読む
+--   2026-10-30: Network 契約の除外を dm_network_contract_candidates（SF の NetworkWW 行動＝接触履歴）から、働くDB の【0円】申込（htdb_applications_wo_FEE）の申込元で判定する方式に変更（ステップ 01b）
 -- 変更時の注意: Worker 側の読み取り SQL（src/worker/sql/*.ts）と zod スキーマ（src/shared/schema/*）を合わせ、DATA_VERSION を +1 する
 -- =============================================================================
 BEGIN
@@ -33,6 +34,39 @@ BEGIN
     WHERE profile_id IS NOT NULL AND company_id IS NOT NULL AND profile_id NOT IN (4928, 14508, 7080)
     QUALIFY ROW_NUMBER() OVER (PARTITION BY profile_id ORDER BY recorded_on DESC NULLS LAST) = 1;
 
+    -- 01b. Network 契約の企業（ダッシュボードの対象外。2026-10-30 に判定元を変更）-----------------------------------
+    --   Network = 海外の求人サイトが顧客企業の求人を Daijob に載せる契約。働くDB の【0円】申込（htdb_applications_wo_FEE）で
+    --   customer_name（申込元）が cms_dim_network_partner の会社、またはサービス名に Network を含む申込の publishing_company_name が掲載企業。
+    --   申込の期間が companies の契約期間（active_from〜active_to）に重なる企業だけを対象にする（過去に Network だったが今は直接契約の企業は残す）。
+    --   社名の突き合わせ: companies.internal_name（/ 区切りの各部分も）・company_profiles_full の company_name / profile_name を NFKC・小文字・空白圧縮で完全一致
+    --   （htdb_application_company_link は Network の申込がすべて company_id NULL のため使えない）。旧方式の dm_network_contract_candidates は
+    --   SF の NetworkWW 行動（接触履歴・「3 ヶ月アプローチ不可」のメモ）で、契約の有無を表さないため使わない
+    CREATE TEMP TABLE network_apps AS
+    SELECT application_code, customer_name, publishing_company_name,
+           NULLIF(TRIM(REGEXP_REPLACE(LOWER(NORMALIZE(IFNULL(publishing_company_name, ''), NFKC)), r'\s+', ' ')), '') AS pk,
+           contract_start_date AS s, contract_end_date AS e
+    FROM `bq-hgt.dwh.htdb_applications_wo_FEE`
+    WHERE publishing_company_name IS NOT NULL
+      AND (customer_name IN (SELECT customer_name FROM `bq-hgt.dwh.cms_dim_network_partner`)
+           OR REGEXP_CONTAINS(IFNULL(service_name, ''), r'(?i)network'))
+      AND contract_end_date >= window_start AND contract_start_date <= DATE_ADD(run_date, INTERVAL 30 DAY);
+
+    CREATE TEMP TABLE network_company_keys AS
+    SELECT DISTINCT company_id, k FROM (
+      SELECT id AS company_id, NULLIF(TRIM(REGEXP_REPLACE(LOWER(NORMALIZE(IFNULL(internal_name, ''), NFKC)), r'\s+', ' ')), '') AS k FROM `bq-hgt.dwh.companies`
+      UNION ALL SELECT id, NULLIF(TRIM(REGEXP_REPLACE(LOWER(NORMALIZE(IFNULL(part, ''), NFKC)), r'\s+', ' ')), '') FROM `bq-hgt.dwh.companies`, UNNEST(SPLIT(internal_name, '/')) AS part
+      UNION ALL SELECT company_id, NULLIF(TRIM(REGEXP_REPLACE(LOWER(NORMALIZE(IFNULL(company_name, ''), NFKC)), r'\s+', ' ')), '') FROM `bq-hgt.dwh.company_profiles_full` WHERE company_id IS NOT NULL
+      UNION ALL SELECT company_id, NULLIF(TRIM(REGEXP_REPLACE(LOWER(NORMALIZE(IFNULL(profile_name, ''), NFKC)), r'\s+', ' ')), '') FROM `bq-hgt.dwh.company_profiles_full` WHERE company_id IS NOT NULL
+    ) WHERE k IS NOT NULL;
+
+    CREATE TEMP TABLE network_companies AS
+    SELECT DISTINCT co.id AS company_id
+    FROM network_apps a
+    JOIN network_company_keys k ON k.k = a.pk
+    JOIN `bq-hgt.dwh.companies` co ON co.id = k.company_id
+    WHERE co.active_from IS NOT NULL
+      AND a.s <= COALESCE(co.active_to, DATE '9999-12-31') AND a.e >= co.active_from;
+
     -- 02. company_base: 対象企業 + 企業情報 + 枠数 + Salesforce 結合 + 担当 + 業種 -------------------------
     --   対象: companies の契約期間（active_from / active_to）が「13 か月前〜今日 + 30 日」に重なる企業
     --   （契約中 + 直近に終了 + 開始間近。ベンチマークの母集団のため過去月の契約企業も持つ）
@@ -56,8 +90,8 @@ BEGIN
       WHERE active_from IS NOT NULL
         -- 掲載サイトに WAWW を含む企業はダッシュボードの対象外（表示も集計もしない。2026-10-23）
         AND NOT REGEXP_CONTAINS(UPPER(IFNULL(publishing_sites, '')), 'WAWW')
-        -- Network 契約（別管理）の企業はダッシュボードの対象外（dm_network_contract_candidates に company_id があるもの。2026-10-23）
-        AND id NOT IN (SELECT company_id FROM `bq-hgt.dwh.dm_network_contract_candidates` WHERE company_id IS NOT NULL)
+        -- Network 契約（別管理）の企業はダッシュボードの対象外（働くDB の【0円】申込の申込元で判定。ステップ 01b。2026-10-23、判定元を 2026-10-30 に変更）
+        AND id NOT IN (SELECT company_id FROM network_companies)
         -- 社内用テストアカウントは対象外（5542 = Daijob.com、8980 = レジュメ更新自動リクエスト専用、7277 = Daijob Resume Search (Working Abroad Scout)、7196 = Daijob Resume Search (Potential Non-Japanese Scouting Service)。2026-10-23）
         AND id NOT IN (5542, 8980, 7277, 7196)
         AND NOT REGEXP_CONTAINS(IFNULL(internal_name, ''), r'レジュメ更新自動リクエスト専用')
@@ -875,7 +909,12 @@ BEGIN
     SELECT run_date, 'all', t0, CURRENT_TIMESTAMP(), 'ok',
            (SELECT COUNT(*) FROM `bq-hgt.dwh.cms_company_master`),
            (SELECT COUNT(*) FROM `bq-hgt.dwh.cms_company_monthly` WHERE account_type = '__ALL__'),
-           NULL;
+           -- 設定の目視用: Network 除外社数 / 社名が companies に結べなかった現在有効な Network 申込 / 働くDB 申込テーブルの鮮度（48 時間より古いと WARN）
+           CONCAT('network_excluded=', CAST((SELECT COUNT(*) FROM network_companies) AS STRING),
+                  '; network_unmatched=', CAST((SELECT COUNT(*) FROM network_apps a WHERE a.s <= run_date AND a.e >= run_date AND a.pk NOT IN (SELECT k FROM network_company_keys)) AS STRING),
+                  '; htdb_loaded_at=', IFNULL(CAST((SELECT MAX(loaded_at) FROM `bq-hgt.dwh.htdb_applications_wo_FEE`) AS STRING), 'none'),
+                  IF(IFNULL((SELECT MAX(loaded_at) FROM `bq-hgt.dwh.htdb_applications_wo_FEE`), TIMESTAMP '1970-01-01') < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 48 HOUR),
+                     '; WARN htdb_applications_wo_FEE が 48 時間以上更新されていない（新規の Network 契約を拾えない）', ''));
   EXCEPTION WHEN ERROR THEN
     INSERT INTO `bq-hgt.dwh.cms_refresh_log` (run_date, step, started_at, finished_at, status, note)
     VALUES (run_date, 'all', t0, CURRENT_TIMESTAMP(), 'error', @@error.message);

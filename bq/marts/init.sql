@@ -1,7 +1,7 @@
 -- =============================================================================
 -- 契約企業マネジメントシステム: マート初期化（1 回だけ実行）
 --   1. 追記型テーブル（履歴）を明示スキーマ・パーティションで作成
---   2. 業種の表記ゆれ対応表（cms_dim_industry_alias）を作成・投入
+--   2. 業種の表記ゆれ対応表（cms_dim_industry_alias）、Network 申込元の一覧（cms_dim_network_partner）を作成・投入
 --   3. GA4 の企業ログインを過去分まで一括取込（旧CT 2026-05-15〜、新CT 2026-10-14〜）
 -- 実行: python3 scripts/bq_script.py run bq/marts/init.sql  または BigQuery Studio に貼り付け（asia-northeast1）
 -- 以後の日次更新は scheduled_query.sql（毎日 22:45 UTC = 07:45 JST）
@@ -58,6 +58,26 @@ BEGIN
     ])
   ) s ON t.sf_value = s.sf_value
   WHEN NOT MATCHED THEN INSERT (sf_value, dj_industry, is_ignored) VALUES (s.sf_value, s.dj_industry, s.is_ignored);
+
+  -- 2b. Network 契約の申込元（働くDB の【0円】申込の customer_name がこの会社 = Network 経由の契約。2026-10-30） --------
+  --   Network = 海外の求人サイト（Totaljobs / StepStone 等）が顧客企業の求人を Daijob に載せる契約。申込の customer_name が
+  --   サイト運営会社、publishing_company_name が実際の掲載企業になる。商品名は通常の Daijob Single Job Posting と同じため、サービス名だけでは判定できない
+  CREATE TABLE IF NOT EXISTS `bq-hgt.dwh.cms_dim_network_partner` (customer_name STRING NOT NULL, note STRING)
+  OPTIONS (description = '契約企業マネジメントシステム: Network 契約の申込元（htdb_applications_wo_FEE.customer_name）。この会社が申込元の0円申込がある企業はマートから除外する。追加は手動（INSERT）');
+  MERGE `bq-hgt.dwh.cms_dim_network_partner` t
+  USING (
+    SELECT * FROM UNNEST([
+      STRUCT('Totaljobs Group Ltd.' AS customer_name, '英国。サービス名 Daijob.com（Network）の申込もここ' AS note),
+      STRUCT('StepStone Deutschland GmbH', 'ドイツ'),
+      STRUCT('StepStone Denmark', 'デンマーク（最終契約 2023-09）'),
+      STRUCT('Appcast, Inc.', '米国'),
+      STRUCT('Figaro Classifieds', 'フランス'),
+      STRUCT('IrishJobs.ie', 'アイルランド'),
+      STRUCT('Nexxt, Inc', '米国（最終契約 2021-03）'),
+      STRUCT('Network eG.', 'ドイツ（最終契約 2024-08）')
+    ])
+  ) s ON t.customer_name = s.customer_name
+  WHEN NOT MATCHED THEN INSERT (customer_name, note) VALUES (s.customer_name, s.note);
 
   -- 3. GA4 ログインの一括取込（既に入っている日は取り直す） -------------------------------------
   FOR src IN (SELECT ds, from_date FROM UNNEST(ga4_sources)) DO
