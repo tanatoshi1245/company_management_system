@@ -1,5 +1,24 @@
 import type { BoardCompany, BoardMeta } from '../schema/board';
 import type { ScoredCompany } from './score';
+import { COMPANY_TYPES } from '../labels';
+
+/** プロファイルの種別（アカウント種別として使う値）。DA / RPO / NW / 不明 は企業単位の判定で、アカウント種別では絞らない */
+export const PROFILE_ACCOUNT_TYPES: readonly string[] = ['直接', '紹介', '派遣'];
+/** 企業種別フィルタの既定: DA と RPO 以外（2026-10-30〜） */
+export const DEFAULT_TYPE_FILTER: readonly string[] = COMPANY_TYPES.filter((t) => t !== 'DA' && t !== 'RPO');
+export function isDefaultTypeFilter(types: readonly string[]): boolean {
+  return types.length === DEFAULT_TYPE_FILTER.length && DEFAULT_TYPE_FILTER.every((t) => types.includes(t));
+}
+
+/**
+ * 種別フィルタ・種別の件数・ボードの +種別 に使うアカウント種別。
+ * 企業種別が 直接 / 紹介 / 派遣 のときだけ副アカウントの種別（直接 + 紹介 など）も含める。DA / RPO / NW / 不明 は企業種別だけ
+ * （DA / RPO のプロファイルも company_type は 直接 / 紹介 なので、そのまま使うと「直接」で絞ったときに DA / RPO が混ざる）
+ */
+export function boardAccountTypes(c: Pick<BoardCompany, 'type' | 'accountTypes'>): string[] {
+  if (!PROFILE_ACCOUNT_TYPES.includes(c.type)) return [c.type];
+  return Array.from(new Set([c.type, ...c.accountTypes.filter((t) => PROFILE_ACCOUNT_TYPES.includes(t))]));
+}
 
 /** 契約終了の絞り込み: 30 日以内 / 60 日以内 / 90 日以上先（無期限を含む） */
 export const ENDING_OPTIONS = ['30', '60', 'over90'] as const;
@@ -27,7 +46,7 @@ export interface BoardFilters {
   q: string;
 }
 
-export const DEFAULT_FILTERS: BoardFilters = { mine: false, owner: [], type: [], ending: null, jobs: null, sent: null, q: '' };
+export const DEFAULT_FILTERS: BoardFilters = { mine: false, owner: [], type: [...DEFAULT_TYPE_FILTER], ending: null, jobs: null, sent: null, q: '' };
 
 export const NO_OWNER_KEY = '(未設定)';
 /** 担当の絞り込みキー（メール優先。無ければ名前、どちらも無ければ (未設定)） */
@@ -57,8 +76,8 @@ export function filterCompanies(rows: ScoredCompany[], f: BoardFilters, meta: Pi
     if (!isContracted(c, meta)) return false;
     if (f.mine && !c.isMine) return false;
     if (f.owner.length && !f.owner.includes(ownerKey(c))) return false;
-    // 種別はいずれかのアカウント種別（直接 + 紹介 など）が一致すれば通す
-    if (f.type.length && !f.type.includes(c.type) && !c.accountTypes.some((t) => f.type.includes(t))) return false;
+    // 種別はいずれかのアカウント種別（直接 + 紹介 など）が一致すれば通す。DA / RPO / NW / 不明 は企業種別だけで判定（boardAccountTypes）。空 = すべて
+    if (f.type.length && !boardAccountTypes(c).some((t) => f.type.includes(t))) return false;
     if (f.ending !== null && !matchesEnding(c.contract.daysToEnd, f.ending)) return false;
     if (f.jobs !== null && (c.m.jobs > 0) !== (f.jobs === 'yes')) return false;
     if (f.sent !== null && (c.m.sent > 0) !== (f.sent === 'yes')) return false;

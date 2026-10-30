@@ -45,7 +45,7 @@ describe('ホーム（ボード）', () => {
     await waitFor(() => expect(screen.getByRole('table', { name: '契約企業の実績一覧' })).toBeTruthy());
     const table = screen.getByRole('table', { name: '契約企業の実績一覧' });
     const rowsBefore = table.querySelectorAll('tbody tr').length;
-    expect(rowsBefore).toBeGreaterThan(20);
+    expect(rowsBefore).toBeGreaterThan(15);
     expect(screen.getByText('契約企業')).toBeTruthy();
     expect(screen.getByText('スカウト消化率')).toBeTruthy();
     expect(screen.getByText('スカウト利用社数（利用率）')).toBeTruthy();
@@ -89,10 +89,19 @@ describe('ホーム（ボード）', () => {
     expect(headers.slice(0, 3)).toEqual(['種別', 'CS 担当', '企業名']);
     for (const h of ['掲載 / 枠', '閲覧', '応募', '送信 / 枠', '興味あり返信', '選考中', '採用', '最終ログイン', '契約残']) expect(headers).toContain(h);
     expect(headers).not.toContain('返信');
-    // 契約中の企業だけ（終了済み・開始前・直近終了は出ない）。メーター・アイコンは無い
+    // 契約中の企業だけ（終了済み・開始前・直近終了は出ない）。既定の種別フィルタは DA と RPO 以外（2026-10-30〜）。メーター・アイコンは無い
     const f = await fixtures();
-    const contractedIds = new Set(f.board.companies.filter((c) => c.state === 'active' || c.state === 'ending_30d').map((c) => c.id));
+    const contractedAll = f.board.companies.filter((c) => c.state === 'active' || c.state === 'ending_30d');
+    const contractedIds = new Set(contractedAll.filter((c) => c.type !== 'DA' && c.type !== 'RPO').map((c) => c.id));
+    expect(contractedAll.some((c) => c.type === 'DA' || c.type === 'RPO')).toBe(true);
     expect(rowsBefore).toBe(contractedIds.size);
+    expect(table.querySelectorAll('td.col-type .badge')).toBeTruthy();
+    for (const b of table.querySelectorAll('td.col-type .badge')) expect(['DA', 'RPO']).not.toContain(b.textContent);
+    // 既定の種別フィルタは「絞り込み中」として数えない（チップは強調なし、件数なし、URL に type= が無い）
+    const typeChip = screen.getByLabelText('企業種別で絞り込み');
+    expect(typeChip.classList.contains('on')).toBe(false);
+    expect(typeChip.textContent).toBe('企業種別');
+    expect(window.location.search).not.toContain('type=');
     expect(table.querySelector('.ava, .co-strip .meta, svg.timeline')).toBeNull();
     // 実数の分数表記と、担当の苗字・種別の別セル
     const first = table.querySelector('tbody tr')!;
@@ -204,14 +213,27 @@ describe('ホーム（ボード）', () => {
     fireEvent(details, new Event('toggle', { bubbles: false }));
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(details.open).toBe(false);
-    // 企業種別: 2 つ選ぶ
-    const typeBoxes = typeGroup.querySelectorAll('input[type=checkbox]');
-    fireEvent.click(typeBoxes[0]);
-    fireEvent.click(typeBoxes[1]);
-    await waitFor(() => expect(window.location.search).toMatch(/type=[^&]+%2C|type=[^&]+,/));
+    // 企業種別: 既定では DA / RPO が外れ、直接・紹介・派遣（と 0 件でなければ NW・不明）が選ばれている
+    const boxOf = (name: string) => Array.from(typeGroup.querySelectorAll('label')).find((l) => l.textContent?.startsWith(name))!.querySelector('input[type=checkbox]') as HTMLInputElement;
+    expect(boxOf('DA').checked).toBe(false);
+    expect(boxOf('RPO').checked).toBe(false);
+    expect(boxOf('直接').checked).toBe(true);
+    expect(boxOf('紹介').checked).toBe(true);
+    // 直接だけにすると DA / RPO は混ざらない（DA / RPO のプロファイルも種別は 直接 / 紹介 だが企業種別で判定する）
+    fireEvent.click(boxOf('紹介'));
+    fireEvent.click(boxOf('派遣'));
+    await waitFor(() => expect(window.location.search).toMatch(/type=/));
     await waitFor(() => expect(table0.querySelectorAll('tbody tr').length).toBeLessThan(total));
-    fireEvent.click(typeBoxes[0]);
-    fireEvent.click(typeBoxes[1]);
+    // 直接のアカウントを持つ企業だけ（主種別が 直接、または 紹介 + 直接 のように副アカウントが 直接）。DA / RPO は出ない
+    for (const td of table0.querySelectorAll('td.col-type')) expect(td.querySelector('.badge')?.textContent === '直接' || td.querySelector('.acct-more')?.textContent?.includes('直接')).toBe(true);
+    for (const b of table0.querySelectorAll('td.col-type .badge')) expect(['DA', 'RPO']).not.toContain(b.textContent);
+    // DA を足すと DA の行が出る
+    fireEvent.click(boxOf('DA'));
+    await waitFor(() => expect(Array.from(table0.querySelectorAll('td.col-type .badge')).some((b) => b.textContent === 'DA')).toBe(true));
+    fireEvent.click(boxOf('DA'));
+    fireEvent.click(boxOf('紹介'));
+    fireEvent.click(boxOf('派遣'));
+    await waitFor(() => expect(window.location.search).not.toContain('type='));
     // 契約終了: 90 日以上先
     fireEvent.change(screen.getByLabelText('契約終了'), { target: { value: 'over90' } });
     await waitFor(() => expect(window.location.search).toContain('ending=over90'));
@@ -223,6 +245,35 @@ describe('ホーム（ボード）', () => {
     await waitFor(() => expect(table.querySelectorAll('tbody tr').length).toBeLessThan(5));
     fireEvent.click(screen.getByRole('button', { name: /クリア/ }));
     await waitFor(() => expect(window.location.search).not.toContain('q='));
+  });
+
+  it('企業詳細へ遷移して戻ると、絞り込みとスクロール位置が直前の状態に戻る', async () => {
+    const scrollTo = vi.fn();
+    const origScrollTo = window.scrollTo;
+    window.scrollTo = scrollTo as unknown as typeof window.scrollTo;
+    let scrollY = 0;
+    Object.defineProperty(window, 'scrollY', { configurable: true, get: () => scrollY });
+    Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, get: () => 10_000 });
+    try {
+      window.history.replaceState(null, '', '/?sent=yes');
+      render(<App />);
+      await waitFor(() => expect(screen.getByRole('table', { name: '契約企業の実績一覧' })).toBeTruthy());
+      const rowsFiltered = screen.getByRole('table', { name: '契約企業の実績一覧' }).querySelectorAll('tbody tr').length;
+      // ボードを 640px スクロールした状態で行を開く → 詳細は先頭から
+      scrollY = 640;
+      fireEvent.click(screen.getByRole('table', { name: '契約企業の実績一覧' }).querySelector('tbody tr')!);
+      await waitFor(() => expect(window.location.pathname).toMatch(/^\/companies\/\d+$/));
+      expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+      scrollY = 0;
+      // 戻る → 絞り込み（sent=yes）とスクロール位置（640）が復元される
+      window.history.back();
+      await waitFor(() => expect(window.location.pathname).toBe('/'));
+      expect(window.location.search).toContain('sent=yes');
+      await waitFor(() => expect(screen.getByRole('table', { name: '契約企業の実績一覧' }).querySelectorAll('tbody tr').length).toBe(rowsFiltered));
+      await waitFor(() => expect(scrollTo).toHaveBeenLastCalledWith(0, 640));
+    } finally {
+      window.scrollTo = origScrollTo;
+    }
   });
 
   it('行クリックで企業詳細へ遷移する（URL に月を引き継ぐ）', async () => {

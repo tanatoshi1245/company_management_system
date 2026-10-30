@@ -70,12 +70,20 @@ describe('/api/board（モック）', () => {
     expect(scored.some((s) => s.pace.status === 'behind')).toBe(true);
     expect(scored.some((s) => s.bench.scout_utilization?.score !== null)).toBe(true);
     expect(scored.every((s) => s.health.target.level === 'none')).toBe(true); // 目標なし
-    // 契約中の企業だけ（終了済み・開始前・直近終了は出ない）
-    const all = filterCompanies(scored, DEFAULT_FILTERS, body.meta);
+    // 契約中の企業だけ（終了済み・開始前・直近終了は出ない）。type: [] = 種別で絞らない（既定は DA / RPO 以外）
+    const all = filterCompanies(scored, { ...DEFAULT_FILTERS, type: [] }, body.meta);
+    const byDefault = filterCompanies(scored, DEFAULT_FILTERS, body.meta);
+    expect(byDefault.length).toBeLessThan(all.length);
+    expect(byDefault.every((s) => s.c.type !== 'DA' && s.c.type !== 'RPO')).toBe(true);
+    expect(all.some((s) => s.c.type === 'DA' || s.c.type === 'RPO')).toBe(true);
+    // 直接 / 紹介 / 派遣 で絞ると DA / RPO は混ざらない（DA / RPO のプロファイルの種別も 直接 / 紹介 だが企業種別で判定）
+    const direct = filterCompanies(scored, { ...DEFAULT_FILTERS, type: ['直接', '紹介', '派遣'] }, body.meta);
+    expect(direct.every((s) => ['直接', '紹介', '派遣'].includes(s.c.type))).toBe(true);
+    expect(filterCompanies(scored, { ...DEFAULT_FILTERS, type: ['DA'] }, body.meta).every((s) => s.c.type === 'DA')).toBe(true);
     expect(all.length).toBeLessThan(scored.length);
     expect(all.every((s) => s.c.state === 'active' || s.c.state === 'ending_30d')).toBe(true);
     expect(scored.some((s) => s.c.state === 'ended_recent' || s.c.state === 'upcoming')).toBe(true);
-    const mine = filterCompanies(scored, { ...DEFAULT_FILTERS, mine: true }, body.meta);
+    const mine = filterCompanies(scored, { ...DEFAULT_FILTERS, type: [], mine: true }, body.meta);
     expect(mine.length).toBeGreaterThan(0);
     expect(mine.length).toBeLessThan(all.length);
     const byPace = sortCompanies(scored, 'pace');
@@ -105,9 +113,9 @@ describe('/api/board（モック）', () => {
     expect(contractKindOf(null, null)).toBe('unknown');
     expect(contractKindOf('登録なし', '')).toBe('unknown');
     // 契約終了: 30 日以内 / 90 日以上先（無期限を含む）
-    const soon = filterCompanies(scored, { ...DEFAULT_FILTERS, ending: '30' }, body.meta);
+    const soon = filterCompanies(scored, { ...DEFAULT_FILTERS, type: [], ending: '30' }, body.meta);
     expect(soon.every((s) => s.c.contract.daysToEnd !== null && s.c.contract.daysToEnd <= 30)).toBe(true);
-    const far = filterCompanies(scored, { ...DEFAULT_FILTERS, ending: 'over90' }, body.meta);
+    const far = filterCompanies(scored, { ...DEFAULT_FILTERS, type: [], ending: 'over90' }, body.meta);
     expect(far.length).toBeGreaterThan(0);
     expect(far.every((s) => s.c.contract.daysToEnd === null || s.c.contract.daysToEnd > 90)).toBe(true);
     expect(soon.length + far.length).toBeLessThanOrEqual(all.length);
@@ -124,7 +132,7 @@ describe('/api/board（モック）', () => {
     expect(tiles[2].label).toBe('スカウト利用社数（利用率）');
     // CS 担当で絞り込み
     const key = ownerKey(scored.find((s) => s.c.owner.email)!.c);
-    const byOwner = filterCompanies(scored, { ...DEFAULT_FILTERS, owner: [key] }, body.meta);
+    const byOwner = filterCompanies(scored, { ...DEFAULT_FILTERS, type: [], owner: [key] }, body.meta);
     expect(byOwner.length).toBeGreaterThan(0);
     expect(byOwner.every((s) => ownerKey(s.c) === key)).toBe(true);
     // 実数の列で並べ替え
@@ -134,7 +142,7 @@ describe('/api/board（モック）', () => {
     // NW（Network 契約）はボードに出さない（モックには NW の企業があるが応答に含めない）
     expect(scored.some((s) => s.c.type === 'NW')).toBe(false);
     expect(companyMasterQuery().sql).toContain("WHERE company_type != 'NW'");
-    const q = filterCompanies(scored, { ...DEFAULT_FILTERS, q: 'ｱｰｸ' }, body.meta);
+    const q = filterCompanies(scored, { ...DEFAULT_FILTERS, type: [], q: 'ｱｰｸ' }, body.meta);
     const byType = sortCompanies(all, 'type');
     for (let i = 1; i < byType.length; i++) expect(byType[i].c.type.localeCompare(byType[i - 1].c.type, 'ja')).toBeGreaterThanOrEqual(0);
     expect(q.length).toBeGreaterThan(0);

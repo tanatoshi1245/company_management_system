@@ -49,6 +49,41 @@ export function matchRoute(pathname: string): { key: RouteKey; params: Record<st
 }
 
 const NAV_EVENT = 'cms:navigate';
+
+/**
+ * スクロール位置の保存・復元（戻る / 進むで直前の画面の位置に戻る）。
+ * 位置は history の state に持つ（scroll 中に間引いて保存 + 遷移の直前にも保存）。popstate で復元を予約し、
+ * 画面が描けた（高さが足りた）タイミングで useScrollRestore が戻す。ブラウザ既定の復元は内容が非同期に描かれる SPA では効かないので手動
+ */
+let pendingScrollY: number | null = null;
+let scrollSaveTimer: number | null = null;
+function saveScroll(): void {
+  if (typeof window === 'undefined') return;
+  const st = (window.history.state ?? {}) as Record<string, unknown>;
+  const y = window.scrollY;
+  if (st.scrollY === y) return;
+  window.history.replaceState({ ...st, scrollY: y }, '', window.location.pathname + window.location.search);
+}
+if (typeof window !== 'undefined') {
+  if ('scrollRestoration' in window.history) window.history.scrollRestoration = 'manual';
+  window.addEventListener('scroll', () => {
+    if (scrollSaveTimer !== null) return;
+    scrollSaveTimer = window.setTimeout(() => {
+      scrollSaveTimer = null;
+      saveScroll();
+    }, 150);
+  }, { passive: true });
+  window.addEventListener('popstate', () => {
+    const st = (window.history.state ?? {}) as Record<string, unknown>;
+    pendingScrollY = typeof st.scrollY === 'number' ? st.scrollY : 0;
+  });
+}
+/** 復元待ちの位置を取り出す（1 回だけ） */
+export function takePendingScroll(): number | null {
+  const y = pendingScrollY;
+  pendingScrollY = null;
+  return y;
+}
 function subscribe(cb: () => void): () => void {
   window.addEventListener('popstate', cb);
   window.addEventListener(NAV_EVENT, cb);
@@ -73,8 +108,14 @@ export function useLocation(): Location {
 }
 
 export function navigate(to: string, opts: { replace?: boolean } = {}): void {
-  if (opts.replace) window.history.replaceState(null, '', to);
-  else window.history.pushState(null, '', to);
+  if (opts.replace) {
+    // 絞り込みの変更など同じ画面内の URL 更新。保存済みのスクロール位置は引き継ぐ
+    window.history.replaceState(window.history.state ?? null, '', to);
+  } else {
+    saveScroll();
+    window.history.pushState(null, '', to);
+    window.scrollTo(0, 0);
+  }
   window.dispatchEvent(new Event(NAV_EVENT));
 }
 
