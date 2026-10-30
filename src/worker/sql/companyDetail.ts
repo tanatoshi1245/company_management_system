@@ -1,5 +1,8 @@
 import { p, type BuiltQuery } from '../bq/params';
 
+/** 属性マート照会のスキャン上限（表全体の推定量 + 伸びしろ。実際の課金は読んだ分だけ） */
+export const ATTRIBUTES_MAX_BYTES = 2 * 1024 ** 3;
+
 /** 1 社分。企業 ID は INT64 パラメータで渡す（文字列連結しない） */
 export function companyMasterByIdQuery(companyId: string): BuiltQuery {
   return {
@@ -103,6 +106,9 @@ WHERE company_id = @id AND sent_month BETWEEN @from AND @to AND (@account IS NUL
 GROUP BY 1, 2, 3
 ORDER BY 1, 2, 4 DESC`,
     params: [p.int('id', Number(companyId)), p.date('from', fromMonthFirstDay), p.date('to', toMonthFirstDay), p.nullableStr('account', accountType), p.nullableStr('job', jobKey)],
+    // 属性マートは求人の軸で約 4.3M 行・約 500 MB（2026-10-30）。推定スキャン量が表全体になるため既定の 200 MB では拒否される。
+    // company_id でクラスタリングしているので実際の読み取りは 1 社 数十 MB。上限だけ 2 GB に緩める
+    maxBytes: ATTRIBUTES_MAX_BYTES,
   };
 }
 

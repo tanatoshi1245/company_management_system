@@ -42,8 +42,10 @@ let bad = 0;
 for (const q of queries) {
   const { bytesProcessed } = await client.dryRun(q);
   const mb = bytesProcessed / 1024 ** 2;
-  const flag = bytesProcessed > BUDGET ? '  <-- 予算 10 MB 超過' : '';
-  if (bytesProcessed > BUDGET) bad++;
+  // 属性マートなど表全体が大きいマートは q.maxBytes で個別に上限を持つ（推定はクラスタリング前の表全体）
+  const budget = q.maxBytes ?? BUDGET;
+  const flag = bytesProcessed > budget ? `  <-- 予算 ${Math.round(budget / 1024 ** 2)} MB 超過` : '';
+  if (bytesProcessed > budget) bad++;
   console.log(`${q.label.padEnd(24)} ${mb.toFixed(2).padStart(8)} MB${flag}`);
 }
 console.log(bad ? `\n${bad} 件が予算超過` : '\nすべて予算内（各 < 10 MB）');

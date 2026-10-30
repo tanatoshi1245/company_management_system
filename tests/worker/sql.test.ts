@@ -12,6 +12,15 @@ const ALLOWED_TABLES = ['cms_refresh_log', 'cms_company_master', 'cms_company_mo
 
 const queries: BuiltQuery[] = [companyMasterQuery(), companyMonthlyQuery(), companyLoginQuery(), industryBenchmarkQuery('2026-10'), refreshLogQuery('2026-10-01'), companyMasterByIdQuery('1001'), companyMonthlyByIdQuery('1001'), dailyUsageQuery('1001'), scoutCohortQuery('1001'), applicationCohortQuery('1001'), memberAttributesQuery('1001', '2026-08-01', '2026-10-01', null), memberAttributesQuery('1001', '2026-08-01', '2026-10-01', '直接', '12345'), companyAccountMonthlyQuery('1001'), companyJobsQuery('1001', '2026-08-01', '2026-10-01', null), companyJobMonthlyQuery('1001', '12345', '2026-08-01', '2026-10-01', '直接'), benchSeriesQuery('IT', '直接'), companyLoginByIdQuery('1001')];
 
+describe('スキャン上限', () => {
+  it('属性マートの照会だけ maxBytes を緩め（表全体の推定量 > 200 MB）、他は既定のまま', () => {
+    for (const q of queries) {
+      if (q.label === 'member_attributes') expect(q.maxBytes).toBeGreaterThan(200 * 1024 ** 2);
+      else expect(q.maxBytes).toBeUndefined();
+    }
+  });
+});
+
 describe('マート読み取り SQL', () => {
   it.each(queries.map((q) => [q.label, q] as const))('%s: cms_* だけを読み、利用者入力は @param で渡す', (_label, q) => {
     const tables = Array.from(q.sql.matchAll(/`bq-hgt\.dwh\.([a-z_]+)`/g)).map((m) => m[1]);
