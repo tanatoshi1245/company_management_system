@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AttributeBreakdown } from '../companyModel';
 import { ATTRIBUTE_LABEL, ATTRIBUTE_TYPES, type AttributeType } from '../../../../shared/labels';
 import { PieChart } from '../../../components/charts/PieChart';
@@ -18,11 +18,15 @@ const MODE_UNIT: Record<PieMode, string> = { sent: '件', replied: '件', viewed
 export function AttributePiePanel({ title, help, breakdown, range, modes, state = 'ready', initial, onChange, testId }: { title: string; help: string; breakdown: Record<PieMode, Record<string, AttributeBreakdown[]>>; range: string; modes: PieMode[]; state?: 'loading' | 'error' | 'ready'; initial?: string; onChange?: (t: AttributeType) => void; testId: string }) {
   const [type, setTypeState] = useState<AttributeType>((ATTRIBUTE_TYPES as readonly string[]).includes(initial ?? '') ? (initial as AttributeType) : 'japanese_level');
   const [mode, setMode] = useState<PieMode>(modes[0]);
+  // modes が変わって今の mode が無くなったら先頭に戻す（求人タブ → スカウトタブのように、同じインスタンスが別の対象で使われたとき）
+  useEffect(() => {
+    if (!modes.includes(mode)) setMode(modes[0]);
+  }, [modes, mode]);
   const setType = (t: AttributeType) => {
     setTypeState(t);
     onChange?.(t);
   };
-  const rows = breakdown[mode]?.[type] ?? [];
+  const rows = modes.includes(mode) ? (breakdown[mode]?.[type] ?? []) : [];
   return (
     <section className="card" aria-label={title} data-testid={testId}>
       <div className="card-head">

@@ -264,6 +264,32 @@ describe('企業詳細', () => {
     await waitFor(() => expect(window.location.search).not.toContain('tab='));
   });
 
+  it('求人タブで 応募 に切り替えてからスカウトタブへ移ると、属性の円は 送信 が選ばれてスカウトの内訳になる（求人タブの選択が残らない）', async () => {
+    installFetch(f, calls);
+    const c = f.behind;
+    window.history.replaceState(null, '', `/companies/${c.id}`);
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: c.name })).toBeTruthy());
+    const pieViews = screen.getByTestId('pie-views');
+    await waitFor(() => expect(pieViews.querySelector('.pie svg')).toBeTruthy());
+    fireEvent.click(within(pieViews.querySelector('.segmented') as HTMLElement).getByRole('button', { name: '応募' }));
+    expect(within(pieViews.querySelector('.segmented') as HTMLElement).getByRole('button', { name: '応募' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('tab', { name: 'スカウトの実績' }));
+    await waitFor(() => expect(screen.getByTestId('pie-scout')).toBeTruthy());
+    const pieScout = screen.getByTestId('pie-scout');
+    await waitFor(() => expect(pieScout.querySelector('.pie svg')).toBeTruthy());
+    const seg = pieScout.querySelector('.segmented') as HTMLElement;
+    expect(within(seg).getByRole('button', { name: '送信' }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(seg).getByRole('button', { name: '興味あり' }).getAttribute('aria-pressed')).toBe('false');
+    const total = () => Number(pieScout.querySelector('.pie svg text.num')?.textContent?.replace(/,/g, ''));
+    const shown = total();
+    // 表示されている合計は 送信 の分（興味あり → 送信 と明示的に選び直しても同じ値）
+    fireEvent.click(within(seg).getByRole('button', { name: '興味あり' }));
+    fireEvent.click(within(seg).getByRole('button', { name: '送信' }));
+    expect(total()).toBe(shown);
+    expect(shown).toBeGreaterThan(0);
+  });
+
   it('選考状況タブ: 面接調整中 → 採用 の 6 枚（期間の st06〜st11 の合計）。求人を選ぶとその求人の応募側だけ', async () => {
     installFetch(f, calls);
     const c = f.behind;

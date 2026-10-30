@@ -101,10 +101,21 @@ table.unused td:nth-child(3) { color: var(--ink-soft); }
 .progress .mark { position: absolute; top: -3px; width: 2px; height: 16px; background: var(--ink); }
 
 /* スカウト未利用の登録ページ */
-table.unused-reg td { vertical-align: top; padding-top: 6px; padding-bottom: 6px; }
-table.unused-reg td .nm { font-weight: 600; }
-table.unused-reg select.ctl { max-width: 360px; width: 100%; }
-table.unused-reg input.remarks { width: 100%; min-width: 220px; }
+/* 列幅は固定（種別 / CS 担当 / 企業名 / 理由 / 補足 / 登録）。企業名は省略表示（title に全文） */
+table.unused-reg { table-layout: fixed; width: 100%; }
+table.unused-reg col.c-type { width: 64px; }
+table.unused-reg col.c-owner { width: 96px; }
+table.unused-reg col.c-name { width: 26%; }
+table.unused-reg col.c-reason { width: 30%; }
+table.unused-reg col.c-save { width: 150px; }
+table.unused-reg td { vertical-align: top; padding-top: 6px; padding-bottom: 6px; overflow: hidden; }
+table.unused-reg td.owner { overflow: hidden; text-overflow: ellipsis; }
+table.unused-reg td .nm { font-weight: 600; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 広告掲載の企業はボードと同じ薄い黄色で企業名を強調 */
+table.unused-reg td.company.ad .nm { background: var(--dj-gold-pale); padding: 0 4px; margin: 0 -4px; border-radius: 2px; width: fit-content; max-width: 100%; box-sizing: border-box; }
+.ad-mark { background: var(--dj-gold-pale); padding: 0 4px; border-radius: 2px; font-weight: 600; color: var(--ink); }
+table.unused-reg select.ctl { width: 100%; }
+table.unused-reg input.remarks { width: 100%; min-width: 0; }
 table.unused-reg tr.dirty td { background: var(--surface-low); }
 table.unused-reg .status { margin-top: 4px; white-space: nowrap; }
 table.unused-reg .status .ok { color: var(--good); font-weight: 600; }

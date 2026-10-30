@@ -84,8 +84,9 @@ export default function CompanyPage({ params }: PageProps) {
     <div className={res.refreshing ? 'visually-dim' : ''}>
       <CompanyHeader d={d} sel={sel} onPeriod={(from, to2) => setUrl({ from: from === resolvePeriod(d, { from: '', to: to2, account: '' }).from ? '' : from, to: to2 === (meta?.month ?? '') ? '' : to2 })} onAccount={(a) => setUrl({ account: a })} />
       <CompanyTabs value={tab} onChange={(t2) => setUrl({ tab: t2 === 'jobs' ? '' : t2 })} />
+      {/* タブごとに key を付けて別インスタンスにする（同じ構成の AttributePiePanel が使い回され、求人タブの 閲覧 / 応募 の選択がスカウトタブに残るのを防ぐ） */}
       {tab === 'jobs' ? (
-        <div className="stack" role="tabpanel" id="co-panel-jobs" aria-labelledby="co-tab-jobs">
+        <div key="jobs" className="stack" role="tabpanel" id="co-panel-jobs" aria-labelledby="co-tab-jobs">
           <SummaryPanel
             title="求人の実績"
             help="掲載求人数 = 選択期間に掲載期間が重なった求人の数（日英の重複は set_id で排除）。閲覧件数 = 求人の閲覧数、応募件数 = 応募数、採用 = 応募経由の採用。すべて選択期間のうち契約期間中の月の合計。アカウント種別や求人を選ぶとその分だけ"
@@ -105,7 +106,7 @@ export default function CompanyPage({ params }: PageProps) {
           <JobsTablePanel jobs={jobs.data} state={stateOf(jobs)} errorCode={jobs.error instanceof ApiError ? jobs.error.code : jobs.error ? 'error' : null} selected={sel.job} onSelect={setJob} range={range} />
         </div>
       ) : tab === 'scout' ? (
-        <div className="stack" role="tabpanel" id="co-panel-scout" aria-labelledby="co-tab-scout">
+        <div key="scout" className="stack" role="tabpanel" id="co-panel-scout" aria-labelledby="co-tab-scout">
           <SummaryPanel
             title="スカウトの実績"
             help={`送信 = スカウト送信数、興味あり返信 = その月に「興味あり」返信があったスカウト数（返信月基準。質問・開封のみは含まない）、選考中 = 期間の終了月に応募 / 返信した人のうち現在の選考ステータスが選考中の人数、採用 = スカウト経由の採用。月間のスカウト枠は ${d.company.limits.scout === null ? '未設定' : `${fmtInt(d.company.limits.scout)} 件`}`}
@@ -125,7 +126,7 @@ export default function CompanyPage({ params }: PageProps) {
           <ScoutUnusedPanel rows={d.scoutUnused} month={d.meta.month} />
         </div>
       ) : (
-        <div className="stack" role="tabpanel" id="co-panel-selection" aria-labelledby="co-tab-selection">
+        <div key="selection" className="stack" role="tabpanel" id="co-panel-selection" aria-labelledby="co-tab-selection">
           <SelectionPanel selection={model.selection} lead={leadBase} jobLabel={jobLabel} />
         </div>
       )}
