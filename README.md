@@ -56,7 +56,7 @@ CS（カスタマーサクセス）向けの社内 Web アプリ。契約中企�
     │ fetch /api/*（同一オリジンのみ）
 [Cloudflare Worker] Hono
     ├─ securityHeaders → authenticate（Google ログイン・@daijob.com・fail-closed）→ sameOriginGuard → requestLog → /auth/* → /api/* → SPA assets
-    ├─ BigQuery REST（@param のみ、maximumBytesBilled 200 MB、宛先はホスト許可リスト）→ 日次マート cms_* だけ
+    ├─ BigQuery REST（@param のみ、maximumBytesBilled 200 MB（属性マートの照会だけ 2 GB。推定はクラスタリング前の表全体のため）、宛先はホスト許可リスト）→ 日次マート cms_* だけ
     ├─ Cache API（キー = マートの版 + cache_epoch + DATA_VERSION。TTL = 次回 08:30 JST まで）
     └─ D1 CMS_DB（company_targets / company_settings / audit_log / app_meta / plan_target_defaults。キャッシュしない）
 [BigQuery bq-hgt.dwh] cms_* 13 表 ← スケジュールドスクリプト bq/marts/scheduled_query.sql（毎日 22:45 UTC = 07:45 JST、約 1 GB/日）

@@ -89,7 +89,7 @@ export class RestBqClient implements BqClient {
       location: this.opts.location,
       timeoutMs: this.timeoutMs,
       maxResults: 5000,
-      maximumBytesBilled: String(this.maxBytes),
+      maximumBytesBilled: String(q.maxBytes ?? this.maxBytes),
       useQueryCache: true,
       labels: { app: 'company-management-system', q: q.label.toLowerCase().replace(/[^a-z0-9_-]/g, '_') },
       dryRun,

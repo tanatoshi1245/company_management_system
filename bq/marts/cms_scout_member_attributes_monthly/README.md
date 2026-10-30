@@ -17,7 +17,7 @@ status: active
 | attribute_type | STRING | japanese_level / english_level / residence_prefecture / last_occupation_group（12 区分）/ experienced_occupation（中分類、複数値を分割）/ desired_occupation（同）/ current_income_range / desired_income_range / member_category / target_flag（ターゲット = A/B/C/I）/ age_group |
 | attribute_value | STRING | 値（空は (未入力)。居住地は都道府県、日本以外は '日本以外'） |
 | account_type | STRING | アカウント種別（送信 / 閲覧 / 応募したプロファイルの company_type: 直接 / 紹介 / 派遣。2026-10-30〜）。Worker は期間と種別で SUM して返す |
-| job_key | STRING | 求人キー（`kind = 'view' / 'application'` の行だけ。`jobs_all.set_id`、無ければ `job_id`、直接応募は `'(direct)'`。`scout` は NULL。2026-10-30〜）。企業ページの求人フィルタ（`/attributes?job=`）で閲覧 / 応募の属性を求人ごとに出す。この列で行数が約 90 万 → 430 万 |
+| job_key | STRING | 求人キー（`kind = 'view' / 'application'` の行だけ。`jobs_all.set_id`、無ければ `job_id`、直接応募は `'(direct)'`。`scout` は NULL。2026-10-30〜）。企業ページの求人フィルタ（`/attributes?job=`）で閲覧 / 応募の属性を求人ごとに出す。この列で行数が約 90 万 → 430 万（表 約 500 MB）。BigQuery の maximumBytesBilled は推定スキャン量（クラスタリング前の表全体）で判定されるため、Worker の `memberAttributesQuery` だけ上限を 2 GB にしている（`src/worker/sql/companyDetail.ts` の `ATTRIBUTES_MAX_BYTES`。実際の読み取りは 1 社 数十 MB）。`CREATE OR REPLACE` ではパーティション指定を変えられず、DROP すると表単位の IAM が消えるので範囲パーティション化はしていない |
 | scouts / members / interested_scouts | INT64 | 送信数（view は閲覧数、application は応募数）/ 会員数 / 興味あり返信があった送信数 |
 
 ## 元テーブル（依存するデータ）

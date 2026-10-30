@@ -39,4 +39,10 @@ export interface BuiltQuery {
   label: string;
   sql: string;
   params: QueryParameter[];
+  /**
+   * この照会だけのスキャン上限（バイト）。既定は client の 200 MB。
+   * BigQuery は maximumBytesBilled を「推定スキャン量」で判定し、クラスタリングによる削減は推定に入らない。
+   * 表全体が 200 MB を超えるマート（cms_scout_member_attributes_monthly）はここで上限を緩める（実際の課金は読んだ分だけ）
+   */
+  maxBytes?: number;
 }
