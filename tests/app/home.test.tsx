@@ -201,7 +201,16 @@ describe('ホーム（ボード）', () => {
     // 企業種別のプルダウンは外側のクリック・Esc で閉じ、中のクリックでは閉じない
     const typeGroup = screen.getByRole('group', { name: '企業種別' });
     // NW はボードに出ないので種別の選択肢にも無い
-    expect(Array.from(typeGroup.querySelectorAll('label')).some((l) => l.textContent?.includes('NW'))).toBe(false);
+    const hasType = (name: string) => Array.from(typeGroup.querySelectorAll('label')).some((l) => l.textContent?.startsWith(name));
+    expect(hasType('NW')).toBe(false);
+    // RPO を足して既定以外にしても、0 件の NW・不明 は選択肢に出ない（既定の選択に含まれているだけで、該当企業は無い）
+    const rpoBox = Array.from(typeGroup.querySelectorAll('label')).find((l) => l.textContent?.startsWith('RPO'))!.querySelector('input[type=checkbox]') as HTMLInputElement;
+    fireEvent.click(rpoBox);
+    await waitFor(() => expect(decodeURIComponent(window.location.search)).toMatch(/type=[^&]*RPO/));
+    expect(hasType('NW')).toBe(false);
+    expect(hasType('不明')).toBe(false);
+    fireEvent.click(rpoBox);
+    await waitFor(() => expect(window.location.search).not.toContain('type='));
     const details = typeGroup.closest('details') as HTMLDetailsElement;
     details.open = true;
     fireEvent(details, new Event('toggle', { bubbles: false }));

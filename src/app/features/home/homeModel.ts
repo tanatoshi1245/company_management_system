@@ -55,7 +55,6 @@ export function useHomeModel(board: BoardResponse | null, filters: BoardFilters,
       types: (() => {
         const m = new Map<string, number>();
         for (const s of typeRows) for (const t of boardAccountTypes(s.c)) m.set(t, (m.get(t) ?? 0) + 1);
-        for (const t of filters.type) if (!m.has(t)) m.set(t, 0);
         return Array.from(m, ([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count);
       })(),
       mineCount: mineRows.filter((s) => s.c.isMine).length,
