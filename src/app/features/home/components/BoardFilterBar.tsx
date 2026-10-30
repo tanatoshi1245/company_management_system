@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BoardFilters, EndingFilter, YesNo } from '../../../../shared/metrics/board';
+import { isDefaultTypeFilter, type BoardFilters, type EndingFilter, type YesNo } from '../../../../shared/metrics/board';
 import { ENDING_LABEL, ENDING_OPTIONS, YES_NO_LABEL } from '../../../../shared/metrics/board';
 import { COMPANY_TYPES, COMPANY_TYPE_SHORT } from '../../../../shared/labels';
 import { Chip } from '../../../components/ui/Chip';
@@ -16,7 +16,7 @@ interface Props {
 }
 
 /** 複数選択のプルダウン（チェックボックス付き）。外側のクリック・Esc で閉じる。スカウト未利用の登録ページでも使う */
-export function MultiPick({ label, ariaLabel, options, value, onChange }: { label: string; ariaLabel: string; options: { key: string; label: string; title?: string; count: number }[]; value: string[]; onChange: (v: string[]) => void }) {
+export function MultiPick({ label, ariaLabel, options, value, onChange, isDefault = value.length === 0 }: { label: string; ariaLabel: string; options: { key: string; label: string; title?: string; count: number }[]; value: string[]; onChange: (v: string[]) => void; /** 既定の選択なら件数と強調を出さない（企業種別の既定 = DA と RPO 以外） */ isDefault?: boolean }) {
   const ref = useRef<HTMLDetailsElement>(null);
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -38,9 +38,9 @@ export function MultiPick({ label, ariaLabel, options, value, onChange }: { labe
   return (
     <details className="industry-pick" ref={ref} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
       <summary>
-        <span className={`chip ${value.length ? 'on' : ''}`} aria-label={`${ariaLabel}で絞り込み`}>
+        <span className={`chip ${isDefault ? '' : 'on'}`} aria-label={`${ariaLabel}で絞り込み`}>
           {label}
-          {value.length ? ` ${value.length}` : ''}
+          {isDefault ? '' : ` ${value.length}`}
           <Icon name="chevronDown" size={14} />
         </span>
       </summary>
@@ -75,7 +75,7 @@ export function BoardFilterBar(p: Props) {
     <div className="sticky-bar" role="search" aria-label="絞り込み">
       <Chip label="担当 = 自分" on={p.filters.mine} onClick={() => p.onChange({ mine: !p.filters.mine })} count={p.mineCount} disabled={p.mineCount === 0 && !p.filters.mine} title={p.mineCount === 0 ? 'ログイン中のメールが担当になっている企業がありません（設定で担当を上書きできます）' : '自分が担当の企業だけ'} icon={<Icon name="filter" size={14} />} />
       <MultiPick label="CS 担当" ariaLabel="CS 担当" options={p.owners.map((o) => ({ key: o.key, label: o.label, title: o.name, count: o.count }))} value={p.filters.owner} onChange={(owner) => p.onChange({ owner })} />
-      <MultiPick label="企業種別" ariaLabel="企業種別" options={typeOptions} value={p.filters.type} onChange={(type) => p.onChange({ type })} />
+      <MultiPick label="企業種別" ariaLabel="企業種別" options={typeOptions} value={p.filters.type} onChange={(type) => p.onChange({ type })} isDefault={isDefaultTypeFilter(p.filters.type)} />
       <div className="field">
         <label htmlFor="f-ending">契約終了</label>
         <select id="f-ending" className="ctl" value={p.filters.ending ?? ''} onChange={(e) => p.onChange({ ending: (e.target.value || null) as EndingFilter | null })}>

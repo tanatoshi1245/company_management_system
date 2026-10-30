@@ -1,7 +1,7 @@
 import { useState, type KeyboardEvent, type MouseEvent } from 'react';
 import type { BoardMeta } from '../../../../shared/schema/board';
 import type { ScoredCompany } from '../../../../shared/metrics/score';
-import { BOARD_COLUMNS, isNoLogin, type BoardColumn } from '../../../../shared/metrics/board';
+import { BOARD_COLUMNS, isNoLogin, type BoardColumn, boardAccountTypes } from '../../../../shared/metrics/board';
 import { METRIC_BY_KEY } from '../../../../shared/metrics/definitions';
 import { PACE_LABEL } from '../../../../shared/metrics/pace';
 import { COMPANY_TYPE_SHORT, CONTRACT_STATE_LABEL, surname, type ContractState } from '../../../../shared/labels';
@@ -132,9 +132,9 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
             const c = s.c;
             return (
               <tr key={c.id} tabIndex={0} onClick={(e) => onRowClick(e, c.id)} onKeyDown={(e) => onRowKey(e, c.id)} onMouseEnter={() => prefetch(`/api/companies/${c.id}?month=${meta.month}`, CompanyDetailResponseSchema)} aria-label={`${c.name} の詳細を開く`}>
-                <td className="col-type" title={c.accountTypes.length > 1 ? `企業種別: ${COMPANY_TYPE_SHORT[c.type] ?? c.type}。アカウント ${c.accountTypes.length}（${c.accountTypes.join('・')}）` : `企業種別: ${COMPANY_TYPE_SHORT[c.type] ?? c.type}`}>
+                <td className="col-type" title={boardAccountTypes(c).length > 1 ? `企業種別: ${COMPANY_TYPE_SHORT[c.type] ?? c.type}。アカウント ${boardAccountTypes(c).length}（${boardAccountTypes(c).join('・')}）` : `企業種別: ${COMPANY_TYPE_SHORT[c.type] ?? c.type}`}>
                   <span className="badge neutral">{COMPANY_TYPE_SHORT[c.type] ?? c.type}</span>
-                  {c.accountTypes.length > 1 ? <span className="acct-more">+{c.accountTypes.filter((t) => t !== c.type).join('・')}</span> : null}
+                  {boardAccountTypes(c).length > 1 ? <span className="acct-more">+{boardAccountTypes(c).filter((t) => t !== c.type).join('・')}</span> : null}
                 </td>
                 <td className={`col-owner ${c.isMine ? 'mine' : ''} ${c.owner.name ? '' : 'none'}`} title={c.owner.name ? `担当: ${c.owner.name}${c.owner.src === 'override' ? '（画面で上書き）' : ''}` : '担当未設定'}>
                   {surname(c.owner.name) ?? '未設定'}

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { BoardResponse } from '../../../shared/schema/board';
-import { filterCompanies, isContracted, kpiStrip, ownerKey, sortCompanies, type BoardFilters, type KpiTile } from '../../../shared/metrics/board';
+import { boardAccountTypes, filterCompanies, isContracted, kpiStrip, ownerKey, sortCompanies, type BoardFilters, type KpiTile } from '../../../shared/metrics/board';
 import { surname } from '../../../shared/labels';
 import { makeContext, scoreCompany, type ScoredCompany } from '../../../shared/metrics/score';
 
@@ -50,7 +50,7 @@ export function useHomeModel(board: BoardResponse | null, filters: BoardFilters,
       // 種別の件数は、副アカウントの種別（直接 + 紹介 の 紹介）にも数える（フィルタの判定と同じ）
       types: (() => {
         const m = new Map<string, number>();
-        for (const s of contractedRows) for (const t of new Set([s.c.type, ...s.c.accountTypes])) m.set(t, (m.get(t) ?? 0) + 1);
+        for (const s of contractedRows) for (const t of boardAccountTypes(s.c)) m.set(t, (m.get(t) ?? 0) + 1);
         return Array.from(m, ([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count);
       })(),
       mineCount: contractedRows.filter((s) => s.c.isMine).length,
