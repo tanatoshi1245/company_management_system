@@ -22,7 +22,8 @@ companies / company_profiles_full / company_profiles_all / active_companies / ac
 | cms_company_daily_usage | 企業 × 日（前月 + 当月） | 全件差し替え |
 | cms_scout_cohort_status / cms_application_cohort_status | 企業 × コホート月 × ステータス | 全件差し替え |
 | cms_status_snapshot_daily | 日 × 上 2 表 | 追記 |
-| cms_scout_member_attributes_monthly | 企業 × 送信月 × 属性 | 全件差し替え |
+| cms_scout_member_attributes_monthly | 企業 × 送信月 × kind × アカウント種別 × 求人 × 属性 | 全件差し替え |
+| cms_company_job_monthly | 企業 × アカウント種別 × 求人 × 月（閲覧・応募） | 全件差し替え（2026-10-30〜） |
 | cms_company_login_daily / cms_company_login | 日 × 企業 / 企業 | 追記（直近 3 日取り直し）/ 全件差し替え |
 | cms_industry_benchmark_monthly | 月 × 業種 × 種別 × 指標 | 全件差し替え |
 | cms_dim_industry_alias | 表記ゆれ | 手動（init.sql） |
@@ -54,6 +55,7 @@ companies / company_profiles_full / company_profiles_all / active_companies / ac
 
 | 日付 | 変更 | スキャン | 反映 |
 |---|---|---|---|
+| 2026-10-30 | **求人単位の軸を追加**。新表 `cms_company_job_monthly`（企業 × 種別 × 求人 × 月。タイトル・閲覧・応募・応募側の現ステータス st06〜st11・掲載期間。`(direct)` = 企業への直接応募）、`cms_scout_member_attributes_monthly` に `job_key`（view / application の行だけ。scout は NULL）。`jobs_all` は `jobs_latest` で 1 回だけ読み（`job_set` / `job_title`）、`jph` / `view_raw` / `app_fact` で共用。企業ページの「求人ごとの実績」の表と求人フィルタ用。**Worker 用 SA に新表の dataViewer 付与が要る**（README 作業 8）。`DATA_VERSION` 18 → 19 | 手動実行 1,694 MB | 設定 `6aee95cf-…` に反映済み・手動実行 ok（求人行 69,194・求人 22,169 件・直接応募の行 575・タイトル無し 36 行。企業 × 種別 × 月の閲覧・応募が `cms_company_monthly` の種別行と一致（差 0）。属性マート 4,310,184 行（90 万 → 430 万）。所要 約 9 分） |
 | 2026-10-30 | **アカウント種別（`account_type` = プロファイルの 直接 / 紹介 / 派遣）の軸を追加**。`pcm` に `account_type`、`cms_company_master` に `account_types`（例 `直接,紹介`）/ `accounts_json`（プロファイル一覧）/ `jobs_json`（窓に掛かる求人の一覧。企業ページが任意の期間で重複排除して数える）、`cms_company_monthly` に `account_type` 列（`'__ALL__'` = 企業全体 + 種別ごとの行。全体だけ読むクエリは `WHERE account_type = '__ALL__'`）、`cms_scout_member_attributes_monthly` に `account_type` と `kind = 'application'`（応募した会員）。`view_raw` で `member_job_detail_views` を 1 回だけ読む。同じ会員が 2 種別で採用なら種別の行には両方に 1 ずつ（全体は 1）。Worker の属性照会は期間・種別で集約する形に変更（`DATA_VERSION` 17 → 18） | 手動実行 1,132 MB | 設定 `6aee95cf-…` に反映済み・手動実行 ok（`__ALL__` 12,334 行 + 直接 10,332 / 紹介 2,100 / 派遣 168 行。種別の合計 = 全体を送信・応募・閲覧・返信・選考中で確認、差 0。`jobs_json` 最大 161 KB） |
 | 2026-10-29 | 企業情報の元を `company_profiles`（差分・求人掲載のあるプロファイルのみ）から **`company_profiles_full`（全プロファイル・日次全件洗い替え）** に変更（`pcm` / RA・RDS 除外 / `latest_profiles`）。求人未掲載の契約企業（A-Gold・FP GLOBAL・サイエンテックス等）の企業種別が「不明」になっていた問題を解消。1 企業に複数プロファイルがあり掲載数・日付が同点のときは `profile_id` 最小の行を採用（全件表は `recorded_on` が同一のため順序を固定） | 手動実行 920 MB 級 | 設定 `6aee95cf-…` に反映済み・手動実行 ok（master 880 行のまま、`company_type = '不明'` 12 → 0、契約中 5 → 0）。変更前の `cms_company_master` は `cms_company_master_bak_20261029` に保存 |
 | 2026-10-27 | `cms_scout_member_attributes_monthly` に `kind`（scout / view）を追加し、求人を閲覧した会員の属性（`member_job_detail_views` × 会員属性）も同じ表に入れる（企業ページ「誰が求人を見ているか」）。`cms_company_master` に `jobs_window_distinct`（窓に掲載期間が重なる求人数。set_id 重複排除） | 手動実行 1,029 MB | スケジュールドクエリを PATCH で差し替え済み。`DATA_VERSION` 16 |

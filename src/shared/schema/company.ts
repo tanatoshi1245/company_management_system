@@ -50,7 +50,7 @@ export const AccountSchema = z.object({ type: z.string(), profiles: z.array(z.ob
 export type Account = z.infer<typeof AccountSchema>;
 
 /** アカウント種別ごとの月次（企業ページの種別切替用。全体は monthly） */
-export const AccountMonthlyRowSchema = z.object({ account: z.string(), month: z.string(), jobs: z.number(), sent: z.number(), intReply: z.number(), apps: z.number(), views: z.number(), hiresApp: z.number(), hiresScout: z.number(), inSel: z.number() });
+export const AccountMonthlyRowSchema = z.object({ account: z.string(), month: z.string(), jobs: z.number(), sent: z.number(), intReply: z.number(), apps: z.number(), views: z.number(), hiresApp: z.number(), hiresScout: z.number(), inSel: z.number(), /** 現ステータス別件数（st06〜st11。応募 + スカウト） */ st: z.record(z.string(), z.number()).default({}) });
 export type AccountMonthlyRow = z.infer<typeof AccountMonthlyRowSchema>;
 
 /** 窓に掲載期間が重なる求人（set_id で日英重複排除）。任意の期間・アカウントで数えるための一覧 */
@@ -61,9 +61,20 @@ export const ATTRIBUTE_KINDS = ['scout', 'view', 'application'] as const;
 /** 属性の内訳 1 行。kind: scout = スカウトを送った会員（count = 送信数、interested = 興味あり返信）/ view = 閲覧した会員（count = 閲覧数）/ application = 応募した会員（count = 応募数） */
 export const AttributeRowSchema = z.object({ kind: z.enum(ATTRIBUTE_KINDS), type: z.string(), value: z.string(), count: z.number(), interested: z.number() });
 export type AttributeRow = z.infer<typeof AttributeRowSchema>;
-/** GET /api/companies/:id/attributes の応答（期間 from〜to・アカウント種別で集約済み） */
-export const AttributesResponseSchema = z.object({ from: z.string(), to: z.string(), account: z.string().nullable(), rows: z.array(AttributeRowSchema) });
+/** GET /api/companies/:id/attributes の応答（期間 from〜to・アカウント種別・求人で集約済み。job 指定時は閲覧 / 応募だけ） */
+export const AttributesResponseSchema = z.object({ from: z.string(), to: z.string(), account: z.string().nullable(), job: z.string().nullable().default(null), rows: z.array(AttributeRowSchema) });
 export type AttributesResponse = z.infer<typeof AttributesResponseSchema>;
+
+/** 求人キー（API の job パラメータ）: 求人の set_id / job_id、または 'direct'（企業への直接応募） */
+export const JobKeySchema = z.string().regex(/^(\d{1,12}|direct)$/);
+/** 求人 1 件の期間集計（cms_company_job_monthly を job_key で SUM）。st は応募側の現ステータス別件数（st06〜st11） */
+export const JobRowSchema = z.object({ key: z.string(), title: z.string(), account: z.string(), direct: z.boolean(), publishFrom: z.string().nullable(), publishTo: z.string().nullable(), views: z.number(), apps: z.number(), hiresApp: z.number(), st: z.record(z.string(), z.number()) });
+export type JobRow = z.infer<typeof JobRowSchema>;
+export const JobMonthlyRowSchema = z.object({ month: z.string(), views: z.number(), apps: z.number(), hiresApp: z.number(), st: z.record(z.string(), z.number()) });
+export type JobMonthlyRow = z.infer<typeof JobMonthlyRowSchema>;
+/** GET /api/companies/:id/jobs の応答。monthly は job 指定時だけ（その求人の月次） */
+export const JobsResponseSchema = z.object({ from: z.string(), to: z.string(), account: z.string().nullable(), job: z.string().nullable(), rows: z.array(JobRowSchema), monthly: z.array(JobMonthlyRowSchema) });
+export type JobsResponse = z.infer<typeof JobsResponseSchema>;
 
 /** スカウト未利用の記録（cms_company_master.scout_unused_json。契約期間に入る月だけ、月の降順） */
 export const ScoutUnusedRowSchema = z.object({ month: z.string(), reason: z.string().nullable(), remarks: z.string().nullable(), source: z.enum(['sheet', 'app']).default('sheet') });

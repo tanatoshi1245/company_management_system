@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import type { AttributesResponse, CompanyDetailResponse } from '../../../shared/schema/company';
+import type { AttributesResponse, CompanyDetailResponse, JobRow, JobsResponse } from '../../../shared/schema/company';
 import type { BenchRow } from '../../../shared/schema/board';
 import { makeContext, scoreCompany, type ScoredCompany } from '../../../shared/metrics/score';
-import { LEVEL_ATTRIBUTES } from '../../../shared/labels';
+import { LEVEL_ATTRIBUTES, SELECTION_CARD_KEYS } from '../../../shared/labels';
 import { endOfMonth, monthOf } from '../../../shared/calendar/periods';
 import type { PieMode } from './components/AttributePiePanel';
 
@@ -45,17 +45,30 @@ export interface CompanyModel {
   /** 表示期間（from〜to のうち契約期間に入る月） */
   period: string[];
   totals: Totals;
-  /** 閲覧人数・応募人数の単月推移 */
+  /** 閲覧件数・応募件数の単月推移（求人選択時はその求人） */
   viewsApps: SeriesByMonth & { views: number[]; apps: number[] };
-  /** スカウト送信数・興味あり返信数（返信月基準）の単月推移 */
+  /** スカウト送信数・興味あり返信数（返信月基準）の単月推移（求人フィルタは効かない） */
   scoutTrend: SeriesByMonth & { sent: number[]; intReply: number[] };
+  /** 選考状況のカード: 期間中に応募 / 興味あり返信した人の、今のステータス別の人数（st06〜st11。求人選択時は応募側だけ） */
+  selection: Record<string, number>;
+  /** 選択中の求人（求人 API の集約行）。未選択・期間内にデータ無しは null */
+  jobRow: JobRow | null;
 }
+
+export type CompanyTab = 'jobs' | 'scout' | 'selection';
+export const COMPANY_TABS: { key: CompanyTab; label: string }[] = [
+  { key: 'jobs', label: '求人の実績' },
+  { key: 'scout', label: 'スカウトの実績' },
+  { key: 'selection', label: '選考状況' },
+];
 
 export interface PeriodSelection {
   from: string;
   to: string;
   /** '' = 全体、それ以外はアカウント種別（直接 / 紹介 / 派遣） */
   account: string;
+  /** '' = 全求人、それ以外は求人キー（set_id / job_id、または 'direct'） */
+  job: string;
 }
 
 interface Agg {
@@ -93,14 +106,15 @@ export function defaultPeriod(d: CompanyDetailResponse): { from: string; to: str
 }
 
 /** URL の from / to / account を検証して確定させる（窓の外・逆順・無いアカウントは既定に戻す） */
-export function resolvePeriod(d: CompanyDetailResponse, url: { from: string; to: string; account: string }): PeriodSelection {
+export function resolvePeriod(d: CompanyDetailResponse, url: { from: string; to: string; account: string; job?: string }): PeriodSelection {
   const def = defaultPeriod(d);
   const months = d.meta.months;
   const to = months.includes(url.to) ? url.to : def.to;
   let from = months.includes(url.from) ? url.from : def.from;
   if (from > to) from = to;
   const account = d.accounts.length > 1 && d.accounts.some((a) => a.type === url.account) ? url.account : '';
-  return { from, to, account };
+  const job = /^(\d{1,12}|direct)$/.test(url.job ?? '') ? (url.job as string) : '';
+  return { from, to, account, job };
 }
 
 /** 属性 API の応答 → 円グラフ用の内訳（mode × 属性種別 → 値と件数） */
@@ -139,7 +153,7 @@ export function countJobs(jobs: CompanyDetailResponse['jobs'], from: string, to:
   return keys.size;
 }
 
-export function useCompanyModel(d: CompanyDetailResponse | null, sel: PeriodSelection | null): CompanyModel | null {
+export function useCompanyModel(d: CompanyDetailResponse | null, sel: PeriodSelection | null, jobs: JobsResponse | null = null): CompanyModel | null {
   return useMemo(() => {
     if (!d || !sel) return null;
     const month = d.meta.month;
@@ -163,14 +177,23 @@ export function useCompanyModel(d: CompanyDetailResponse | null, sel: PeriodSele
     }
     const series = (k: keyof Agg) => period.map((m) => byMonth.get(m)?.[k] ?? 0);
     const sum = (xs: number[]) => xs.reduce((a, v) => a + v, 0);
+    // 求人フィルタ: 求人 API の月次（応募側だけ）で閲覧・応募・採用（応募経由）・選考状況を差し替える。スカウトは求人に紐付かないのでそのまま
+    const jobOn = sel.job !== '' && jobs !== null && jobs.job === sel.job;
+    const jobRow = jobOn ? (jobs.rows.find((r) => r.key === sel.job) ?? null) : null;
+    const jobByMonth = new Map<string, JobsResponse['monthly'][number]>();
+    if (jobOn) for (const r of jobs.monthly) jobByMonth.set(r.month, r);
+    const jobSeries = (k: 'views' | 'apps' | 'hiresApp') => period.map((m) => jobByMonth.get(m)?.[k] ?? 0);
+    const stSource = (m: string): Record<string, number> => (jobOn ? jobByMonth.get(m)?.st : sel.account ? d.accountMonthly.find((r) => r.account === sel.account && r.month === m)?.st : d.monthly.find((r) => r.month === m)?.st) ?? {};
+    const selection: Record<string, number> = {};
+    for (const k of SELECTION_CARD_KEYS) selection[k] = period.reduce((a, m) => a + (stSource(m)[k] ?? 0), 0);
     const totals: Totals = {
       months: period,
       fromMonth: base.fromMonth,
       truncated,
-      jobsDistinct: countJobs(d.jobs, sel.from, sel.to, sel.account, d.meta.asOf),
-      views: sum(series('views')),
-      apps: sum(series('apps')),
-      hiresApp: sum(series('hiresApp')),
+      jobsDistinct: jobOn ? (jobRow ? 1 : 0) : countJobs(d.jobs, sel.from, sel.to, sel.account, d.meta.asOf),
+      views: jobOn ? sum(jobSeries('views')) : sum(series('views')),
+      apps: jobOn ? sum(jobSeries('apps')) : sum(series('apps')),
+      hiresApp: jobOn ? sum(jobSeries('hiresApp')) : sum(series('hiresApp')),
       sent: sum(series('sent')),
       intReply: sum(series('intReply')),
       hiresScout: sum(series('hiresScout')),
@@ -181,8 +204,10 @@ export function useCompanyModel(d: CompanyDetailResponse | null, sel: PeriodSele
       months,
       period,
       totals,
-      viewsApps: { ...base, views: series('views'), apps: series('apps') },
+      viewsApps: { ...base, views: jobOn ? jobSeries('views') : series('views'), apps: jobOn ? jobSeries('apps') : series('apps') },
       scoutTrend: { ...base, sent: series('sent'), intReply: series('intReply') },
+      selection,
+      jobRow,
     };
-  }, [d, sel]);
+  }, [d, sel, jobs]);
 }

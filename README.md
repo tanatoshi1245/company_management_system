@@ -34,6 +34,7 @@ CS（カスタマーサクセス）向けの社内 Web アプリ。契約中企�
 | 4 | Cloudflare の Git 連携で Worker `company-management-system` を作る（Production branch = `main`、Deploy command = `npx wrangler deploy`） | Workers & Pages | 同 4 |
 | 5 | Secret 4 つを入れて Deploy、`/api/health` と curl 試験（未ログイン 302 / 401、gmail 403、他オリジン PUT 403）を行い結果を記入 | Cloudflare | 同 5〜6、[セキュリティチェックリスト](./docs/セキュリティチェックリスト.md) §2.3 |
 | 6 | 台帳（claude_analysis `04_アプリケーション/セキュリティ要件.md` §5.1 / §5.2）のキー ID・発行日を埋め、リリース 1 週間後に Workers Logs を確認 | claude_analysis | 同 7 |
+| 8 | **（2026-10-30 追加）求人ごとの実績**: 新しいマート表 `dwh.cms_company_job_monthly` に Worker 用 SA の読み取り権限を付与する（`bq add-iam-policy-binding --member=serviceAccount:<Worker 用 SA のメール> --role=roles/bigquery.dataViewer bq-hgt:dwh.cms_company_job_monthly`）。付与前は企業ページの「求人ごとの実績」の表だけ「権限待ち」の注記になり、他は動く | Cloud Shell | [Google Cloud 認証情報の発行手順](./docs/Google_Cloud認証情報の発行手順.md) §1 |
 | 7 | **（2026-10-23 追加）スカウト未利用の登録ページ**: D1 に `0003_scout_unused.sql` を適用（`npx wrangler d1 migrations apply CMS_DB --remote`）し、Worker 用 SA に BigQuery の書き込み先 `dwh.scout_unused_companies_monthly`（シート取込と同じ表。アプリは `match_method = 'app'` の行だけ書く）に `roles/bigquery.dataEditor` を付与（`bq add-iam-policy-binding --member=serviceAccount:<Worker 用 SA のメール> --role=roles/bigquery.dataEditor bq-hgt:dwh.scout_unused_companies_monthly`）。付与前でも登録は D1 に保存され画面に反映するが、BigQuery には「未反映」になる（登録ページの「BQ に再同期」で後から反映できる） | Cloudflare D1 / Cloud Shell | [デプロイ手順](./docs/デプロイ手順.md) 3・8 |
 
 ## 画面
@@ -41,7 +42,7 @@ CS（カスタマーサクセス）向けの社内 Web アプリ。契約中企�
 | ルート | 画面 | 主な内容 |
 |---|---|---|
 | `/` | 契約企業ボード | KPI タイル（契約企業数・求人枠消化率・ペース遅れ・ログインなし・契約終了間近）→ 注目レーン → `担当=自分` などの絞り込み → **マトリクス・ヒートマップ**（利用状況 / 反応 / 選考 / 接点 × 企業）。右上で **業界比 | 目標比** を切替（再取得なし） |
-| `/companies/:id` | 企業詳細 | **期間（開始月〜終了月）とアカウント種別（全体 / 直接 / 紹介 / 派遣。複数アカウント企業のみ）の切替**、契約期間・残日数・最終ログインのカード、選択期間の実績（左: 求人関連 / 右: スカウト関連。掲載求人数は期間で重複排除）、閲覧と応募 / 送信と興味あり返信の推移（2 軸の折れ線）、会員属性の円グラフ（誰が求人を見ているか = 閲覧 / 応募の切替、誰にスカウトを送っているか = 送信 / 興味あり の切替。期間・アカウントに連動）、スカウト未利用状況（シート取込 + アプリ登録） |
+| `/companies/:id` | 企業詳細 | **期間（開始月〜終了月）とアカウント種別（全体 / 直接 / 紹介 / 派遣。複数アカウント企業のみ）の切替**、契約期間・残日数・最終ログインのカード、その下に **3 タブ**（2026-10-30〜）: **求人の実績**（掲載求人数 / 閲覧件数 / 応募件数 / 採用（応募経由）、閲覧と応募の推移（2 軸）、誰が求人を見ているか（閲覧 / 応募）、**求人ごとの実績の表と求人フィルタ**（求人を選ぶとカード・推移・円グラフ・選考状況がその求人の分に））/ **スカウトの実績**（送信 / 興味あり返信 / 選考中 / 採用、送信と興味あり返信の推移、誰にスカウトを送っているか（送信 / 興味あり）、スカウト未利用状況）/ **選考状況**（面接調整中 → 採用 の 6 枚。期間中に応募 / 興味あり返信した人の今のステータス別人数） |
 | `/scout-unused` | スカウト未利用の理由 | 月ごとに「契約中・送信 0 件・スカウト枠あり・DA / RPO 以外」の企業と営業担当を並べ、理由（プルダウン 8 件）と補足（500 文字）を登録。D1 に保存 → BigQuery `scout_unused_companies_monthly` に `match_method = 'app'` の行として MERGE → 翌朝のマートで企業ページに統合（即時には D1 を重ねて表示） |
 | `/targets`, `/targets/:id` | 契約時の目標（メニューには出さない。URL 直打ちで開ける） | 一覧（達成率バー・未設定のみ・プラン既定値で一括登録）、企業別 12 か月グリッド（前月からコピー・既定値の適用・差分だけ保存・変更履歴）、企業の設定（担当上書き・枠の期間 / 上書き・メモ） |
 | `/settings`, `/help` | 設定・ヘルプ（メニューには出さない。URL 直打ちで開ける） | データの鮮度、Worker 設定の有無、プラン別の既定目標、担当上書き一覧、キャッシュ破棄、指標の定義一覧 |
@@ -93,7 +94,8 @@ tests/                vitest（worker / shared / app / repo）。helpers/fakeD1.
 | GET /api/meta | session | マートの版・データ最終日・営業日・注記 |
 | GET /api/board?month= | session | 企業 × 当月の実績・契約・担当・ベンチマーク（マート部分はキャッシュ、D1 はリクエストごと） |
 | GET /api/companies/:id?month= | session | 1 社の詳細（14 か月・アカウント種別ごとの 14 か月・窓に掛かる求人の一覧・日次累積・コホート・ベンチマーク系列・設定・目標） |
-| GET /api/companies/:id/attributes?from=&to=&account= | session | 会員属性の内訳（期間 from〜to の月、アカウント種別で BQ 側に集約。kind = scout / view / application） |
+| GET /api/companies/:id/attributes?from=&to=&account=&job= | session | 会員属性の内訳（期間 from〜to の月、アカウント種別・求人で BQ 側に集約。kind = scout / view / application。job 指定時は閲覧 / 応募だけ） |
+| GET /api/companies/:id/jobs?from=&to=&account=&job= | session | 求人ごとの期間集計（タイトル・閲覧件数・応募件数・採用・応募側の選考ステータス。閲覧の多い順）。job 指定でその求人の月次も。表 `cms_company_job_monthly`（SA の dataViewer 付与が要る） |
 | GET /api/targets?month=、GET /api/companies/:id/targets、GET …/targets/history | session | 目標（D1）、監査ログ |
 | PUT / DELETE /api/companies/:id/targets/:month、POST …/targets/copy、POST /api/targets/bulk-defaults | verified + 同一オリジン | 目標の登録・削除・コピー・一括既定値（更新 + 監査ログを 1 batch） |
 | GET / PUT /api/companies/:id/settings、GET /api/settings/overrides | session / verified | 企業設定（担当上書き・枠） |

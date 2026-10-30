@@ -4,8 +4,9 @@ import App from '../../src/app/App';
 import { clearResourceCache } from '../../src/app/lib/useResource';
 import { MockBqClient } from '../../src/worker/bq/mockClient';
 import { loadBoardCore, mergeBoard } from '../../src/worker/services/boardService';
-import { loadAttributes, loadCompanyCore, mergeCompanyDetail } from '../../src/worker/services/companyService';
+import { loadAttributes, loadCompanyCore, loadJobs, mergeCompanyDetail } from '../../src/worker/services/companyService';
 import { countJobs } from '../../src/app/features/company/companyModel';
+import { SELECTION_CARD_KEYS } from '../../src/shared/labels';
 import { mockRefreshLog } from '../../src/worker/bq/fixtures';
 import { addDays, monthOf, todayJst } from '../../src/shared/calendar/periods';
 import { monthProgress } from '../../src/shared/calendar/businessDays';
@@ -51,8 +52,16 @@ function installFetch(f: F, calls: string[], targetsFor: (id: string) => TargetR
     if (url.startsWith('/api/meta')) return Response.json(f.meta);
     if (url.startsWith('/api/me')) return Response.json(f.me);
     if (url.startsWith('/api/board')) return Response.json(f.board);
-    const a = url.match(/^\/api\/companies\/(\d+)\/attributes\?from=(\d{4}-\d{2})&to=(\d{4}-\d{2})(?:&account=([^&]+))?$/);
-    if (a) return Response.json(await loadAttributes(f.client, a[1], a[2], a[3], a[4] ? decodeURIComponent(a[4]) : null));
+    const sub = url.match(/^\/api\/companies\/(\d+)\/(attributes|jobs)\?(.*)$/);
+    if (sub) {
+      const q = new URLSearchParams(sub[3]);
+      const from = q.get('from') ?? '';
+      const to = q.get('to') ?? '';
+      const account = q.get('account');
+      const job = q.get('job');
+      if (sub[2] === 'attributes') return Response.json(await loadAttributes(f.client, sub[1], from, to, account, job));
+      return Response.json(await loadJobs(f.client, sub[1], from, to, account, job));
+    }
     const m = url.match(/^\/api\/companies\/(\d+)\?month=(\d{4}-\d{2})/);
     if (m) {
       const d = await f.detail(m[1], targetsFor(m[1]));
@@ -72,7 +81,7 @@ describe('企業詳細', () => {
   });
   afterEach(() => cleanup());
 
-  it('ヘッダのカード・期間の選択・実績（求人 / スカウト。期間の累積）・2 軸の推移 2 枚・属性の円グラフ 2 枚（閲覧 / 応募、送信 / 興味あり）・未利用状況。担当・SF・目標比較は無い', async () => {
+  it('求人の実績タブ（既定）: ヘッダのカード・期間の選択・タブ 3 つ・実績カード（掲載求人数 / 閲覧件数 / 応募件数）・2 軸の推移・閲覧 / 応募の円グラフ・求人ごとの表。担当・SF・目標比較は無い', async () => {
     installFetch(f, calls);
     const c = f.behind;
     window.history.replaceState(null, '', `/companies/${c.id}`);
@@ -97,83 +106,139 @@ describe('企業詳細', () => {
     // 単一アカウントの企業にはアカウント切替が無い
     expect(c.accountTypes.length).toBe(1);
     expect(screen.queryByRole('group', { name: 'アカウント種別の切替' })).toBeNull();
-    // 実績: 左 = 求人、右 = スカウト（直近 13 か月の累積）。当月の 8 タイル・ゲージ・目標比較は無い
-    const lower = document.querySelector('.co-lower')!;
-    const cols = lower.querySelectorAll(':scope > .stack');
-    expect(cols.length).toBe(2);
-    const jobs = within(cols[0] as HTMLElement).getByTestId('summary-jobs');
-    const scout = within(cols[1] as HTMLElement).getByTestId('summary-scout');
-    expect(Array.from(jobs.querySelectorAll('.stat .t')).map((e) => e.textContent)).toEqual(['掲載求人数（重複排除）', '閲覧人数', '応募人数', '採用（応募経由）']);
-    expect(Array.from(scout.querySelectorAll('.stat .t')).map((e) => e.textContent)).toEqual(['スカウト送信件数', '興味あり返信', '選考中（現在）', '採用（スカウト経由）']);
+    // タブ 3 つ（カードの下、同じ幅）。既定は求人の実績
+    const tablist = screen.getByRole('tablist', { name: '企業詳細のタブ' });
+    const tabs = Array.from(tablist.querySelectorAll('[role=tab]'));
+    expect(tabs.map((t) => t.textContent)).toEqual(['求人の実績', 'スカウトの実績', '選考状況']);
+    expect(tabs[0].getAttribute('aria-selected')).toBe('true');
+    expect(head.compareDocumentPosition(tablist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 求人の実績カード（掲載求人数 / 閲覧件数 / 応募件数 / 採用（応募経由））。スカウトのカードは別タブ
+    const jobs = screen.getByTestId('summary-jobs');
+    expect(screen.queryByTestId('summary-scout')).toBeNull();
+    expect(Array.from(jobs.querySelectorAll('.stat .t')).map((e) => e.textContent)).toEqual(['掲載求人数', '閲覧件数', '応募件数', '採用（応募経由）']);
+    expect(jobs.textContent).not.toMatch(/閲覧人数|応募人数|重複排除/);
     const num = (el: Element, key: string) => Number(el.querySelector(`[data-stat=${key}] .v`)?.textContent?.replace(/[^\d]/g, ''));
     const inWindow = detail.monthly.filter((m) => m.month >= fromSel.value && (!detail.company.contract.to || m.month <= detail.company.contract.to.slice(0, 7)));
     expect(num(jobs, 'views')).toBe(inWindow.reduce((a, m) => a + m.views, 0));
     expect(num(jobs, 'apps')).toBe(inWindow.reduce((a, m) => a + m.apps, 0));
     expect(num(jobs, 'jobs')).toBe(countJobs(detail.jobs, fromSel.value, f.month, '', detail.meta.asOf));
-    expect(num(scout, 'sent')).toBe(inWindow.reduce((a, m) => a + m.sent, 0));
-    expect(num(scout, 'intReply')).toBe(inWindow.reduce((a, m) => a + m.intReply, 0));
-    expect(num(scout, 'inSel')).toBe(detail.company.m.inSel);
     expect(document.querySelectorAll('.bullet').length).toBe(0);
     expect(screen.queryByRole('table', { name: '目標と実績' })).toBeNull();
-    expect(screen.queryByText('この月の目標は未登録です')).toBeNull();
-    expect(screen.queryByText('13 か月の推移')).toBeNull();
     expect(screen.queryByText('この画面の注意点')).toBeNull();
-    // 推移: 左 = 閲覧・応募、右 = 送信・返信。どちらも左右 2 軸（目盛の文字は系列の色）
-    expect(cols[0].querySelector('section[aria-label="閲覧と応募の推移"]')).toBeTruthy();
-    expect(cols[1].querySelector('section[aria-label="スカウト送信と興味あり返信の推移"]')).toBeTruthy();
+    // 推移: 閲覧・応募（左右 2 軸、目盛の文字は系列の色）。系列名は 閲覧件数 / 応募件数
+    expect(screen.getByRole('region', { name: '閲覧と応募の推移' })).toBeTruthy();
     const dual = document.querySelectorAll('.chart.dual');
-    expect(dual.length).toBe(2);
-    for (const ch of dual) {
-      expect(ch.querySelectorAll('.legend > span').length).toBe(2);
-      expect(ch.querySelectorAll('svg g[data-series] > path').length).toBe(2);
-      expect(ch.querySelectorAll('svg text.tick.left').length).toBe(5);
-      expect(ch.querySelectorAll('svg text.tick.right').length).toBe(5);
-      expect(ch.querySelector('svg text.tick.right')?.getAttribute('fill')).toBe('var(--cat-2)');
-      expect(ch.textContent).toContain('左軸');
-    }
-    fireEvent.click(screen.getAllByRole('button', { name: '表で見る' })[0]);
+    expect(dual.length).toBe(1);
+    const ch = dual[0];
+    expect(ch.querySelectorAll('.legend > span').length).toBe(2);
+    expect(ch.querySelectorAll('svg g[data-series] > path').length).toBe(2);
+    expect(ch.querySelectorAll('svg text.tick.left').length).toBe(5);
+    expect(ch.querySelectorAll('svg text.tick.right').length).toBe(5);
+    expect(ch.querySelector('svg text.tick.right')?.getAttribute('fill')).toBe('var(--cat-2)');
+    expect(ch.textContent).toContain('閲覧件数');
+    expect(ch.textContent).toContain('応募件数');
+    fireEvent.click(screen.getByRole('button', { name: '表で見る' }));
     const va = screen.getByRole('table', { name: '閲覧と応募の推移の表' });
     const lastRow = va.querySelector('tbody tr:last-child')!;
     const cells = Array.from(lastRow.querySelectorAll('td')).map((td) => td.textContent?.replace(/,/g, ''));
     expect(Number(cells[1])).toBe(c.m.views);
     expect(Number(cells[2])).toBe(c.m.apps);
-    // 属性の円グラフ: 左 = 誰が求人を見ているか（閲覧 / 応募）、右 = 誰にスカウトを送っているか（送信 / 興味あり）。同じ大きさ、タブ 8 種。内訳は期間・アカウント付きの属性 API から
-    await waitFor(() => expect(calls.some((u) => u.startsWith(`/api/companies/${c.id}/attributes?from=${fromSel.value}&to=${f.month}`) && !u.includes('account='))).toBe(true));
-    const pieViews = within(cols[0] as HTMLElement).getByTestId('pie-views');
-    const pieScout = within(cols[1] as HTMLElement).getByTestId('pie-scout');
-    await waitFor(() => expect(pieScout.querySelector('.pie svg')).toBeTruthy());
-    for (const pnl of [pieViews, pieScout]) {
-      const tabs = Array.from(pnl.querySelectorAll('[role=tab]')).map((t) => t.textContent);
-      expect(tabs).toEqual(['日本語レベル', '英語レベル', '現住所', '経験職種', '希望職種', '現年収', '希望年収', '年代']);
-      const svg = pnl.querySelector('.pie svg')!;
-      expect(svg.getAttribute('width')).toBe('200');
-      expect(pnl.querySelectorAll('.pie svg path').length).toBeGreaterThan(1);
-      expect(pnl.querySelectorAll('.pie-legend li').length).toBeLessThanOrEqual(9);
-    }
+    fireEvent.click(screen.getByRole('button', { name: 'グラフで見る' }));
+    // 属性の円グラフ: 誰が求人を見ているか（閲覧 / 応募）。内訳は期間付きの属性 API から
+    await waitFor(() => expect(calls.some((u) => u.startsWith(`/api/companies/${c.id}/attributes?from=${fromSel.value}&to=${f.month}`) && !u.includes('job='))).toBe(true));
+    const pieViews = screen.getByTestId('pie-views');
+    expect(screen.queryByTestId('pie-scout')).toBeNull();
+    await waitFor(() => expect(pieViews.querySelector('.pie svg')).toBeTruthy());
+    expect(Array.from(pieViews.querySelectorAll('[role=tab]')).map((t) => t.textContent)).toEqual(['日本語レベル', '英語レベル', '現住所', '経験職種', '希望職種', '現年収', '希望年収', '年代']);
+    expect(pieViews.querySelector('.pie svg')?.getAttribute('width')).toBe('200');
     const segV = pieViews.querySelector('.segmented')!;
     expect(Array.from(segV.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['閲覧', '応募']);
+    const viewsTotal = () => Number(pieViews.querySelector('.pie svg text.num')?.textContent?.replace(/,/g, ''));
+    const viewed = viewsTotal();
+    expect(viewed).toBeGreaterThan(0);
+    fireEvent.click(within(segV as HTMLElement).getByRole('button', { name: '応募' }));
+    expect(viewsTotal()).toBeLessThan(viewed);
+    expect(viewsTotal()).toBeGreaterThan(0);
+    fireEvent.click(within(segV as HTMLElement).getByRole('button', { name: '閲覧' }));
+    // 求人ごとの表（期間中。閲覧件数の降順）と求人フィルタ
+    const jobsApi = await loadJobs(f.client, c.id, fromSel.value, f.month, null, null);
+    expect(jobsApi.rows.length).toBeGreaterThan(1);
+    const table = await screen.findByRole('table', { name: '求人ごとの実績の表' });
+    expect(Array.from(table.querySelectorAll('thead th')).map((h) => h.textContent)).toEqual(['求人タイトル', 'アカウント', '掲載期間', '閲覧件数', '応募件数', '採用']);
+    const trs = Array.from(table.querySelectorAll('tbody tr'));
+    expect(trs.length).toBe(jobsApi.rows.length);
+    const shownViews = trs.map((tr) => Number(tr.querySelectorAll('td')[3].textContent?.replace(/[^\d]/g, '') || 0));
+    for (let k = 1; k < shownViews.length; k++) expect(shownViews[k - 1]).toBeGreaterThanOrEqual(shownViews[k]);
+    expect(jobsApi.rows.reduce((a, r) => a + r.views, 0)).toBe(num(jobs, 'views'));
+    expect(jobsApi.rows.reduce((a, r) => a + r.apps, 0)).toBe(num(jobs, 'apps'));
+    expect(trs.some((tr) => tr.textContent?.includes('企業への直接応募'))).toBe(jobsApi.rows.some((r) => r.direct));
+    const filter = screen.getByLabelText('求人フィルタ') as HTMLSelectElement;
+    expect(filter.options.length).toBe(jobsApi.rows.length + 1);
+    // 行を選ぶ → URL に job=、掲載求人数 1、閲覧件数 = その求人、推移はその求人の月次、属性 API に job=
+    const pick = jobsApi.rows.find((r) => !r.direct && r.views > 0)!;
+    const pickTr = trs[jobsApi.rows.indexOf(pick)] as HTMLElement;
+    fireEvent.click(pickTr);
+    await waitFor(() => expect(window.location.search).toContain(`job=${pick.key}`));
+    await waitFor(() => expect(num(jobs, 'views')).toBe(pick.views));
+    expect(num(jobs, 'jobs')).toBe(1);
+    expect(num(jobs, 'apps')).toBe(pick.apps);
+    expect(filter.value).toBe(pick.key);
+    expect(screen.getByRole('table', { name: '求人ごとの実績の表' }).querySelector('tbody tr[aria-selected=true]')?.textContent).toContain(pick.title);
+    expect(jobs.querySelector('.lead')?.textContent).toContain(pick.title);
+    await waitFor(() => expect(calls.some((u) => u.startsWith(`/api/companies/${c.id}/attributes?`) && u.endsWith(`&job=${pick.key}`))).toBe(true));
+    const jobMonthly = await loadJobs(f.client, c.id, fromSel.value, f.month, null, pick.key);
+    fireEvent.click(screen.getByRole('button', { name: '表で見る' }));
+    const va2 = screen.getByRole('table', { name: '閲覧と応募の推移の表' });
+    const last2 = Array.from(va2.querySelector('tbody tr:last-child')!.querySelectorAll('td')).map((td) => td.textContent?.replace(/,/g, ''));
+    expect(Number(last2[1])).toBe(jobMonthly.monthly.find((m) => m.month === f.month)?.views ?? 0);
+    // 解除で戻る
+    fireEvent.click(screen.getByRole('button', { name: '解除' }));
+    await waitFor(() => expect(window.location.search).not.toContain('job='));
+    await waitFor(() => expect(num(jobs, 'views')).toBe(inWindow.reduce((a, m) => a + m.views, 0)));
+    // 詳細の取得は 1 回（属性・求人 API は別）
+    expect(calls.filter((u) => u.startsWith(`/api/companies/${c.id}?`)).length).toBe(1);
+    // 期間を当月だけに絞ると実績が当月の値になり、URL に from= が入る。詳細本体は再取得しない
+    fireEvent.change(fromSel, { target: { value: f.month } });
+    await waitFor(() => expect(window.location.search).toContain(`from=${f.month}`));
+    await waitFor(() => expect(num(jobs, 'views')).toBe(detail.monthly[13].views));
+    expect(num(jobs, 'jobs')).toBe(countJobs(detail.jobs, f.month, f.month, '', detail.meta.asOf));
+    expect(calls.filter((u) => u.startsWith(`/api/companies/${c.id}?`)).length).toBe(1);
+  });
+
+  it('スカウトの実績タブ: 実績カード（興味あり返信）・2 軸の推移・送信 / 興味あり の円グラフ・スカウト未利用状況。求人フィルタは効かない', async () => {
+    installFetch(f, calls);
+    const c = f.behind;
+    window.history.replaceState(null, '', `/companies/${c.id}?tab=scout`);
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: c.name })).toBeTruthy());
+    const detail = (await f.detail(c.id))!;
+    expect(screen.getByRole('tab', { name: 'スカウトの実績' }).getAttribute('aria-selected')).toBe('true');
+    const scout = screen.getByTestId('summary-scout');
+    expect(screen.queryByTestId('summary-jobs')).toBeNull();
+    expect(Array.from(scout.querySelectorAll('.stat .t')).map((e) => e.textContent)).toEqual(['スカウト送信件数', '興味あり返信', '選考中（現在）', '採用（スカウト経由）']);
+    const num = (el: Element, key: string) => Number(el.querySelector(`[data-stat=${key}] .v`)?.textContent?.replace(/[^\d]/g, ''));
+    const fromSel = screen.getByLabelText('開始月') as HTMLSelectElement;
+    const inWindow = detail.monthly.filter((m) => m.month >= fromSel.value && (!detail.company.contract.to || m.month <= detail.company.contract.to.slice(0, 7)));
+    expect(num(scout, 'sent')).toBe(inWindow.reduce((a, m) => a + m.sent, 0));
+    expect(num(scout, 'intReply')).toBe(inWindow.reduce((a, m) => a + m.intReply, 0));
+    expect(num(scout, 'inSel')).toBe(detail.company.m.inSel);
+    expect(screen.getByRole('region', { name: 'スカウト送信と興味あり返信の推移' })).toBeTruthy();
+    expect(document.querySelectorAll('.chart.dual').length).toBe(1);
+    const pieScout = screen.getByTestId('pie-scout');
+    await waitFor(() => expect(pieScout.querySelector('.pie svg')).toBeTruthy());
     const seg = pieScout.querySelector('.segmented')!;
     expect(Array.from(seg.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['送信', '興味あり']);
     // 日本語レベルは番号の降順（凡例の 1 行目が 6.）。興味あり に切り替えると件数が減る
-    const firstLegend = () => pieScout.querySelector('.pie-legend li .lbl')?.textContent ?? '';
-    expect(firstLegend().startsWith('6.')).toBe(true);
+    expect(pieScout.querySelector('.pie-legend li .lbl')?.textContent?.startsWith('6.')).toBe(true);
     const total = () => Number(pieScout.querySelector('.pie svg text.num')?.textContent?.replace(/,/g, ''));
     const sentTotal = total();
     fireEvent.click(within(seg as HTMLElement).getByRole('button', { name: '興味あり' }));
     expect(total()).toBeLessThan(sentTotal);
     expect(total()).toBeGreaterThan(0);
-    // 閲覧の円はスカウトより大きい合計（モック）。応募に切り替えると閲覧より小さい
-    const viewsTotal = () => Number(pieViews.querySelector('.pie svg text.num')?.textContent?.replace(/,/g, ''));
-    const viewed = viewsTotal();
-    expect(viewed).toBeGreaterThan(sentTotal);
-    fireEvent.click(within(segV as HTMLElement).getByRole('button', { name: '応募' }));
-    expect(viewsTotal()).toBeLessThan(viewed);
-    expect(viewsTotal()).toBeGreaterThan(0);
-    // タブ切替で URL に attr=（スカウト側）
+    // タブ切替で URL に attr=
     const second = pieScout.querySelectorAll('[role=tab]')[1] as HTMLElement;
     fireEvent.click(second);
     await waitFor(() => expect(window.location.search).toContain('attr='));
-    expect(second.getAttribute('aria-selected')).toBe('true');
     // スカウト未利用状況の表（モックは 3 社に 1 社に記録がある）
     const unused = screen.getByRole('region', { name: 'スカウト未利用状況' });
     expect(within(unused).getByRole('link', { name: '理由を登録する' }).getAttribute('href')).toBe(`/scout-unused?month=${f.month}`);
@@ -185,17 +250,44 @@ describe('企業詳細', () => {
     } else {
       expect(unused.textContent).toContain('未利用の記録はありません');
     }
-    // 詳細の取得は 1 回（属性 API は別）
-    expect(calls.filter((u) => u.startsWith(`/api/companies/${c.id}?`)).length).toBe(1);
-    // 期間を当月だけに絞ると実績が当月の値になり、URL に from= が入り、属性 API を期間付きで取り直す。詳細本体は再取得しない
-    fireEvent.change(fromSel, { target: { value: f.month } });
-    await waitFor(() => expect(window.location.search).toContain(`from=${f.month}`));
-    await waitFor(() => expect(num(scout, 'sent')).toBe(detail.monthly[13].sent));
-    expect(num(jobs, 'views')).toBe(detail.monthly[13].views);
-    expect(num(jobs, 'jobs')).toBe(countJobs(detail.jobs, f.month, f.month, '', detail.meta.asOf));
-    await waitFor(() => expect(calls.some((u) => u.startsWith(`/api/companies/${c.id}/attributes?from=${f.month}&to=${f.month}`))).toBe(true));
-    expect(calls.filter((u) => u.startsWith(`/api/companies/${c.id}?`)).length).toBe(1);
-    expect(document.querySelector('.chart.dual svg g[data-series] > path')).toBeTruthy();
+    // 求人フィルタが URL にあってもスカウトの値は変わらず、注記が出る
+    const jobsApi = await loadJobs(f.client, c.id, fromSel.value, f.month, null, null);
+    const pick = jobsApi.rows.find((r) => !r.direct)!;
+    window.history.replaceState(null, '', `/companies/${c.id}?tab=scout&job=${pick.key}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await waitFor(() => expect(screen.getByTestId('summary-scout').querySelector('.lead')?.textContent).toContain('求人フィルタはスカウトには効きません'));
+    expect(num(screen.getByTestId('summary-scout'), 'sent')).toBe(inWindow.reduce((a, m) => a + m.sent, 0));
+    // タブをクリックすると URL に tab= が入る（求人の実績は既定なので消える）
+    fireEvent.click(screen.getByRole('tab', { name: '選考状況' }));
+    await waitFor(() => expect(window.location.search).toContain('tab=selection'));
+    fireEvent.click(screen.getByRole('tab', { name: '求人の実績' }));
+    await waitFor(() => expect(window.location.search).not.toContain('tab='));
+  });
+
+  it('選考状況タブ: 面接調整中 → 採用 の 6 枚（期間の st06〜st11 の合計）。求人を選ぶとその求人の応募側だけ', async () => {
+    installFetch(f, calls);
+    const c = f.behind;
+    window.history.replaceState(null, '', `/companies/${c.id}?tab=selection`);
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: c.name })).toBeTruthy());
+    const detail = (await f.detail(c.id))!;
+    const panel = screen.getByTestId('summary-selection');
+    expect(Array.from(panel.querySelectorAll('.stat .t')).map((e) => e.textContent)).toEqual(['面接調整中', '1st インタビュー', '2nd インタビュー', '3rd インタビュー', 'Final インタビュー', '採用']);
+    expect(panel.querySelector('.stat-grid')?.classList.contains('six')).toBe(true);
+    expect(Array.from(panel.querySelectorAll('.stat .t')).join('')).not.toMatch(/辞退|見送り|不採用|未対応|連絡/);
+    const num = (key: string) => Number(panel.querySelector(`[data-stat=${key}] .v`)?.textContent?.replace(/[^\d]/g, ''));
+    const fromSel = screen.getByLabelText('開始月') as HTMLSelectElement;
+    const period = detail.monthly.filter((m) => m.month >= fromSel.value && (!detail.company.contract.to || m.month <= detail.company.contract.to.slice(0, 7)));
+    for (const k of SELECTION_CARD_KEYS) expect(num(k)).toBe(period.reduce((a, m) => a + (m.st[k] ?? 0), 0));
+    expect(screen.queryByTestId('summary-jobs')).toBeNull();
+    // 求人を選ぶ（URL）→ その求人の応募側の件数
+    const jobsApi = await loadJobs(f.client, c.id, fromSel.value, f.month, null, null);
+    const pick = jobsApi.rows.find((r) => !r.direct && r.apps > 0)!;
+    window.history.replaceState(null, '', `/companies/${c.id}?tab=selection&job=${pick.key}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    await waitFor(() => expect(screen.getByTestId('summary-selection').querySelector('.lead')?.textContent).toContain('応募経由のみ'));
+    const jobMonthly = await loadJobs(f.client, c.id, fromSel.value, f.month, null, pick.key);
+    await waitFor(() => expect(Number(screen.getByTestId('summary-selection').querySelector('[data-stat=st06_interview_adjusting] .v')?.textContent?.replace(/[^\d]/g, ''))).toBe(jobMonthly.monthly.reduce((a, m) => a + (m.st.st06_interview_adjusting ?? 0), 0)));
   });
 
   it('複数アカウント（直接 + 紹介）の企業: ヘッダに切替が出て、種別を選ぶと実績・推移・属性がその種別の分になり、URL に account= が入る', async () => {
@@ -209,27 +301,33 @@ describe('企業詳細', () => {
     expect(screen.getByTestId('accounts-chip').textContent).toContain(`アカウント ${detail.accounts.length}`);
     const group = screen.getByRole('group', { name: 'アカウント種別の切替' });
     expect(Array.from(group.querySelectorAll('button')).map((b) => b.textContent)).toEqual(['全体', ...detail.accounts.map((a) => a.type)]);
-    const scout = screen.getByTestId('summary-scout');
     const jobs = screen.getByTestId('summary-jobs');
     const num = (el: Element, key: string) => Number(el.querySelector(`[data-stat=${key}] .v`)?.textContent?.replace(/[^\d]/g, ''));
     const fromSel = screen.getByLabelText('開始月') as HTMLSelectElement;
     const period = detail.monthly.map((m) => m.month).filter((m) => m >= fromSel.value && m <= f.month && (!detail.company.contract.to || m <= detail.company.contract.to.slice(0, 7)));
-    const allSent = num(scout, 'sent');
+    const allViews = num(jobs, 'views');
     const second = detail.accounts[1].type;
     fireEvent.click(within(group).getByRole('button', { name: second }));
     await waitFor(() => expect(window.location.search).toContain(`account=${encodeURIComponent(second)}`));
     const rows = detail.accountMonthly.filter((r) => r.account === second && period.includes(r.month));
-    await waitFor(() => expect(num(scout, 'sent')).toBe(rows.reduce((s, r) => s + r.sent, 0)));
-    expect(num(scout, 'sent')).toBeLessThan(allSent);
-    expect(num(jobs, 'views')).toBe(rows.reduce((s, r) => s + r.views, 0));
+    await waitFor(() => expect(num(jobs, 'views')).toBe(rows.reduce((s, r) => s + r.views, 0)));
+    expect(num(jobs, 'views')).toBeLessThan(allViews);
     expect(num(jobs, 'jobs')).toBe(countJobs(detail.jobs, fromSel.value, f.month, second, detail.meta.asOf));
+    expect(jobs.querySelector('.lead')?.textContent).toContain(`（${second}）`);
+    await waitFor(() => expect(calls.some((u) => u.startsWith(`/api/companies/${c.id}/attributes?`) && u.includes(`&account=${encodeURIComponent(second)}`))).toBe(true));
+    await waitFor(() => expect(calls.some((u) => u.startsWith(`/api/companies/${c.id}/jobs?`) && u.includes(`&account=${encodeURIComponent(second)}`))).toBe(true));
+    // 求人の表もその種別の求人だけ
+    const jobsApi = await loadJobs(f.client, c.id, fromSel.value, f.month, second, null);
+    await waitFor(() => expect(screen.getByRole('table', { name: '求人ごとの実績の表' }).querySelectorAll('tbody tr').length).toBe(jobsApi.rows.length));
+    // スカウトタブでも種別の値
+    fireEvent.click(screen.getByRole('tab', { name: 'スカウトの実績' }));
+    const scout = await screen.findByTestId('summary-scout');
+    expect(num(scout, 'sent')).toBe(rows.reduce((s, r) => s + r.sent, 0));
     expect(num(scout, 'inSel')).toBe(detail.accountMonthly.find((r) => r.account === second && r.month === f.month)?.inSel ?? 0);
-    expect(screen.getByTestId('summary-scout').querySelector('.lead')?.textContent).toContain(`（${second}）`);
-    await waitFor(() => expect(calls.some((u) => u.startsWith(`/api/companies/${c.id}/attributes?`) && u.endsWith(`&account=${encodeURIComponent(second)}`))).toBe(true));
     // 全体に戻すと URL から account= が消える
     fireEvent.click(within(group).getByRole('button', { name: '全体' }));
     await waitFor(() => expect(window.location.search).not.toContain('account='));
-    await waitFor(() => expect(num(scout, 'sent')).toBe(allSent));
+    await waitFor(() => expect(num(screen.getByTestId('summary-scout'), 'sent')).toBe(detail.monthly.filter((m) => period.includes(m.month)).reduce((s, m) => s + m.sent, 0)));
   });
 
   it('目標があっても目標比較の表は出さない（2026-10-27 から非表示。データは /targets で扱う）', async () => {
