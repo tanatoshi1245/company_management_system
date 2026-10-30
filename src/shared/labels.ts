@@ -60,6 +60,9 @@ export const STATUS_SHORT: Record<string, string> = {
 export const STATUS_ORDER: string[] = [...STATUS_KEYS.map((k) => STATUS_VALUES[k]), '(未設定)'];
 /** 「選考中」= 面接調整中〜最終面接 */
 export const IN_SELECTION_KEYS: StatusKey[] = ['st06_interview_adjusting', 'st07_interview_1st', 'st08_interview_2nd', 'st09_interview_3rd', 'st10_interview_final'];
+/** 企業ページ「選考状況」のカード（面接調整中 → 採用。辞退・見送り・不採用は出さない） */
+export const SELECTION_CARD_KEYS: StatusKey[] = [...IN_SELECTION_KEYS, 'st11_hired'];
+export const SELECTION_CARD_LABEL: Record<string, string> = { st06_interview_adjusting: '面接調整中', st07_interview_1st: '1st インタビュー', st08_interview_2nd: '2nd インタビュー', st09_interview_3rd: '3rd インタビュー', st10_interview_final: 'Final インタビュー', st11_hired: '採用' };
 
 /** スカウト未利用の理由（登録ページのプルダウン。番号の大きい順に並べる。文言はシート取込 scout_unused_companies_monthly と同じ） */
 export const SCOUT_UNUSED_REASONS = [

@@ -3,10 +3,10 @@ import app from '../../src/worker/index';
 import { baseEnv, ctx } from '../helpers/env';
 import { installFakeCache, uninstallFakeCache } from '../helpers/fakeCache';
 import { parseScoutUnused } from '../../src/worker/services/companyService';
-import { AttributesResponseSchema, CompanyDetailResponseSchema } from '../../src/shared/schema/company';
+import { AttributesResponseSchema, CompanyDetailResponseSchema, JobsResponseSchema } from '../../src/shared/schema/company';
 import { BoardResponseSchema } from '../../src/shared/schema/board';
 import { addMonths, monthOf, todayJst } from '../../src/shared/calendar/periods';
-import { ATTRIBUTE_TYPES } from '../../src/shared/labels';
+import { ATTRIBUTE_TYPES, SELECTION_CARD_KEYS } from '../../src/shared/labels';
 import { parseAccounts, parseJobs } from '../../src/worker/services/companyService';
 
 describe('/api/companies/:id（モック）', () => {
@@ -46,6 +46,7 @@ describe('/api/companies/:id（モック）', () => {
       expect(rows.reduce((s, r) => s + r.sent, 0)).toBe(all.sent);
       expect(rows.reduce((s, r) => s + r.views, 0)).toBe(all.views);
     }
+    for (const r of body.accountMonthly) for (const k of SELECTION_CARD_KEYS) expect(typeof r.st[k]).toBe('number');
     expect(Array.isArray(body.jobs)).toBe(true);
     for (const j of body.jobs) expect(j.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(typeof body.extra.jobsWindowDistinct).toBe('number');
@@ -92,6 +93,48 @@ describe('/api/companies/:id（モック）', () => {
     expect((await get(`${multi.id}/attributes?from=2020-01&to=${cur}`)).status).toBe(400);
     expect((await get(`${multi.id}/attributes?from=${from}&to=${cur}&account=DA`)).status).toBe(400);
     expect((await get(`${multi.id}/attributes?from=${from}`)).status).toBe(400);
+  });
+
+  it('/jobs: 求人ごとの期間集計（閲覧の多い順）。合計 = 月次の期間合計、直接応募の行、job= でその求人の月次、不正な job は 400、キャッシュ', async () => {
+    const board = BoardResponseSchema.parse(await (await app.fetch(new Request('http://x/api/board'), baseEnv, ctx)).json());
+    const c = board.companies.find((x) => x.limits.job && x.limits.job > 0 && x.m.apps > 0)!;
+    const cur = monthOf(todayJst());
+    const from = addMonths(cur, -3);
+    const res = await get(`${c.id}/jobs?from=${from}&to=${cur}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-cache')).toBe('MISS');
+    const body = JobsResponseSchema.parse(await res.json());
+    expect(body).toMatchObject({ from, to: cur, account: null, job: null, monthly: [] });
+    expect(body.rows.length).toBeGreaterThan(1);
+    for (let i = 1; i < body.rows.length; i++) expect(body.rows[i - 1].views).toBeGreaterThanOrEqual(body.rows[i].views);
+    const detail = CompanyDetailResponseSchema.parse(await (await get(c.id)).json());
+    const period = detail.monthly.filter((m) => m.month >= from && m.month <= cur);
+    expect(body.rows.reduce((s, r) => s + r.views, 0)).toBe(period.reduce((s, m) => s + m.views, 0));
+    expect(body.rows.reduce((s, r) => s + r.apps, 0)).toBe(period.reduce((s, m) => s + m.apps, 0));
+    const direct = body.rows.find((r) => r.direct);
+    expect(direct?.key).toBe('direct');
+    expect(direct?.title).toBe('企業への直接応募');
+    for (const r of body.rows) for (const k of SELECTION_CARD_KEYS) expect(typeof r.st[k]).toBe('number');
+    const pick = body.rows.find((r) => !r.direct)!;
+    const one = JobsResponseSchema.parse(await (await get(`${c.id}/jobs?from=${from}&to=${cur}&job=${pick.key}`)).json());
+    expect(one.job).toBe(pick.key);
+    expect(one.monthly.length).toBeGreaterThan(0);
+    expect(one.monthly.reduce((s, m) => s + m.views, 0)).toBe(pick.views);
+    expect(one.rows.length).toBe(body.rows.length);
+    expect((await get(`${c.id}/jobs?from=${from}&to=${cur}`)).headers.get('x-cache')).toBe('HIT');
+    expect((await get(`${c.id}/jobs?from=${from}&to=${cur}&job=abc`)).status).toBe(400);
+    expect((await get(`${c.id}/jobs?from=${cur}&to=${from}`)).status).toBe(400);
+    expect((await get(`${c.id}/jobs?from=${from}`)).status).toBe(400);
+    // 属性も job= で絞れる: 閲覧 / 応募だけ、件数は全体より少ない
+    const attrAll = AttributesResponseSchema.parse(await (await get(`${c.id}/attributes?from=${from}&to=${cur}`)).json());
+    const attrJob = AttributesResponseSchema.parse(await (await get(`${c.id}/attributes?from=${from}&to=${cur}&job=${pick.key}`)).json());
+    expect(attrJob.job).toBe(pick.key);
+    expect(attrJob.rows.some((r) => r.kind === 'scout')).toBe(false);
+    expect(attrJob.rows.some((r) => r.kind === 'view')).toBe(true);
+    const sum = (rows: typeof attrAll.rows, kind: string) => rows.filter((r) => r.kind === kind).reduce((s, r) => s + r.count, 0);
+    expect(sum(attrJob.rows, 'view')).toBeLessThan(sum(attrAll.rows, 'view'));
+    expect(sum(attrJob.rows, 'view')).toBeGreaterThan(0);
+    expect((await get(`${c.id}/attributes?from=${from}&to=${cur}&job=x`)).status).toBe(400);
   });
 
   it('存在しない ID・形式違いは 404、範囲外の月は 400', async () => {

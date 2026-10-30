@@ -41,8 +41,8 @@ BigQuery を「読むだけ」のアプリに必要なのは **2 つだけ**。
 | `roles/secretmanager.secretAccessor` | アプリは Secret Manager を読まない（鍵は Workers Secret に入れる） |
 | Default Compute SA の流用 | 禁止（§3.1） |
 
-本アプリで dataViewer を付ける 9 表（`src/worker/sql/*.ts` が参照する表。`cms_contract_snapshot_daily` / `cms_status_snapshot_daily` / `cms_company_login_daily` / `cms_dim_industry_alias` は Worker が読まないので付けない）:
-`cms_company_master`, `cms_company_monthly`, `cms_company_daily_usage`, `cms_scout_cohort_status`, `cms_application_cohort_status`, `cms_scout_member_attributes_monthly`, `cms_company_login`, `cms_industry_benchmark_monthly`, `cms_refresh_log`
+本アプリで dataViewer を付ける 10 表（`src/worker/sql/*.ts` が参照する表。`cms_contract_snapshot_daily` / `cms_status_snapshot_daily` / `cms_company_login_daily` / `cms_dim_industry_alias` は Worker が読まないので付けない）:
+`cms_company_master`, `cms_company_monthly`, `cms_company_daily_usage`, `cms_scout_cohort_status`, `cms_application_cohort_status`, `cms_scout_member_attributes_monthly`, `cms_company_login`, `cms_industry_benchmark_monthly`, `cms_refresh_log`, `cms_company_job_monthly`（2026-10-30 追加。既存の SA には `bq add-iam-policy-binding --member=serviceAccount:<SA> --role=roles/bigquery.dataViewer bq-hgt:dwh.cms_company_job_monthly` を 1 回）
 
 > 表単位の IAM は `CREATE OR REPLACE TABLE` で表を作り直しても残る（表の IAM ポリシーは表名に付く）。マートに表を足したら、この一覧と IAM の両方を更新する。
 
@@ -52,7 +52,7 @@ BigQuery を「読むだけ」のアプリに必要なのは **2 つだけ**。
 PROJECT=bq-hgt
 SA=cms-bq-reader                                   # 新規アプリでは変える
 SA_EMAIL=$SA@$PROJECT.iam.gserviceaccount.com
-TABLES="cms_company_master cms_company_monthly cms_company_daily_usage cms_scout_cohort_status cms_application_cohort_status cms_scout_member_attributes_monthly cms_company_login cms_industry_benchmark_monthly cms_refresh_log"
+TABLES="cms_company_master cms_company_monthly cms_company_daily_usage cms_scout_cohort_status cms_application_cohort_status cms_scout_member_attributes_monthly cms_company_login cms_industry_benchmark_monthly cms_refresh_log cms_company_job_monthly"
 
 gcloud config set project $PROJECT
 

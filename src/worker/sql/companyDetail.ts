@@ -44,7 +44,7 @@ export function companyAccountMonthlyQuery(companyId: string): BuiltQuery {
     label: 'company_account_monthly_one',
     sql: `
 SELECT account_type, month_ym, active_jobs_eom, scout_sent, interested_by_reply_month, applications, job_views,
-       hires_from_application, hires_from_scout, in_selection
+       hires_from_application, hires_from_scout, in_selection, st06_interview_adjusting, st07_interview_1st, st08_interview_2nd, st09_interview_3rd, st10_interview_final, st11_hired
 FROM \`bq-hgt.dwh.cms_company_monthly\`
 WHERE company_id = @id AND account_type != '__ALL__'
 ORDER BY account_type, month_ym`,
@@ -93,16 +93,51 @@ ORDER BY cohort_month, status`,
  * 会員属性の内訳（kind = scout / view / application × 属性種別 × 値）。期間（月初 from〜to）とアカウント種別（NULL = 全体）で BQ 側に集約させる。
  * members（会員の distinct）は月をまたいで足せないので返さない
  */
-export function memberAttributesQuery(companyId: string, fromMonthFirstDay: string, toMonthFirstDay: string, accountType: string | null): BuiltQuery {
+export function memberAttributesQuery(companyId: string, fromMonthFirstDay: string, toMonthFirstDay: string, accountType: string | null, jobKey: string | null = null): BuiltQuery {
   return {
     label: 'member_attributes',
     sql: `
 SELECT kind, attribute_type, attribute_value, SUM(scouts) AS scouts, SUM(interested_scouts) AS interested_scouts
 FROM \`bq-hgt.dwh.cms_scout_member_attributes_monthly\`
-WHERE company_id = @id AND sent_month BETWEEN @from AND @to AND (@account IS NULL OR account_type = @account)
+WHERE company_id = @id AND sent_month BETWEEN @from AND @to AND (@account IS NULL OR account_type = @account) AND (@job IS NULL OR job_key = @job)
 GROUP BY 1, 2, 3
 ORDER BY 1, 2, 4 DESC`,
+    params: [p.int('id', Number(companyId)), p.date('from', fromMonthFirstDay), p.date('to', toMonthFirstDay), p.nullableStr('account', accountType), p.nullableStr('job', jobKey)],
+  };
+}
+
+/** 求人単位の集計（期間 from〜to の月、アカウント種別）。企業ページの求人の表・求人フィルタ用。閲覧数の多い順 */
+export function companyJobsQuery(companyId: string, fromMonthFirstDay: string, toMonthFirstDay: string, accountType: string | null): BuiltQuery {
+  return {
+    label: 'company_jobs',
+    sql: `
+SELECT job_key, ANY_VALUE(job_title) AS job_title, ANY_VALUE(account_type) AS account_type, LOGICAL_OR(is_direct) AS is_direct,
+       CAST(MIN(publish_from) AS STRING) AS publish_from,
+       CAST(IF(LOGICAL_OR(publish_from IS NOT NULL AND publish_to IS NULL), NULL, MAX(publish_to)) AS STRING) AS publish_to,
+       SUM(job_views) AS job_views, SUM(applications) AS applications, SUM(hires_from_application) AS hires_from_application,
+       SUM(st06_interview_adjusting) AS st06_interview_adjusting, SUM(st07_interview_1st) AS st07_interview_1st, SUM(st08_interview_2nd) AS st08_interview_2nd,
+       SUM(st09_interview_3rd) AS st09_interview_3rd, SUM(st10_interview_final) AS st10_interview_final, SUM(st11_hired) AS st11_hired
+FROM \`bq-hgt.dwh.cms_company_job_monthly\`
+WHERE company_id = @id AND month BETWEEN @from AND @to AND (@account IS NULL OR account_type = @account)
+GROUP BY job_key
+ORDER BY job_views DESC, applications DESC, job_key`,
     params: [p.int('id', Number(companyId)), p.date('from', fromMonthFirstDay), p.date('to', toMonthFirstDay), p.nullableStr('account', accountType)],
+  };
+}
+
+/** 1 求人の月次（期間 from〜to）。求人フィルタ選択時の推移・数値用 */
+export function companyJobMonthlyQuery(companyId: string, jobKey: string, fromMonthFirstDay: string, toMonthFirstDay: string, accountType: string | null): BuiltQuery {
+  return {
+    label: 'company_job_monthly_one',
+    sql: `
+SELECT month_ym, SUM(job_views) AS job_views, SUM(applications) AS applications, SUM(hires_from_application) AS hires_from_application,
+       SUM(st06_interview_adjusting) AS st06_interview_adjusting, SUM(st07_interview_1st) AS st07_interview_1st, SUM(st08_interview_2nd) AS st08_interview_2nd,
+       SUM(st09_interview_3rd) AS st09_interview_3rd, SUM(st10_interview_final) AS st10_interview_final, SUM(st11_hired) AS st11_hired
+FROM \`bq-hgt.dwh.cms_company_job_monthly\`
+WHERE company_id = @id AND job_key = @job AND month BETWEEN @from AND @to AND (@account IS NULL OR account_type = @account)
+GROUP BY month_ym
+ORDER BY month_ym`,
+    params: [p.int('id', Number(companyId)), p.str('job', jobKey), p.date('from', fromMonthFirstDay), p.date('to', toMonthFirstDay), p.nullableStr('account', accountType)],
   };
 }
 

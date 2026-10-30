@@ -5,12 +5,12 @@ import { lastNMonths, monthOf, todayJst } from '../../shared/calendar/periods';
 import { monthProgress } from '../../shared/calendar/businessDays';
 import { DATA_VERSION } from '../../shared/schema/common';
 import type { BoardMeta } from '../../shared/schema/board';
-import { AccountSchema, AttributeRowSchema, JobRangeSchema, ScoutUnusedRowSchema, type Account, type AttributeRow, type AttributesResponse, type CompanyDetailResponse, type CompanySettings, type JobRange, type ScoutUnusedRow } from '../../shared/schema/company';
+import { AccountSchema, AttributeRowSchema, JobRangeSchema, ScoutUnusedRowSchema, type Account, type AttributeRow, type AttributesResponse, type CompanyDetailResponse, type CompanySettings, type JobRange, type JobRow, type JobsResponse, type ScoutUnusedRow } from '../../shared/schema/company';
 import { z } from 'zod';
-import { STATUS_KEYS } from '../../shared/labels';
+import { SELECTION_CARD_KEYS, STATUS_KEYS } from '../../shared/labels';
 import { martTtlSec, type RefreshMeta } from './refreshMeta';
-import { buildBoardCompany, mergeCompany, MONTHS_IN_MART, num, numOrNull, str, toMonthly, type MonthlyAgg } from './boardService';
-import { applicationCohortQuery, benchSeriesQuery, companyAccountMonthlyQuery, companyLoginByIdQuery, companyMasterByIdQuery, companyMonthlyByIdQuery, dailyUsageQuery, memberAttributesQuery, scoutCohortQuery } from '../sql/companyDetail';
+import { bool, buildBoardCompany, mergeCompany, MONTHS_IN_MART, num, numOrNull, str, toMonthly, type MonthlyAgg } from './boardService';
+import { applicationCohortQuery, benchSeriesQuery, companyAccountMonthlyQuery, companyJobMonthlyQuery, companyJobsQuery, companyLoginByIdQuery, companyMasterByIdQuery, companyMonthlyByIdQuery, dailyUsageQuery, memberAttributesQuery, scoutCohortQuery } from '../sql/companyDetail';
 import { rowToValues, type TargetRow } from '../d1/targetsRepo';
 import type { SettingsRow } from '../d1/settingsRepo';
 
@@ -58,6 +58,21 @@ export function parseJobs(raw: unknown): JobRange[] {
 
 /** 属性 API で指定できるアカウント種別 */
 export const ACCOUNT_TYPES = ['直接', '紹介', '派遣'] as const;
+
+/** API の求人キー（'direct' = 企業への直接応募）→ マートの job_key */
+export function jobKeyToMart(job: string | null): string | null {
+  return job === null ? null : job === 'direct' ? '(direct)' : job;
+}
+export function jobKeyFromMart(key: string): string {
+  return key === '(direct)' ? 'direct' : key;
+}
+
+/** 選考状況のカード用: st06〜st11 を行から取り出す */
+function stOf(r: Row): Record<string, number> {
+  const st: Record<string, number> = {};
+  for (const k of SELECTION_CARD_KEYS) st[k] = num(r[k]);
+  return st;
+}
 
 export async function loadCompanyCore(client: BqClient, companyId: string, month: string, refresh: RefreshMeta, now: Date = new Date()): Promise<CompanyCore | null> {
   const currentMonth = monthOf(refresh.dataVersion);
@@ -122,7 +137,7 @@ export async function loadCompanyCore(client: BqClient, companyId: string, month
     accounts: parseAccounts(master.accounts_json),
     accountMonthly: acctMonthly.rows
       .filter((r) => months.includes(String(r.month_ym)))
-      .map((r) => ({ account: String(r.account_type), month: String(r.month_ym), jobs: num(r.active_jobs_eom), sent: num(r.scout_sent), intReply: num(r.interested_by_reply_month), apps: num(r.applications), views: num(r.job_views), hiresApp: num(r.hires_from_application), hiresScout: num(r.hires_from_scout), inSel: num(r.in_selection) })),
+      .map((r) => ({ account: String(r.account_type), month: String(r.month_ym), jobs: num(r.active_jobs_eom), sent: num(r.scout_sent), intReply: num(r.interested_by_reply_month), apps: num(r.applications), views: num(r.job_views), hiresApp: num(r.hires_from_application), hiresScout: num(r.hires_from_scout), inSel: num(r.in_selection), st: stOf(r) })),
     jobs: parseJobs(master.jobs_json),
     scoutUnused: parseScoutUnused(master.scout_unused_json),
     benchSeries: bench.rows.map((b) => ({ month: String(b.month_ym), industry: String(b.industry), companyType: String(b.company_type), metric: String(b.metric), n: num(b.n_companies), mean: numOrNull(b.mean), p25: numOrNull(b.p25), median: numOrNull(b.median), p75: numOrNull(b.p75) })),
@@ -141,25 +156,61 @@ export async function getCompanyCore(client: BqClient, companyId: string, month:
   return { core, hit: false };
 }
 
-/** 属性の内訳（期間 from〜to の月、アカウント種別 or 全体）。マート側で集約済みの行を返す */
-export async function loadAttributes(client: BqClient, companyId: string, from: string, to: string, account: string | null): Promise<AttributesResponse> {
-  const res = await client.run(memberAttributesQuery(companyId, `${from}-01`, `${to}-01`, account));
+/** 属性の内訳（期間 from〜to の月、アカウント種別 or 全体、求人 or 全求人）。マート側で集約済みの行を返す。求人指定時は閲覧 / 応募だけ（スカウトは求人に紐付かない） */
+export async function loadAttributes(client: BqClient, companyId: string, from: string, to: string, account: string | null, job: string | null = null): Promise<AttributesResponse> {
+  const res = await client.run(memberAttributesQuery(companyId, `${from}-01`, `${to}-01`, account, jobKeyToMart(job)));
   const rows: AttributeRow[] = [];
   for (const r of res.rows) {
     const parsed = AttributeRowSchema.safeParse({ kind: String(r.kind), type: String(r.attribute_type), value: String(r.attribute_value), count: num(r.scouts), interested: num(r.interested_scouts) });
     if (parsed.success) rows.push(parsed.data);
   }
-  return { from, to, account, rows };
+  return { from, to, account, job, rows };
 }
 
-export async function getAttributes(client: BqClient, companyId: string, from: string, to: string, account: string | null, refresh: RefreshMeta, cacheEpoch: string, opts: { now?: Date; refresh?: boolean; capSec?: number; ctx?: { waitUntil(p: Promise<unknown>): void } } = {}): Promise<{ body: AttributesResponse; hit: boolean }> {
+type CacheOpts = { now?: Date; refresh?: boolean; capSec?: number; ctx?: { waitUntil(p: Promise<unknown>): void } };
+
+export async function getAttributes(client: BqClient, companyId: string, from: string, to: string, account: string | null, refresh: RefreshMeta, cacheEpoch: string, opts: CacheOpts & { job?: string | null } = {}): Promise<{ body: AttributesResponse; hit: boolean }> {
   const now = opts.now ?? new Date();
-  const key = await cacheKey('company-attributes', { id: companyId, from, to, account, dv: refresh.dataVersion, epoch: cacheEpoch, v: DATA_VERSION, mock: client.mock });
+  const job = opts.job ?? null;
+  const key = await cacheKey('company-attributes', { id: companyId, from, to, account, job, dv: refresh.dataVersion, epoch: cacheEpoch, v: DATA_VERSION, mock: client.mock });
   if (!opts.refresh) {
     const hit = await cacheGet<AttributesResponse>(key);
     if (hit) return { body: hit, hit: true };
   }
-  const body = await loadAttributes(client, companyId, from, to, account);
+  const body = await loadAttributes(client, companyId, from, to, account, job);
+  await cachePut(key, body, martTtlSec(refresh, now, opts.capSec), opts.ctx);
+  return { body, hit: false };
+}
+
+/** 求人単位の集計（期間・アカウント種別）と、求人指定時はその求人の月次。cms_company_job_monthly から */
+export async function loadJobs(client: BqClient, companyId: string, from: string, to: string, account: string | null, job: string | null): Promise<JobsResponse> {
+  const [agg, monthly] = await Promise.all([
+    client.run(companyJobsQuery(companyId, `${from}-01`, `${to}-01`, account)),
+    job === null ? Promise.resolve(null) : client.run(companyJobMonthlyQuery(companyId, jobKeyToMart(job) ?? job, `${from}-01`, `${to}-01`, account)),
+  ]);
+  const rows: JobRow[] = agg.rows.map((r) => ({
+    key: jobKeyFromMart(String(r.job_key)),
+    title: String(r.job_title ?? ''),
+    account: String(r.account_type ?? ''),
+    direct: bool(r.is_direct),
+    publishFrom: str(r.publish_from),
+    publishTo: str(r.publish_to),
+    views: num(r.job_views),
+    apps: num(r.applications),
+    hiresApp: num(r.hires_from_application),
+    st: stOf(r),
+  }));
+  return { from, to, account, job, rows, monthly: (monthly?.rows ?? []).map((r) => ({ month: String(r.month_ym), views: num(r.job_views), apps: num(r.applications), hiresApp: num(r.hires_from_application), st: stOf(r) })) };
+}
+
+export async function getJobs(client: BqClient, companyId: string, from: string, to: string, account: string | null, job: string | null, refresh: RefreshMeta, cacheEpoch: string, opts: CacheOpts = {}): Promise<{ body: JobsResponse; hit: boolean }> {
+  const now = opts.now ?? new Date();
+  const key = await cacheKey('company-jobs', { id: companyId, from, to, account, job, dv: refresh.dataVersion, epoch: cacheEpoch, v: DATA_VERSION, mock: client.mock });
+  if (!opts.refresh) {
+    const hit = await cacheGet<JobsResponse>(key);
+    if (hit) return { body: hit, hit: true };
+  }
+  const body = await loadJobs(client, companyId, from, to, account, job);
   await cachePut(key, body, martTtlSec(refresh, now, opts.capSec), opts.ctx);
   return { body, hit: false };
 }

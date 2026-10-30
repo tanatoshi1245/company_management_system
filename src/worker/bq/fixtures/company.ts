@@ -24,24 +24,101 @@ export function mockAccountsJson(id: string, today = todayJst()): string {
   return JSON.stringify(out);
 }
 
+const JOB_TITLES = ['ソフトウェアエンジニア', '営業（法人向け）', 'プロジェクトマネージャー', 'カスタマーサポート', '経理スタッフ', 'マーケティング担当', '人事（採用）', 'データアナリスト', 'バイリンガル事務', '品質保証エンジニア'];
+
 /** jobs_json: 窓に掛かる求人。掲載開始・終了を散らして、期間を変えると件数が変わるようにする。アカウントが 2 つなら 6:4 で分ける */
-export function mockJobs(id: string, today = todayJst()): { a: string; k: number; s: string; e: string | null }[] {
+export function mockJobs(id: string, today = todayJst()): { a: string; k: number; s: string; e: string | null; title: string }[] {
   const c = mockCompanies(today).find((x) => String(x.id) === id);
   if (!c || c.jobLimit === 0) return [];
   const rand = seeded(Number(id) * 17);
   const months = mockMonths(today);
   const accounts = mockAccountTypes(c);
   const n = (c.jobLimit ?? 12) * 2 + (Number(id) % 5);
-  const out: { a: string; k: number; s: string; e: string | null }[] = [];
+  const out: { a: string; k: number; s: string; e: string | null; title: string }[] = [];
   for (let i = 0; i < n; i++) {
     const startM = months[between(rand, 0, months.length - 1)];
     const s = `${startM}-${String(between(rand, 1, 28)).padStart(2, '0')}`;
     const open = rand() < 0.5;
     const e = open ? null : addDays(s, between(rand, 20, 120));
     const a = accounts.length > 1 ? (i % 5 < 3 ? accounts[0] : accounts[1]) : (accounts[0] ?? c.type);
-    out.push({ a, k: Number(id) * 1000 + i, s, e: e && e < s ? null : e });
+    out.push({ a, k: Number(id) * 1000 + i, s, e: e && e < s ? null : e, title: `${JOB_TITLES[i % JOB_TITLES.length]}（${i + 1}）` });
   }
   return out.sort((x, y) => (x.s < y.s ? 1 : -1));
+}
+
+const JOB_ST_KEYS = ['st06_interview_adjusting', 'st07_interview_1st', 'st08_interview_2nd', 'st09_interview_3rd', 'st10_interview_final', 'st11_hired'];
+
+/**
+ * cms_company_job_monthly のモック（企業 × 求人 × 月）。各月の閲覧 / 応募の合計が mockCompanyMonthlyOne の job_views / applications と一致するよう、
+ * 月に掲載中の求人に按分し、残りを最後の求人に寄せる。応募の 1 割は「企業への直接応募」('(direct)') の行に
+ */
+export function mockJobMonthlyRows(id: string, today = todayJst()): Row[] {
+  const jobs = mockJobs(id, today);
+  const c = mockCompanies(today).find((x) => String(x.id) === id);
+  if (!c) return [];
+  const rand = seeded(Number(id) * 23);
+  const out: Row[] = [];
+  for (const m of mockCompanyMonthlyOne(id, today)) {
+    const ym = String(m.month_ym);
+    const totalViews = Number(m.job_views);
+    const totalApps = Number(m.applications);
+    const direct = Math.round(totalApps * 0.1);
+    const active = jobs.filter((j) => j.s <= `${ym}-31` && (j.e === null || j.e >= `${ym}-01`));
+    const pool = active.length ? active : jobs.slice(0, 1);
+    if (!pool.length) continue;
+    const weights = pool.map(() => 0.2 + rand());
+    const wsum = weights.reduce((a, b) => a + b, 0);
+    let leftV = totalViews;
+    let leftA = totalApps - direct;
+    pool.forEach((j, i) => {
+      const last = i === pool.length - 1;
+      const v = last ? leftV : Math.min(leftV, Math.round((totalViews * weights[i]) / wsum));
+      const a = last ? leftA : Math.min(leftA, Math.round(((totalApps - direct) * weights[i]) / wsum));
+      leftV -= v;
+      leftA -= a;
+      if (v === 0 && a === 0) return;
+      const row: Row = { month_ym: ym, account_type: j.a, job_key: String(j.k), job_title: j.title, is_direct: false, publish_from: j.s, publish_to: j.e, job_views: v, applications: a, hires_from_application: a > 3 && rand() < 0.2 ? 1 : 0 };
+      JOB_ST_KEYS.forEach((k, idx) => (row[k] = Math.round(a * [0.15, 0.1, 0.05, 0.02, 0.03, 0.05][idx])));
+      out.push(row);
+    });
+    if (direct > 0) {
+      const row: Row = { month_ym: ym, account_type: jobs[0]?.a ?? c.type, job_key: '(direct)', job_title: '企業への直接応募', is_direct: true, publish_from: null, publish_to: null, job_views: 0, applications: direct, hires_from_application: 0 };
+      JOB_ST_KEYS.forEach((k) => (row[k] = 0));
+      out.push(row);
+    }
+  }
+  return out;
+}
+
+function sumRows(rows: Row[], keys: string[]): Row {
+  const out: Row = {};
+  for (const k of keys) out[k] = rows.reduce((s, r) => s + Number(r[k] ?? 0), 0);
+  return out;
+}
+
+/** company_jobs: 期間・アカウント種別で求人ごとに集約（閲覧の多い順） */
+export function mockCompanyJobs(id: string, fromYmd: string, toYmd: string, account: string | null, today = todayJst()): Row[] {
+  const from = monthOf(fromYmd);
+  const to = monthOf(toYmd);
+  const rows = mockJobMonthlyRows(id, today).filter((r) => String(r.month_ym) >= from && String(r.month_ym) <= to && (!account || r.account_type === account));
+  const by = new Map<string, Row[]>();
+  for (const r of rows) by.set(String(r.job_key), [...(by.get(String(r.job_key)) ?? []), r]);
+  const out: Row[] = [];
+  for (const [job_key, rs] of by) {
+    const first = rs[0];
+    const open = rs.some((r) => r.publish_from !== null && r.publish_to === null);
+    out.push({ job_key, job_title: first.job_title, account_type: first.account_type, is_direct: first.is_direct, publish_from: first.publish_from, publish_to: open ? null : first.publish_to, ...sumRows(rs, ['job_views', 'applications', 'hires_from_application', ...JOB_ST_KEYS]) });
+  }
+  return out.sort((a, b) => Number(b.job_views) - Number(a.job_views) || Number(b.applications) - Number(a.applications));
+}
+
+/** company_job_monthly_one: 1 求人の月次（期間内） */
+export function mockCompanyJobMonthlyOne(id: string, jobKey: string, fromYmd: string, toYmd: string, account: string | null, today = todayJst()): Row[] {
+  const from = monthOf(fromYmd);
+  const to = monthOf(toYmd);
+  return mockJobMonthlyRows(id, today)
+    .filter((r) => String(r.job_key) === jobKey && String(r.month_ym) >= from && String(r.month_ym) <= to && (!account || r.account_type === account))
+    .map((r) => ({ month_ym: r.month_ym, ...sumRows([r], ['job_views', 'applications', 'hires_from_application', ...JOB_ST_KEYS]) }));
 }
 
 /** アカウント種別ごとの月次。2 アカウントの企業は全体を 6:4 に分ける（合計 = 全体） */
@@ -51,7 +128,7 @@ export function mockCompanyAccountMonthlyOne(id: string, today = todayJst()): Ro
   const accounts = mockAccountTypes(c);
   if (!accounts.length) return [];
   const out: Row[] = [];
-  const keys = ['active_jobs_eom', 'scout_sent', 'interested_by_reply_month', 'applications', 'job_views', 'hires_from_application', 'hires_from_scout', 'in_selection'];
+  const keys = ['active_jobs_eom', 'scout_sent', 'interested_by_reply_month', 'applications', 'job_views', 'hires_from_application', 'hires_from_scout', 'in_selection', 'st06_interview_adjusting', 'st07_interview_1st', 'st08_interview_2nd', 'st09_interview_3rd', 'st10_interview_final', 'st11_hired'];
   for (const r of mockCompanyMonthlyOne(id, today)) {
     if (accounts.length === 1) {
       const row: Row = { account_type: accounts[0], month_ym: r.month_ym };
@@ -182,12 +259,22 @@ const ATTR_VALUES: Record<string, string[]> = {
  * 会員属性（期間 from〜to・アカウント種別で集約済み。マートの memberAttributesQuery と同じ形）。
  * 月ごとに scout / view / application の 3 種を作り、2 アカウントの企業は 6:4 に分けてから合算する
  */
-export function mockMemberAttributes(id: string, fromYmd: string, toYmd: string, account: string | null, today = todayJst()): Row[] {
+export function mockMemberAttributes(id: string, fromYmd: string, toYmd: string, account: string | null, jobKey: string | null = null, today = todayJst()): Row[] {
   const c = mockCompanies(today).find((x) => String(x.id) === id);
   if (!c) return [];
   const accounts = mockAccountTypes(c);
   if (account && !accounts.includes(account)) return [];
-  const share = account && accounts.length > 1 ? (account === accounts[0] ? 0.6 : 0.4) : 1;
+  const accountShare = account && accounts.length > 1 ? (account === accounts[0] ? 0.6 : 0.4) : 1;
+  // 求人指定: 閲覧 / 応募だけを、その求人の閲覧数の比率（窓全体）で縮める
+  let jobShare = 1;
+  if (jobKey !== null) {
+    const all = mockJobMonthlyRows(id, today);
+    const tot = all.reduce((s, r) => s + Number(r.job_views) + Number(r.applications), 0);
+    const mine = all.filter((r) => String(r.job_key) === jobKey).reduce((s, r) => s + Number(r.job_views) + Number(r.applications), 0);
+    if (!mine) return [];
+    jobShare = Math.max(0.02, mine / Math.max(1, tot));
+  }
+  const share = accountShare * jobShare;
   const rand = seeded(Number(id) * 11);
   const from = monthOf(fromYmd);
   const to = monthOf(toYmd);
@@ -213,7 +300,7 @@ export function mockMemberAttributes(id: string, fromYmd: string, toYmd: string,
         const vn = Math.round(n * (1.5 + rand() * 2) + (i % 2 === 0 ? 3 : 0));
         const an = Math.round(vn * (0.04 + rand() * 0.06));
         if (n > 0 && inRange) {
-          add('scout', type, v, n, interested);
+          if (jobKey === null) add('scout', type, v, n, interested);
           add('view', type, v, vn, 0);
           if (an > 0) add('application', type, v, an, 0);
         }

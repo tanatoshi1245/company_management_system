@@ -36,6 +36,22 @@
 /* 当月の実績（数値タイル） */
 .stat-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: var(--s2); }
 .stat-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.stat-grid.six { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .stat-grid.six { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .stat-grid.six { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* 企業詳細のタブ（ヘッダのカードの下。3 つを同じ幅で横並び） */
+.co-tabs { display: flex; width: 100%; margin: var(--s3) 0; border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.co-tabs button { flex: 1 1 0; border: 0; background: transparent; padding: 9px 12px; font-size: var(--fs-13); font-weight: 600; color: var(--ink-soft); border-right: 1px solid var(--rule); border-bottom: 3px solid transparent; transition: background-color var(--motion), color var(--motion); }
+.co-tabs button:last-child { border-right: 0; }
+.co-tabs button:hover { background: var(--surface-low); }
+.co-tabs button.on { color: var(--heading); border-bottom-color: var(--dj-gold); background: var(--surface-low); }
+/* 求人の表と求人フィルタ */
+.job-filter { display: flex; align-items: center; gap: 6px; }
+.job-filter select { max-width: 360px; }
+table.data.jobs tbody tr { cursor: pointer; }
+table.data.jobs tbody tr:hover { background: var(--surface-low); }
+table.data.jobs tbody tr[aria-selected='true'] { background: var(--dj-gold-pale); }
+table.data.jobs td.title { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 1100px) { .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .stat-grid.four { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .stat .v .u { font-size: var(--fs-12); color: var(--muted); font-weight: 600; margin-left: 3px; }

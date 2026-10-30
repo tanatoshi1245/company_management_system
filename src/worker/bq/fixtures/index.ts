@@ -2,7 +2,7 @@ import type { BuiltQuery } from '../params';
 import type { Row } from '../parseRows';
 import { todayJst } from '../../../shared/calendar/periods';
 import { mockCompanyLogin, mockCompanyMaster, mockCompanyMonthly, mockIndustryBenchmark } from './board';
-import { mockApplicationCohort, mockBenchSeries, mockCompanyAccountMonthlyOne, mockCompanyLoginOne, mockCompanyMasterOne, mockCompanyMonthlyOne, mockDailyUsage, mockMemberAttributes, mockScoutCohort } from './company';
+import { mockApplicationCohort, mockBenchSeries, mockCompanyAccountMonthlyOne, mockCompanyJobMonthlyOne, mockCompanyJobs, mockCompanyLoginOne, mockCompanyMasterOne, mockCompanyMonthlyOne, mockDailyUsage, mockMemberAttributes, mockScoutCohort } from './company';
 
 export function paramValue(q: BuiltQuery, name: string): string | null {
   const v = q.params.find((x) => x.name === name)?.parameterValue.value;
@@ -44,7 +44,11 @@ export function mockRows(q: BuiltQuery): Row[] {
     case 'application_cohort':
       return mockApplicationCohort(paramValue(q, 'id') ?? '');
     case 'member_attributes':
-      return mockMemberAttributes(paramValue(q, 'id') ?? '', paramValue(q, 'from') ?? '2000-01-01', paramValue(q, 'to') ?? '2999-12-01', paramValue(q, 'account'));
+      return mockMemberAttributes(paramValue(q, 'id') ?? '', paramValue(q, 'from') ?? '2000-01-01', paramValue(q, 'to') ?? '2999-12-01', paramValue(q, 'account'), paramValue(q, 'job'));
+    case 'company_jobs':
+      return mockCompanyJobs(paramValue(q, 'id') ?? '', paramValue(q, 'from') ?? '2000-01-01', paramValue(q, 'to') ?? '2999-12-01', paramValue(q, 'account'));
+    case 'company_job_monthly_one':
+      return mockCompanyJobMonthlyOne(paramValue(q, 'id') ?? '', paramValue(q, 'job') ?? '', paramValue(q, 'from') ?? '2000-01-01', paramValue(q, 'to') ?? '2999-12-01', paramValue(q, 'account'));
     case 'bench_series':
       return mockBenchSeries(paramValue(q, 'industry') ?? '', paramValue(q, 'company_type') ?? '');
     default:
