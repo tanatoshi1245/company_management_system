@@ -4,17 +4,18 @@ import { ATTRIBUTE_LABEL, ATTRIBUTE_TYPES, type AttributeType } from '../../../.
 import { PieChart } from '../../../components/charts/PieChart';
 import { Segmented } from '../../../components/ui/Segmented';
 import { Help } from '../../../components/ui/Help';
-import { fmtMonthShort } from '../../../../shared/calendar/periods';
+import { Skeleton } from '../../../components/ui/Skeleton';
 
-export type PieMode = 'sent' | 'replied' | 'viewed';
-const MODE_LABEL: Record<PieMode, string> = { sent: '送信', replied: '返信', viewed: '閲覧' };
-const MODE_UNIT: Record<PieMode, string> = { sent: '件', replied: '件', viewed: '件' };
+/** sent = スカウトを送った会員 / replied = 興味あり返信した会員 / viewed = 求人を閲覧した会員 / applied = 応募した会員 */
+export type PieMode = 'sent' | 'replied' | 'viewed' | 'applied';
+export const PIE_MODE_LABEL: Record<PieMode, string> = { sent: '送信', replied: '興味あり', viewed: '閲覧', applied: '応募' };
+const MODE_UNIT: Record<PieMode, string> = { sent: '件', replied: '件', viewed: '件', applied: '件' };
 
 /**
  * 会員属性の内訳（同一サイズの円グラフ。属性タブで切替）。
- * modes が 2 つ以上なら 送信 / 返信 のように対象を切り替えられる
+ * modes が 2 つ以上なら 送信 / 興味あり、閲覧 / 応募 のように対象を切り替えられる。内訳は選択期間・選択アカウントで集約済み（属性 API）
  */
-export function AttributePiePanel({ title, help, breakdown, months, modes, initial, onChange, testId }: { title: string; help: string; breakdown: Record<PieMode, Record<string, AttributeBreakdown[]>>; months: string[]; modes: PieMode[]; initial?: string; onChange?: (t: AttributeType) => void; testId: string }) {
+export function AttributePiePanel({ title, help, breakdown, range, modes, state = 'ready', initial, onChange, testId }: { title: string; help: string; breakdown: Record<PieMode, Record<string, AttributeBreakdown[]>>; range: string; modes: PieMode[]; state?: 'loading' | 'error' | 'ready'; initial?: string; onChange?: (t: AttributeType) => void; testId: string }) {
   const [type, setTypeState] = useState<AttributeType>((ATTRIBUTE_TYPES as readonly string[]).includes(initial ?? '') ? (initial as AttributeType) : 'japanese_level');
   const [mode, setMode] = useState<PieMode>(modes[0]);
   const setType = (t: AttributeType) => {
@@ -22,7 +23,6 @@ export function AttributePiePanel({ title, help, breakdown, months, modes, initi
     onChange?.(t);
   };
   const rows = breakdown[mode]?.[type] ?? [];
-  const range = months.length ? `${fmtMonthShort(months[0])}〜${fmtMonthShort(months[months.length - 1])}` : '';
   return (
     <section className="card" aria-label={title} data-testid={testId}>
       <div className="card-head">
@@ -30,7 +30,7 @@ export function AttributePiePanel({ title, help, breakdown, months, modes, initi
           {title} <Help text={help} />
         </h2>
         <span className="lead">{range} の分</span>
-        {modes.length > 1 ? <Segmented options={modes.map((m) => ({ key: m, label: MODE_LABEL[m] }))} value={mode} onChange={setMode} ariaLabel={`${title}の対象`} /> : null}
+        {modes.length > 1 ? <Segmented options={modes.map((m) => ({ key: m, label: PIE_MODE_LABEL[m] }))} value={mode} onChange={setMode} ariaLabel={`${title}の対象`} /> : null}
       </div>
       <div className="tabs" role="tablist" aria-label={`${title}の属性`}>
         {ATTRIBUTE_TYPES.map((t) => (
@@ -39,7 +39,15 @@ export function AttributePiePanel({ title, help, breakdown, months, modes, initi
           </button>
         ))}
       </div>
-      {rows.length ? <PieChart rows={rows.map((r) => ({ label: r.value, value: r.count }))} ariaLabel={`${ATTRIBUTE_LABEL[type]} の内訳（${MODE_LABEL[mode]}）`} unit={MODE_UNIT[mode]} /> : <div className="empty">この期間のデータがありません</div>}
+      {state === 'loading' && !rows.length ? (
+        <Skeleton variant="tile" />
+      ) : state === 'error' && !rows.length ? (
+        <div className="empty">属性の内訳を取得できませんでした</div>
+      ) : rows.length ? (
+        <PieChart rows={rows.map((r) => ({ label: r.value, value: r.count }))} ariaLabel={`${ATTRIBUTE_LABEL[type]} の内訳（${PIE_MODE_LABEL[mode]}）`} unit={MODE_UNIT[mode]} />
+      ) : (
+        <div className="empty">この期間のデータがありません</div>
+      )}
     </section>
   );
 }

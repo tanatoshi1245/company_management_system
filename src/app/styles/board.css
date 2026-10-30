@@ -71,6 +71,7 @@ table.board td.company, table.board th.company { position: sticky; left: 140px; 
 table.board thead th.col-type, table.board thead th.col-owner, table.board thead th.company { z-index: 4; }
 table.board thead tr.groups th.col-type { text-align: left; }
 table.board td.col-type .badge { padding: 0 5px; font-size: 10px; }
+table.board td.col-type .acct-more { display: block; font-size: 9px; line-height: 1.1; color: var(--muted); white-space: nowrap; }
 table.board td.company .nm { display: block; font-size: var(--fs-13); font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 広告掲載型の企業は企業名を黄色でハイライト */
 table.board td.company.ad .nm { background: var(--dj-gold-pale); padding: 0 4px; margin: 0 -4px; border-radius: 2px; }

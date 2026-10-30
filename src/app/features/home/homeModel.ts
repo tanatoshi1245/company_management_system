@@ -47,7 +47,12 @@ export function useHomeModel(board: BoardResponse | null, filters: BoardFilters,
         }
         return Array.from(m.values()).sort((a, b) => (a.key === '(未設定)' ? 1 : b.key === '(未設定)' ? -1 : b.count - a.count || a.label.localeCompare(b.label, 'ja')));
       })(),
-      types: count((s) => s.c.type),
+      // 種別の件数は、副アカウントの種別（直接 + 紹介 の 紹介）にも数える（フィルタの判定と同じ）
+      types: (() => {
+        const m = new Map<string, number>();
+        for (const s of contractedRows) for (const t of new Set([s.c.type, ...s.c.accountTypes])) m.set(t, (m.get(t) ?? 0) + 1);
+        return Array.from(m, ([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count);
+      })(),
       mineCount: contractedRows.filter((s) => s.c.isMine).length,
     };
   }, [board, scored, filtered, sorted]);

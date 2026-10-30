@@ -17,7 +17,8 @@ status: active
 | 企業名・種別・業種・プラン・契約状態・契約タイムライン | `GET /api/board?month=` | `cms_company_master.company_name / company_type / industry / plan_name / contract_state / active_from / active_to / days_*` | companies, company_profiles, sf_contracts, sf_accounts |
 | 担当（苗字）・`担当=自分`・CS 担当フィルタ | 同上 + D1 `company_settings` | `cs_owner_email_default / cs_owner_name_default`（既定は企業管理ツールの `sales_staff`） | active_companies.sales_staff |
 | 掲載 / 枠、送信 / 枠（分数） | 同上 | `cms_company_monthly.active_jobs_eom / scout_sent`, `cms_company_master.job_posting_limit / scout_limit` | job_publish_history, jobs_all, scouts, companies |
-| 閲覧・応募・返信（当月、返信月軸） | 同上 | `job_views / applications / interested_by_reply_month` | member_job_detail_views, member_applications, scouts × scout_histories |
+| 閲覧・応募・興味あり返信（当月、返信月軸。興味あり以外の返信は数えない） | 同上 | `job_views / applications / interested_by_reply_month`（`account_type = '__ALL__'` の行） | member_job_detail_views, member_applications, scouts × scout_histories |
+| 種別セルの `+紹介`（複数アカウント企業）と種別フィルタ（いずれかのアカウント種別が一致） | 同上 | `cms_company_master.account_types` | company_profiles_full.company_type |
 | 選考中・採用 | 同上 | `in_selection / hires` | member_applications.status, scouts |
 | 最終ログイン（30 日以上なしは赤）・契約残 | 同上 | `cms_company_login.last_login_date / days_since_login`, `cms_company_master.days_to_contract_end` | GA4 `get_ID`, companies |
 | 契約中の判定 | 同上 | 当月: `contract_state ∈ {active, ending_30d}`、過去月: `cms_company_monthly.is_contracted_in_month` | companies |

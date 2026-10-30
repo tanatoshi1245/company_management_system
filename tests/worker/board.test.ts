@@ -140,3 +140,21 @@ describe('/api/board（モック）', () => {
     expect(q.length).toBeGreaterThan(0);
   });
 });
+
+describe('アカウント種別（複数アカウント企業）', () => {
+  it('accountTypes を返し、種別フィルタは副アカウントの種別でも通る', async () => {
+    const res = await app.fetch(new Request('http://x/api/board'), baseEnv, ctx);
+    const body = BoardResponseSchema.parse(await res.json());
+    for (const c of body.companies) expect(Array.isArray(c.accountTypes)).toBe(true);
+    const multi = body.companies.filter((c) => c.accountTypes.length > 1 && (c.state === 'active' || c.state === 'ending_30d'));
+    expect(multi.length).toBeGreaterThan(0);
+    for (const c of multi) expect(c.accountTypes).toContain(c.type);
+    const other = multi[0].accountTypes.find((t) => t !== multi[0].type)!;
+    const ctxb = makeContext(body.benchmarks, body.meta.benchMinN, body.meta.bizDays.rate, body.meta.bizDays.elapsed, body.meta.isCurrentMonth);
+    const scored = body.companies.map((c) => scoreCompany(c, ctxb));
+    const byOther = filterCompanies(scored, { ...DEFAULT_FILTERS, type: [other] }, body.meta);
+    expect(byOther.some((s) => s.c.id === multi[0].id)).toBe(true);
+    const byMain = filterCompanies(scored, { ...DEFAULT_FILTERS, type: [multi[0].type] }, body.meta);
+    expect(byMain.some((s) => s.c.id === multi[0].id)).toBe(true);
+  });
+});

@@ -55,7 +55,7 @@ function titleOf(col: BoardColumn, s: ScoredCompany): string {
   const { value, secondary } = cellText(col, s);
   const lines = [`${col.label}: ${value}${secondary ? `（${secondary}）` : ''}`];
   if (col.key === 'sent') lines.push(`消化率 ${s.pace.util === null ? '–' : fmtRate(s.pace.util)}${s.pace.expected === null ? '' : `・期待 ${fmtInt(s.pace.expected)}`}・ペース: ${PACE_LABEL[s.pace.status]}`);
-  if (col.key === 'intReply') lines.push('その月に「興味あり」返信があったスカウト数（送信月は問わない）');
+  if (col.key === 'intReply') lines.push('その月に「興味あり」返信があったスカウト数（質問・開封のみは含まない。送信月は問わない）');
   if (col.key === 'login') lines.push(`直近 30 日のログイン日数 ${fmtInt(s.c.login.days30)} 日。CT 画面（2026-05-15 以降）`);
   const def = col.metric ? METRIC_BY_KEY[col.metric] : null;
   if (def) lines.push(`参考: ${def.label} = ${def.formula}`);
@@ -132,10 +132,9 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
             const c = s.c;
             return (
               <tr key={c.id} tabIndex={0} onClick={(e) => onRowClick(e, c.id)} onKeyDown={(e) => onRowKey(e, c.id)} onMouseEnter={() => prefetch(`/api/companies/${c.id}?month=${meta.month}`, CompanyDetailResponseSchema)} aria-label={`${c.name} の詳細を開く`}>
-                <td className="col-type">
-                  <span className="badge neutral" title={`企業種別: ${COMPANY_TYPE_SHORT[c.type] ?? c.type}`}>
-                    {COMPANY_TYPE_SHORT[c.type] ?? c.type}
-                  </span>
+                <td className="col-type" title={c.accountTypes.length > 1 ? `企業種別: ${COMPANY_TYPE_SHORT[c.type] ?? c.type}。アカウント ${c.accountTypes.length}（${c.accountTypes.join('・')}）` : `企業種別: ${COMPANY_TYPE_SHORT[c.type] ?? c.type}`}>
+                  <span className="badge neutral">{COMPANY_TYPE_SHORT[c.type] ?? c.type}</span>
+                  {c.accountTypes.length > 1 ? <span className="acct-more">+{c.accountTypes.filter((t) => t !== c.type).join('・')}</span> : null}
                 </td>
                 <td className={`col-owner ${c.isMine ? 'mine' : ''} ${c.owner.name ? '' : 'none'}`} title={c.owner.name ? `担当: ${c.owner.name}${c.owner.src === 'override' ? '（画面で上書き）' : ''}` : '担当未設定'}>
                   {surname(c.owner.name) ?? '未設定'}

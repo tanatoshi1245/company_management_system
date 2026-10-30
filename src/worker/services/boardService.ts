@@ -64,6 +64,13 @@ export function contractKindOf(djContractType: string | null, planName: string |
   return 'unknown';
 }
 
+/** cms_company_master.account_types（'直接,紹介' など）→ 配列。無ければ企業種別が 直接 / 紹介 / 派遣 のときだけそれを 1 つ */
+export function accountTypesOf(raw: string | null, companyType: string): string[] {
+  const xs = (raw ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  if (xs.length) return xs;
+  return ['直接', '紹介', '派遣'].includes(companyType) ? [companyType] : [];
+}
+
 /** マスタ 1 行 + 月次 + ログイン → ボードの企業 1 行（targets / isMine はあとで合成） */
 export function buildBoardCompany(r: Row, mm: Map<string, MonthlyRow>, lg: Row | undefined, month: string, months: string[]): BoardCompany {
   const id = String(r.company_id);
@@ -83,6 +90,7 @@ export function buildBoardCompany(r: Row, mm: Map<string, MonthlyRow>, lg: Row |
     plan: str(r.plan_name),
     planSrc: String(r.plan_source ?? 'none'),
     contractKind: contractKindOf(str(r.dj_contract_type), str(r.plan_name)),
+    accountTypes: accountTypesOf(str(r.account_types), String(r.company_type ?? '不明')),
     owner: { email: ownerEmail, name: ownerName, src: ownerEmail || ownerName ? String(r.owner_source ?? 'none') : 'none' },
     sfOwnerName: str(r.sf_account_owner_name),
     salesStaff: str(r.sales_staff),

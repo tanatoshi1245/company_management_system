@@ -14,7 +14,8 @@ SELECT CAST(company_id AS STRING) AS company_id, company_name, internal_name, co
        plan_name, plan_source, sf_active_contract, sf_live_won_opp, da_active_profile, sf_notice_check,
        sf_account_owner_name, sf_account_owner_email, sf_account_owner_position,
        sf_contract_owner_name, sf_contract_owner_email, sf_contract_owner_position,
-       sales_staff, cs_owner_email_default, cs_owner_name_default, owner_source, active_jobs_now, scout_unused_json, jobs_window_distinct
+       sales_staff, cs_owner_email_default, cs_owner_name_default, owner_source, active_jobs_now, scout_unused_json, jobs_window_distinct,
+       account_types, accounts_json, jobs_json
 FROM \`bq-hgt.dwh.cms_company_master\`
 WHERE company_id = @id`,
     params: [p.int('id', Number(companyId))],
@@ -31,8 +32,22 @@ SELECT month_ym, is_current_month, is_contracted_in_month, scout_limit, job_post
        st01_no_response, st02_contact_planned, st03_pass_planned, st04_contacted, st05_rejected, st06_interview_adjusting,
        st07_interview_1st, st08_interview_2nd, st09_interview_3rd, st10_interview_final, st11_hired, st12_declined
 FROM \`bq-hgt.dwh.cms_company_monthly\`
-WHERE company_id = @id
+WHERE company_id = @id AND account_type = '__ALL__'
 ORDER BY month_ym`,
+    params: [p.int('id', Number(companyId))],
+  };
+}
+
+/** アカウント種別（直接 / 紹介 / 派遣）ごとの月次。企業ページの種別切替用 */
+export function companyAccountMonthlyQuery(companyId: string): BuiltQuery {
+  return {
+    label: 'company_account_monthly_one',
+    sql: `
+SELECT account_type, month_ym, active_jobs_eom, scout_sent, interested_by_reply_month, applications, job_views,
+       hires_from_application, hires_from_scout, in_selection
+FROM \`bq-hgt.dwh.cms_company_monthly\`
+WHERE company_id = @id AND account_type != '__ALL__'
+ORDER BY account_type, month_ym`,
     params: [p.int('id', Number(companyId))],
   };
 }
@@ -74,16 +89,20 @@ ORDER BY cohort_month, status`,
   };
 }
 
-/** スカウト対象の会員属性（送信月 ≥ from） */
-export function memberAttributesQuery(companyId: string, fromMonthFirstDay: string): BuiltQuery {
+/**
+ * 会員属性の内訳（kind = scout / view / application × 属性種別 × 値）。期間（月初 from〜to）とアカウント種別（NULL = 全体）で BQ 側に集約させる。
+ * members（会員の distinct）は月をまたいで足せないので返さない
+ */
+export function memberAttributesQuery(companyId: string, fromMonthFirstDay: string, toMonthFirstDay: string, accountType: string | null): BuiltQuery {
   return {
     label: 'member_attributes',
     sql: `
-SELECT FORMAT_DATE('%Y-%m', sent_month) AS month_ym, kind, attribute_type, attribute_value, scouts, members, interested_scouts
+SELECT kind, attribute_type, attribute_value, SUM(scouts) AS scouts, SUM(interested_scouts) AS interested_scouts
 FROM \`bq-hgt.dwh.cms_scout_member_attributes_monthly\`
-WHERE company_id = @id AND sent_month >= @from
-ORDER BY sent_month, attribute_type, scouts DESC`,
-    params: [p.int('id', Number(companyId)), p.date('from', fromMonthFirstDay)],
+WHERE company_id = @id AND sent_month BETWEEN @from AND @to AND (@account IS NULL OR account_type = @account)
+GROUP BY 1, 2, 3
+ORDER BY 1, 2, 4 DESC`,
+    params: [p.int('id', Number(companyId)), p.date('from', fromMonthFirstDay), p.date('to', toMonthFirstDay), p.nullableStr('account', accountType)],
   };
 }
 
