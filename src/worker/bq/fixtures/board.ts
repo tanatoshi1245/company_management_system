@@ -83,6 +83,12 @@ function stateOf(c: MockCompany, today: string): { state: string; daysToEnd: num
   return { state, daysToEnd, now };
 }
 
+/** アカウント種別。4 社に 1 社（直接 / 紹介）は 直接 + 紹介 の 2 アカウント（複数アカウント企業のサンプル） */
+export function mockAccountTypes(c: { id: number | string; type: string }): string[] {
+  if (Number(c.id) % 4 === 0 && (c.type === '直接' || c.type === '紹介')) return ['直接', '紹介'];
+  return ['直接', '紹介', '派遣'].includes(c.type) ? [c.type] : [];
+}
+
 export function mockCompanyMaster(today = todayJst()): Row[] {
   return mockCompanies(today).map((c) => {
     const s = stateOf(c, today);
@@ -92,6 +98,7 @@ export function mockCompanyMaster(today = todayJst()): Row[] {
       company_name: c.name,
       internal_name: c.name,
       company_type: c.type,
+      account_types: mockAccountTypes(c).join(','),
       dj_contract_type: c.plan.includes('成果') ? '採用成功報酬型' : '広告掲載型',
       active_from: c.from,
       active_to: c.to,
@@ -161,6 +168,7 @@ export function mockCompanyMonthly(today = todayJst()): Row[] {
       rows.push({
         company_id: String(c.id),
         month_ym: ym,
+        account_type: '__ALL__',
         is_current_month: isCur,
         data_days: isCur ? dayOfMonth - 1 : 30,
         is_contracted_in_month: contracted,

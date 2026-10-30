@@ -57,7 +57,8 @@ export function filterCompanies(rows: ScoredCompany[], f: BoardFilters, meta: Pi
     if (!isContracted(c, meta)) return false;
     if (f.mine && !c.isMine) return false;
     if (f.owner.length && !f.owner.includes(ownerKey(c))) return false;
-    if (f.type.length && !f.type.includes(c.type)) return false;
+    // 種別はいずれかのアカウント種別（直接 + 紹介 など）が一致すれば通す
+    if (f.type.length && !f.type.includes(c.type) && !c.accountTypes.some((t) => f.type.includes(t))) return false;
     if (f.ending !== null && !matchesEnding(c.contract.daysToEnd, f.ending)) return false;
     if (f.jobs !== null && (c.m.jobs > 0) !== (f.jobs === 'yes')) return false;
     if (f.sent !== null && (c.m.sent > 0) !== (f.sent === 'yes')) return false;
@@ -79,7 +80,7 @@ export const BOARD_COLUMNS: BoardColumn[] = [
   { key: 'views', label: '閲覧', group: '応募', metric: 'views_per_active_job' },
   { key: 'apps', label: '応募', group: '応募', metric: 'apps_per_active_job' },
   { key: 'sent', label: '送信 / 枠', group: 'スカウト', metric: 'scout_utilization' },
-  { key: 'intReply', label: '返信', group: 'スカウト' },
+  { key: 'intReply', label: '興味あり返信', group: 'スカウト' },
   { key: 'inSel', label: '選考中', group: '選考' },
   { key: 'hires', label: '採用', group: '選考', metric: 'hires' },
   { key: 'login', label: '最終ログイン', group: '接点', metric: 'login_days' },

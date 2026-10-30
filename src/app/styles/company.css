@@ -4,7 +4,11 @@
 .co-title h1 { font-size: var(--fs-20); margin: 2px 0 6px; }
 .co-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-12); }
 .chip-text { color: var(--ink-soft); border: 1px solid var(--rule); padding: 1px 7px; border-radius: var(--radius); }
+.co-head-actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s3); }
 .co-head-actions .field > span { font-size: var(--fs-11); font-weight: 700; color: var(--muted); }
+.co-head-actions .field.period { display: flex; align-items: center; gap: 4px; }
+.co-head-actions .field.period > span:first-child { margin-right: 2px; }
+.co-head-actions .field.period .sep { color: var(--muted); }
 .co-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); margin-top: var(--s3); padding-top: var(--s3); border-top: 1px solid var(--rule); }
 @media (max-width: 760px) { .co-cards { grid-template-columns: 1fr; } }
 .co-cards .stat .v.period { font-size: var(--fs-16); }

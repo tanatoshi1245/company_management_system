@@ -6,11 +6,11 @@ import { Help } from '../../../components/ui/Help';
 import { fmtMonthShort } from '../../../../shared/calendar/periods';
 import { fmtInt } from '../../../lib/format';
 
-/** 閲覧人数と応募人数の月次推移（単月の実績）。契約期間中・マートの窓（直近 13 か月 + 当月）に限る */
+/** 閲覧人数と応募人数の月次推移（単月の実績）。選択期間（契約期間中・マートの窓内）・選択アカウント */
 export function ViewsAppsPanel({ m }: { m: CompanyModel }) {
   const [table, setTable] = useState(false);
   const v = m.viewsApps;
-  const lead = v.months.length ? `${fmtMonthShort(v.fromMonth)}〜${fmtMonthShort(v.months[v.months.length - 1])}${v.truncated ? '（直近 13 か月 + 当月のみ）' : ''}` : '契約期間のデータがありません';
+  const lead = v.months.length ? `${fmtMonthShort(v.fromMonth)}〜${fmtMonthShort(v.months[v.months.length - 1])}${v.truncated ? '（直近 13 か月 + 当月のみ）' : ''}` : 'この期間に契約期間のデータがありません';
   return (
     <section className="card" aria-label="閲覧と応募の推移">
       <div className="card-head">

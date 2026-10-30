@@ -16,6 +16,7 @@ status: active
 |---|---|---|
 | month / month_ym / is_current_month / as_of_date / data_days | DATE / STRING / BOOL / DATE / INT64 | 月初・YYYY-MM・当月か・掲載求人の基準日（過去月は月末、当月は今日）・データのある日数 |
 | company_id | INT64 | |
+| account_type | STRING | `'__ALL__'` = 企業全体（従来の行）。`直接` / `紹介` / `派遣` = アカウント種別（プロファイルの company_type）ごとの内訳の行（2026-10-30〜。企業ページの切替用）。**企業全体だけを読むクエリは `WHERE account_type = '__ALL__'` を付ける**（ボード・ベンチマーク）。種別の行では `scout_sent_contract_to_date` = 0、`login_days` = NULL。採用は会員 × 企業 × 種別で重複排除するため種別の合計が全体を上回ることがある |
 | is_contracted_in_month / contracted_source | BOOL / STRING | companies の期間が月に重なる、または cms_contract_snapshot_daily に契約中の記録がある（companies / snapshot / none） |
 | scout_limit / job_posting_limit | INT64 | 現在の枠数（履歴ではない） |
 | active_jobs_eom / new_jobs | INT64 | as_of_date 時点の掲載求人（set_id 重複排除）/ 初掲載がその月の求人 |

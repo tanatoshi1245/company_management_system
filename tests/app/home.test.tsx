@@ -87,7 +87,8 @@ describe('ホーム（ボード）', () => {
     // 列の順: 種別 → CS 担当 → 企業名 → 実績
     const headers = Array.from(table.querySelectorAll('thead tr.metrics th')).map((h) => h.textContent?.replace(/[▲▼]/g, '').trim());
     expect(headers.slice(0, 3)).toEqual(['種別', 'CS 担当', '企業名']);
-    for (const h of ['掲載 / 枠', '閲覧', '応募', '送信 / 枠', '返信', '選考中', '採用', '最終ログイン', '契約残']) expect(headers).toContain(h);
+    for (const h of ['掲載 / 枠', '閲覧', '応募', '送信 / 枠', '興味あり返信', '選考中', '採用', '最終ログイン', '契約残']) expect(headers).toContain(h);
+    expect(headers).not.toContain('返信');
     // 契約中の企業だけ（終了済み・開始前・直近終了は出ない）。メーター・アイコンは無い
     const f = await fixtures();
     const contractedIds = new Set(f.board.companies.filter((c) => c.state === 'active' || c.state === 'ending_30d').map((c) => c.id));
@@ -147,7 +148,12 @@ describe('ホーム（ボード）', () => {
     expect(table.querySelectorAll('thead tr.metrics th.num.gs').length).toBe(5);
     expect(table.querySelector('tbody tr td[data-col=jobs]')?.classList.contains('gs')).toBe(true);
     expect(table.querySelector('tbody tr td[data-col=views]')?.classList.contains('gs')).toBe(false);
-    // 返信・最終ログイン・契約残にも副情報（送信月基準・n 日前・終了日）は出さない
+    // 複数アカウントの企業は種別セルに +紹介 のような副アカウントを出す（モックは 4 社に 1 社）
+    const multi = (await fixtures()).board.companies.filter((c) => c.accountTypes.length > 1 && (c.state === 'active' || c.state === 'ending_30d'));
+    expect(multi.length).toBeGreaterThan(0);
+    expect(table.querySelectorAll('td.col-type .acct-more').length).toBe(multi.length);
+    expect(table.querySelector('td.col-type .acct-more')?.textContent).toMatch(/^\+(直接|紹介)$/);
+    // 興味あり返信・最終ログイン・契約残にも副情報（送信月基準・n 日前・終了日）は出さない
     expect(table.querySelectorAll('td[data-col=intReply] .heat-s, td[data-col=login] .heat-s, td[data-col=daysToEnd] .heat-s').length).toBe(0);
   });
 

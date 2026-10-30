@@ -3,15 +3,23 @@ import { COMPANY_TYPE_SHORT, CONTRACT_STATE_LABEL, INDUSTRY_SOURCE_LABEL, PLAN_S
 import { NO_LOGIN_DAYS, isNoLogin } from '../../../../shared/metrics/board';
 import { fmtMonthJa } from '../../../../shared/calendar/periods';
 import { Badge } from '../../../components/ui/Badge';
+import { Segmented } from '../../../components/ui/Segmented';
 import { Link } from '../../../router';
 import { fmtDaysLeft, fmtInt, fmtYmd } from '../../../lib/format';
+import type { PeriodSelection } from '../companyModel';
 
-/** 企業ページのヘッダ: 名前・状態・種別・業種・プラン・ID、月セレクタ、その下にカード 3 枚（契約期間 / 契約残 / 最終ログイン） */
-export function CompanyHeader({ d, onMonth }: { d: CompanyDetailResponse; onMonth: (m: string) => void }) {
+/**
+ * 企業ページのヘッダ: 名前・状態・種別・業種・プラン・アカウント・ID、期間（開始月〜終了月）とアカウント種別の切替、
+ * その下にカード 3 枚（契約期間 / 契約残 / 最終ログイン）
+ */
+export function CompanyHeader({ d, sel, onPeriod, onAccount }: { d: CompanyDetailResponse; sel: PeriodSelection; onPeriod: (from: string, to: string) => void; onAccount: (account: string) => void }) {
   const c = d.company;
   const stateTone = c.state === 'active' ? 'good' : c.state === 'ending_30d' || c.state === 'ended_recent' ? 'warn' : c.state === 'ended' ? 'bad' : 'neutral';
   const noLogin = isNoLogin(c);
   const soon = c.contract.daysToEnd !== null && c.contract.daysToEnd >= 0 && c.contract.daysToEnd <= 60;
+  const months = [...d.meta.months].reverse();
+  const multi = d.accounts.length > 1;
+  const accountOptions = [{ key: '', label: '全体' }, ...d.accounts.map((a) => ({ key: a.type, label: a.type, title: a.profiles.map((p) => `${p.name ?? p.id}${p.lang ? `（${p.lang}）` : ''}`).join(' / ') }))];
   return (
     <header className="co-head card">
       <div className="co-head-top">
@@ -23,6 +31,11 @@ export function CompanyHeader({ d, onMonth }: { d: CompanyDetailResponse; onMont
           <div className="co-chips">
             <Badge tone={stateTone}>{CONTRACT_STATE_LABEL[c.state as ContractState] ?? c.state}</Badge>
             <Badge tone="navy">{COMPANY_TYPE_SHORT[c.type] ?? c.type}</Badge>
+            {multi ? (
+              <span className="chip-text" data-testid="accounts-chip" title={d.accounts.map((a) => `${a.type}: ${a.profiles.map((p) => p.name ?? p.id).join(' / ')}`).join('\n')}>
+                アカウント {d.accounts.length}（{d.accounts.map((a) => a.type).join('・')}）
+              </span>
+            ) : null}
             <span className="chip-text" title={`業種の出所: ${INDUSTRY_SOURCE_LABEL[c.indSrc] ?? c.indSrc}`}>
               {c.ind}
             </span>
@@ -35,16 +48,30 @@ export function CompanyHeader({ d, onMonth }: { d: CompanyDetailResponse; onMont
           </div>
         </div>
         <div className="co-head-actions">
-          <label className="field">
-            <span>月</span>
-            <select className="ctl" value={d.meta.month} onChange={(e) => onMonth(e.target.value)} aria-label="表示する月">
-              {[...d.meta.months].reverse().map((m) => (
+          <div className="field period" role="group" aria-label="期間">
+            <span>期間</span>
+            <select className="ctl" value={sel.from} onChange={(e) => onPeriod(e.target.value, e.target.value > sel.to ? e.target.value : sel.to)} aria-label="開始月">
+              {months.map((m) => (
                 <option key={m} value={m}>
                   {fmtMonthJa(m)}
                 </option>
               ))}
             </select>
-          </label>
+            <span className="sep">〜</span>
+            <select className="ctl" value={sel.to} onChange={(e) => onPeriod(e.target.value < sel.from ? e.target.value : sel.from, e.target.value)} aria-label="終了月">
+              {months.map((m) => (
+                <option key={m} value={m}>
+                  {fmtMonthJa(m)}
+                </option>
+              ))}
+            </select>
+          </div>
+          {multi ? (
+            <div className="field" role="group" aria-label="アカウント">
+              <span>アカウント</span>
+              <Segmented options={accountOptions} value={sel.account} onChange={onAccount} ariaLabel="アカウント種別の切替" />
+            </div>
+          ) : null}
         </div>
       </div>
       <div className="co-cards" aria-label="契約と接点">

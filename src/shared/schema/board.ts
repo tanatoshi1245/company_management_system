@@ -13,6 +13,8 @@ export const BoardCompanySchema = z.object({
   planSrc: z.string(),
   /** 契約体系: ad = 広告掲載 / success = 成功報酬 / unknown（プロファイルの contract_type を正、無ければ SF プラン名） */
   contractKind: z.enum(['ad', 'success', 'unknown']),
+  /** アカウント種別（プロファイルの 直接 / 紹介 / 派遣。複数アカウントを運用する企業は 2 つ以上） */
+  accountTypes: z.array(z.string()).default([]),
   owner: z.object({ email: z.string().nullable(), name: z.string().nullable(), src: z.string() }),
   sfOwnerName: z.string().nullable(),
   salesStaff: z.string().nullable(),

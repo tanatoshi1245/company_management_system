@@ -18,7 +18,8 @@ status: active
 | GET /api/me | session | — | ログイン者 | セッション |
 | GET /api/meta | session | ?refresh=1 | 鮮度・営業日・注記 | cms_refresh_log（300 秒キャッシュ）、祝日 JSON |
 | GET /api/board | session | ?month=YYYY-MM（直近 14 か月）, ?refresh=1 | 企業 × 当月の実績・契約・担当・ベンチマーク（`BoardResponse`） | cms_company_master, cms_company_monthly, cms_company_login, cms_industry_benchmark_monthly（マート部分をキャッシュ）+ D1 company_targets / company_settings |
-| GET /api/companies/:id | session | :id `^\d{1,12}$`, ?month=, ?refresh=1 | 1 社の詳細（`CompanyDetailResponse`。無ければ 404） | 上記 + cms_company_daily_usage, cms_scout_cohort_status, cms_application_cohort_status, cms_scout_member_attributes_monthly |
+| GET /api/companies/:id | session | :id `^\d{1,12}$`, ?month=, ?refresh=1 | 1 社の詳細（`CompanyDetailResponse`。アカウント種別ごとの月次・求人一覧を含む。無ければ 404） | 上記（cms_company_monthly は `account_type = '__ALL__'` と種別の行）+ cms_company_daily_usage, cms_scout_cohort_status, cms_application_cohort_status |
+| GET /api/companies/:id/attributes | session | ?from=YYYY-MM&to=YYYY-MM（窓内、from <= to）, ?account=直接\|紹介\|派遣（許可リスト）, ?refresh=1 | 会員属性の内訳（`AttributesResponse`。期間・アカウント種別で BQ 側に集約。Cache API） | cms_scout_member_attributes_monthly |
 | GET /api/targets | session | ?month= | 月の目標（全企業、D1 のみ） | D1 company_targets |
 | GET /api/companies/:id/targets | session | ?from=&to=（既定 −13〜+12 か月） | 企業の目標 | D1 company_targets |
 | GET /api/companies/:id/targets/history | session | ?limit=（≤200） | 監査ログ | D1 audit_log |

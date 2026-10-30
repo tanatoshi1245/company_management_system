@@ -2,13 +2,74 @@ import type { Row } from '../parseRows';
 import { addDays, addMonths, eachDay, endOfMonth, monthOf, todayJst } from '../../../shared/calendar/periods';
 import { STATUS_ORDER } from '../../../shared/labels';
 import { between, pick, seeded } from './random';
-import { mockCompanies, mockCompanyMaster, mockCompanyMonthly, mockCompanyLogin, mockIndustryBenchmark, mockMonths } from './board';
+import { mockAccountTypes, mockCompanies, mockCompanyMaster, mockCompanyMonthly, mockCompanyLogin, mockIndustryBenchmark, mockMonths } from './board';
 
 export function mockCompanyMasterOne(id: string, today = todayJst()): Row[] {
   const c = mockCompanies(today).find((x) => String(x.id) === id);
   const row = mockCompanyMaster(today).find((r) => r.company_id === id);
   if (!c || !row) return [];
-  return [{ ...row, profile_count: 2, contract_from: c.from, contract_to: c.to, sf_account_name: c.owner ? `${c.name}（SF）` : null, scout_unused_json: mockScoutUnusedJson(id, today), jobs_window_distinct: c.jobLimit === 0 ? 0 : (c.jobLimit ?? 12) * 2 + (Number(id) % 5) }];
+  const jobs = mockJobs(id, today);
+  return [{ ...row, profile_count: mockAccountTypes(c).length * 2, contract_from: c.from, contract_to: c.to, sf_account_name: c.owner ? `${c.name}（SF）` : null, scout_unused_json: mockScoutUnusedJson(id, today), jobs_window_distinct: new Set(jobs.map((j) => j.k)).size, accounts_json: mockAccountsJson(id, today), jobs_json: JSON.stringify(jobs) }];
+}
+
+/** accounts_json: アカウント種別ごとに 日 / 英 の 2 プロファイル */
+export function mockAccountsJson(id: string, today = todayJst()): string {
+  const c = mockCompanies(today).find((x) => String(x.id) === id);
+  if (!c) return '[]';
+  const out: { type: string; profile_id: number; profile_name: string; language: string }[] = [];
+  mockAccountTypes(c).forEach((type, i) => {
+    out.push({ type, profile_id: Number(id) * 10 + i * 2, profile_name: c.name, language: '日' });
+    out.push({ type, profile_id: Number(id) * 10 + i * 2 + 1, profile_name: `${c.name} (EN)`, language: '英' });
+  });
+  return JSON.stringify(out);
+}
+
+/** jobs_json: 窓に掛かる求人。掲載開始・終了を散らして、期間を変えると件数が変わるようにする。アカウントが 2 つなら 6:4 で分ける */
+export function mockJobs(id: string, today = todayJst()): { a: string; k: number; s: string; e: string | null }[] {
+  const c = mockCompanies(today).find((x) => String(x.id) === id);
+  if (!c || c.jobLimit === 0) return [];
+  const rand = seeded(Number(id) * 17);
+  const months = mockMonths(today);
+  const accounts = mockAccountTypes(c);
+  const n = (c.jobLimit ?? 12) * 2 + (Number(id) % 5);
+  const out: { a: string; k: number; s: string; e: string | null }[] = [];
+  for (let i = 0; i < n; i++) {
+    const startM = months[between(rand, 0, months.length - 1)];
+    const s = `${startM}-${String(between(rand, 1, 28)).padStart(2, '0')}`;
+    const open = rand() < 0.5;
+    const e = open ? null : addDays(s, between(rand, 20, 120));
+    const a = accounts.length > 1 ? (i % 5 < 3 ? accounts[0] : accounts[1]) : (accounts[0] ?? c.type);
+    out.push({ a, k: Number(id) * 1000 + i, s, e: e && e < s ? null : e });
+  }
+  return out.sort((x, y) => (x.s < y.s ? 1 : -1));
+}
+
+/** アカウント種別ごとの月次。2 アカウントの企業は全体を 6:4 に分ける（合計 = 全体） */
+export function mockCompanyAccountMonthlyOne(id: string, today = todayJst()): Row[] {
+  const c = mockCompanies(today).find((x) => String(x.id) === id);
+  if (!c) return [];
+  const accounts = mockAccountTypes(c);
+  if (!accounts.length) return [];
+  const out: Row[] = [];
+  const keys = ['active_jobs_eom', 'scout_sent', 'interested_by_reply_month', 'applications', 'job_views', 'hires_from_application', 'hires_from_scout', 'in_selection'];
+  for (const r of mockCompanyMonthlyOne(id, today)) {
+    if (accounts.length === 1) {
+      const row: Row = { account_type: accounts[0], month_ym: r.month_ym };
+      for (const k of keys) row[k] = Number(r[k] ?? 0);
+      out.push(row);
+      continue;
+    }
+    const first: Row = { account_type: accounts[0], month_ym: r.month_ym };
+    const second: Row = { account_type: accounts[1], month_ym: r.month_ym };
+    for (const k of keys) {
+      const total = Number(r[k] ?? 0);
+      const a = Math.round(total * 0.6);
+      first[k] = a;
+      second[k] = total - a;
+    }
+    out.push(first, second);
+  }
+  return out;
 }
 
 const UNUSED_REASONS = ['1. 企業担当者の作業時間取れず未利用', '2. そもそもスカウト対象が1人もいなく、1通も送れない', '5. 応募で十分間に合うのでスカウト不要', '7. その他の理由', null];
@@ -117,31 +178,49 @@ const ATTR_VALUES: Record<string, string[]> = {
   member_category: ['A', 'B', 'C', 'I', 'D', 'E', 'F', '(未入力)'],
 };
 
-export function mockMemberAttributes(id: string, fromYmd: string, today = todayJst()): Row[] {
+/**
+ * 会員属性（期間 from〜to・アカウント種別で集約済み。マートの memberAttributesQuery と同じ形）。
+ * 月ごとに scout / view / application の 3 種を作り、2 アカウントの企業は 6:4 に分けてから合算する
+ */
+export function mockMemberAttributes(id: string, fromYmd: string, toYmd: string, account: string | null, today = todayJst()): Row[] {
   const c = mockCompanies(today).find((x) => String(x.id) === id);
   if (!c) return [];
+  const accounts = mockAccountTypes(c);
+  if (account && !accounts.includes(account)) return [];
+  const share = account && accounts.length > 1 ? (account === accounts[0] ? 0.6 : 0.4) : 1;
   const rand = seeded(Number(id) * 11);
   const from = monthOf(fromYmd);
-  const months = mockMonths(today).filter((m) => m >= from);
-  const out: Row[] = [];
-  for (const ym of months) {
+  const to = monthOf(toYmd);
+  const acc = new Map<string, { kind: string; attribute_type: string; attribute_value: string; scouts: number; interested_scouts: number }>();
+  const add = (kind: string, type: string, value: string, n: number, interested: number) => {
+    const k = `${kind}|${type}|${value}`;
+    const cur = acc.get(k) ?? { kind, attribute_type: type, attribute_value: value, scouts: 0, interested_scouts: 0 };
+    cur.scouts += Math.round(n * share);
+    cur.interested_scouts += Math.round(interested * share);
+    acc.set(k, cur);
+  };
+  for (const ym of mockMonths(today)) {
     const total = Math.round((c.scoutLimit ?? 120) * c.activity * (0.6 + rand() * 0.6));
+    const inRange = ym >= from && ym <= to;
     for (const [type, values] of Object.entries(ATTR_VALUES)) {
       let remaining = total;
       values.forEach((v, i) => {
-        const share = i === 0 ? 0.3 : i === values.length - 1 ? 0.08 : 0.6 / Math.max(1, values.length - 2);
-        const n = Math.min(remaining, Math.round(total * share * (0.5 + rand())));
+        const shareV = i === 0 ? 0.3 : i === values.length - 1 ? 0.08 : 0.6 / Math.max(1, values.length - 2);
+        const n = Math.min(remaining, Math.round(total * shareV * (0.5 + rand())));
         remaining -= n;
-        if (n > 0) {
-          out.push({ month_ym: ym, kind: 'scout', attribute_type: type, attribute_value: v, scouts: n, members: n, interested_scouts: Math.round(n * (0.05 + rand() * 0.15)) });
-          // 閲覧した会員（スカウトより多く、構成比は少し違う）
-          const vn = Math.round(n * (1.5 + rand() * 2) + (i % 2 === 0 ? 3 : 0));
-          out.push({ month_ym: ym, kind: 'view', attribute_type: type, attribute_value: v, scouts: vn, members: Math.round(vn * 0.8), interested_scouts: 0 });
+        const interested = Math.round(n * (0.05 + rand() * 0.15));
+        // 閲覧した会員（スカウトより多く、構成比は少し違う）、応募した会員（閲覧の 1 割弱）
+        const vn = Math.round(n * (1.5 + rand() * 2) + (i % 2 === 0 ? 3 : 0));
+        const an = Math.round(vn * (0.04 + rand() * 0.06));
+        if (n > 0 && inRange) {
+          add('scout', type, v, n, interested);
+          add('view', type, v, vn, 0);
+          if (an > 0) add('application', type, v, an, 0);
         }
       });
     }
   }
-  return out;
+  return Array.from(acc.values()).filter((r) => r.scouts > 0);
 }
 
 export function mockBenchSeries(industry: string, companyType: string, today = todayJst()): Row[] {

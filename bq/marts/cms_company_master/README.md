@@ -38,6 +38,9 @@ status: active
 | cs_owner_email_default / cs_owner_name_default / owner_source | STRING | 既定の CS 担当（owner_source = sales_staff。名前は sales_staff そのまま、メールは「名の頭文字-姓@daijob.com」の規則で導出。姓だけの値は NULL）。DA（企業名に DaijobAGENT を含む企業）は BQ の担当データによらず名前 `DA`・メール NULL に固定。アプリの上書き（D1）が優先 |
 | active_jobs_now | INT64 | 当日の掲載求人（企業単位で set_id 重複排除） |
 | jobs_window_distinct | INT64 | 直近 13 か月 + 当月の窓に掲載期間が重なる求人数（set_id で日英重複排除。企業ページの「掲載求人数（重複排除）」。2026-10-27〜） |
+| account_types | STRING | アカウント種別の一覧（プロファイルの company_type を 直接, 紹介, 派遣 の順に `,` 区切り。例 `直接,紹介`。2026-10-30〜）。ボードの `+種別`・種別フィルタ、企業ページの切替 |
+| accounts_json | STRING | プロファイルの一覧 `[{type, profile_id, profile_name, language}]`（種別順 → profile_id 順。2026-10-30〜）。企業ページのヘッダ |
+| jobs_json | STRING | 窓（13 か月前の月初〜今日）に掲載期間が重なる求人の一覧 `[{a: アカウント種別, k: job_key（set_id、無ければ job_id）, s: 掲載開始, e: 掲載終了（NULL = 掲載中）}]`（最大 3,000 件。2026-10-30〜）。企業ページが選択期間・種別で重複排除して「掲載求人数」を数える |
 | scout_unused_json | STRING | スカウト未利用の記録。`scout_unused_companies_monthly`（シート取込の行と、アプリの登録ページが書く `match_method = 'app'` の行）から、同じ企業・月はアプリの行を優先。契約期間に入る月だけ。JSON 配列 `[{month: 'YYYY-MM', reason, remarks, source: 'app' \| 'sheet'}]` を月の降順。無ければ `[]`。Worker が JSON.parse し、D1 の最新を重ねて企業ページの「スカウト未利用状況」に出す |
 | run_date / refreshed_at | DATE / TIMESTAMP | 生成日 |
 

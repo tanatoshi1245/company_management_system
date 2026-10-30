@@ -4,11 +4,11 @@ import type { AppEnv } from '../types';
 import { intVar } from '../env';
 import { makeClient } from '../services/clients';
 import { getRefreshMeta } from '../services/refreshMeta';
-import { getCompanyCore, mergeCompanyDetail } from '../services/companyService';
+import { ACCOUNT_TYPES, getAttributes, getCompanyCore, mergeCompanyDetail } from '../services/companyService';
 import { parseParam, parseQuery } from '../lib/validate';
 import { AppError } from '../lib/errors';
 import { CompanyIdSchema, MonthSchema } from '../../shared/schema/common';
-import { addMonths, monthOf } from '../../shared/calendar/periods';
+import { addMonths, lastNMonths, monthOf } from '../../shared/calendar/periods';
 import { asD1 } from '../d1/db';
 import { TargetsRepo } from '../d1/targetsRepo';
 import { SettingsRepo } from '../d1/settingsRepo';
@@ -16,6 +16,7 @@ import { ScoutUnusedRepo } from '../d1/scoutUnusedRepo';
 import { overlayScoutUnused } from '../services/scoutUnusedService';
 import { AppMetaRepo } from '../d1/appMetaRepo';
 import type { CompanyDetailResponse } from '../../shared/schema/company';
+import { MONTHS_IN_MART } from '../services/boardService';
 
 export const companyRoutes = new Hono<AppEnv>();
 
@@ -44,4 +45,22 @@ companyRoutes.get('/companies/:id', async (c) => {
   if (unused.length) body.scoutUnused = overlayScoutUnused(JSON.stringify(res.core.scoutUnused), unused);
   body.meta.cached = res.hit;
   return c.json(body, 200, { 'x-cache': res.hit ? 'HIT' : 'MISS', 'cache-control': 'private, no-store' });
+});
+
+const AttrQuerySchema = z.object({ from: MonthSchema, to: MonthSchema, account: z.enum(ACCOUNT_TYPES).optional(), refresh: z.enum(['0', '1']).optional() });
+
+/** 会員属性の内訳（期間 from〜to・アカウント種別で集約）。企業ページの円グラフ用。期間は窓（直近 13 か月 + 当月）内、from <= to */
+companyRoutes.get('/companies/:id/attributes', async (c) => {
+  const id = parseParam(c.req.param('id'), CompanyIdSchema);
+  const q = parseQuery(c, AttrQuerySchema);
+  const now = new Date();
+  const client = makeClient(c.env);
+  const refresh = await getRefreshMeta(client, now, c.executionCtx, q.refresh === '1');
+  const months = lastNMonths(monthOf(refresh.dataVersion), MONTHS_IN_MART);
+  if (!months.includes(q.from) || !months.includes(q.to)) throw new AppError('badRequest', 400, '表示できるのは直近 13 か月と当月です', [{ path: 'from', message: `${q.from}〜${q.to} はマートの範囲外` }]);
+  if (q.from > q.to) throw new AppError('badRequest', 400, '開始月は終了月以前にしてください', [{ path: 'from', message: `${q.from} > ${q.to}` }]);
+  const db = c.env.CMS_DB ? asD1(c.env.CMS_DB) : null;
+  const epoch = db ? await new AppMetaRepo(db).cacheEpoch().catch(() => '1') : '1';
+  const res = await getAttributes(client, id, q.from, q.to, q.account ?? null, refresh, epoch, { now, refresh: q.refresh === '1', capSec: intVar(c.env.CACHE_TTL_SEC, 0), ctx: c.executionCtx });
+  return c.json(res.body, 200, { 'x-cache': res.hit ? 'HIT' : 'MISS', 'cache-control': 'private, no-store' });
 });

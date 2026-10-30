@@ -33,7 +33,7 @@ const queries = [
   dailyUsageQuery(sampleId),
   scoutCohortQuery(sampleId),
   applicationCohortQuery(sampleId),
-  memberAttributesQuery(sampleId, `${addMonths(month, -2)}-01`),
+  memberAttributesQuery(sampleId, `${addMonths(month, -2)}-01`, `${month}-01`, null),
   benchSeriesQuery('IT・通信', 'DA'),
   companyLoginByIdQuery(sampleId),
 ];

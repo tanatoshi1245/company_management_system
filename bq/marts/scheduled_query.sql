@@ -5,6 +5,7 @@
 --   サービスアカウント: dwh の dataEditor + bigquery.jobUser
 --   スキャン: 約 1.1 GB/日。失敗時は EXCEPTION で cms_refresh_log に error 行を残し、前日のマートがそのまま残る
 --   設計: company_management_system/bq/README.md、列定義: bq/marts/<table>/README.md
+--   2026-10-30: account_type（アカウント種別 = プロファイルの 直接 / 紹介 / 派遣）を cms_company_monthly（'__ALL__' + 種別の行）・属性・master（account_types / accounts_json / jobs_json）に追加
 -- 変更時の注意: Worker 側の読み取り SQL（src/worker/sql/*.ts）と zod スキーマ（src/shared/schema/*）を合わせ、DATA_VERSION を +1 する
 -- =============================================================================
 BEGIN
@@ -23,10 +24,13 @@ BEGIN
 
   BEGIN
     -- 01. profile → company（RA 4928 / 14508・RDS 7080 は契約企業ではないので除外） ------------------------
+    --   account_type = プロファイルの種別（直接 / 紹介 / 派遣）。1 企業が複数種別のアカウントを運用する場合に実績を分けるための軸（2026-10-30）
     CREATE TEMP TABLE pcm AS
-    SELECT DISTINCT profile_id, company_id
+    SELECT profile_id, company_id,
+           CASE company_type WHEN '直接' THEN '直接' WHEN '紹介' THEN '紹介' WHEN '派遣' THEN '派遣' ELSE '不明' END AS account_type
     FROM `bq-hgt.dwh.company_profiles_full`
-    WHERE profile_id IS NOT NULL AND company_id IS NOT NULL AND profile_id NOT IN (4928, 14508, 7080);
+    WHERE profile_id IS NOT NULL AND company_id IS NOT NULL AND profile_id NOT IN (4928, 14508, 7080)
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY profile_id ORDER BY recorded_on DESC NULLS LAST) = 1;
 
     -- 02. company_base: 対象企業 + 企業情報 + 枠数 + Salesforce 結合 + 担当 + 業種 -------------------------
     --   対象: companies の契約期間（active_from / active_to）が「13 か月前〜今日 + 30 日」に重なる企業
@@ -89,6 +93,20 @@ BEGIN
       JOIN pcm USING (profile_id)
       LEFT JOIN profile_job_counts j USING (profile_id)
       GROUP BY p.company_id
+    ),
+    -- アカウント種別の一覧（直接, 紹介, 派遣 の順）とプロファイルの一覧（企業ページのヘッダ用。2026-10-30）
+    company_accounts AS (
+      SELECT company_id,
+             STRING_AGG(account_type, ',' ORDER BY ord) AS account_types,
+             TO_JSON_STRING(ARRAY_CONCAT_AGG(profiles ORDER BY ord)) AS accounts_json
+      FROM (
+        SELECT pcm.company_id, pcm.account_type,
+               CASE pcm.account_type WHEN '直接' THEN 1 WHEN '紹介' THEN 2 WHEN '派遣' THEN 3 ELSE 9 END AS ord,
+               ARRAY_AGG(STRUCT(pcm.account_type AS type, p.profile_id AS profile_id, p.profile_name AS profile_name, p.language AS language) ORDER BY p.profile_id) AS profiles
+        FROM pcm JOIN latest_profiles p USING (profile_id)
+        GROUP BY 1, 2, 3
+      )
+      GROUP BY 1
     ),
     -- 枠数の予備（company_profiles_all）。SUM はしない（複数プロファイルに同じ値が載るため MAX）
     limits_all AS (
@@ -265,8 +283,11 @@ BEGIN
            IF(c.is_da_name OR ci.company_type = 'DA', 'DA', CASE owner_source WHEN 'sf_account_owner' THEN ua.Name WHEN 'sf_contract_owner' THEN uc.Name ELSE ac.sales_staff END) AS cs_owner_name_default,
            owner_source,
            IFNULL(aj.n, 0) AS active_jobs_now,
-           IFNULL(su.scout_unused_json, '[]') AS scout_unused_json
+           IFNULL(su.scout_unused_json, '[]') AS scout_unused_json,
+           IFNULL(ca.account_types, '') AS account_types,
+           IFNULL(ca.accounts_json, '[]') AS accounts_json
     FROM companies_now c
+    LEFT JOIN company_accounts ca USING (company_id)
     LEFT JOIN scout_unused su USING (company_id)
     LEFT JOIN company_info ci USING (company_id)
     LEFT JOIN limits_all la USING (company_id)
@@ -306,7 +327,7 @@ BEGIN
       WHERE from_status IN ('質問する', '開封のみ') AND to_status = '興味あり'
       GROUP BY 1
     )
-    SELECT s.scout_id, s.member_id, pcm.company_id, s.profile_id,
+    SELECT s.scout_id, s.member_id, pcm.company_id, s.profile_id, pcm.account_type,
            DATE(s.sent_at) AS sent_date, DATE_TRUNC(DATE(s.sent_at), MONTH) AS sent_month,
            IFNULL(s.is_auto_scout, FALSE) AS is_auto,
            DATE(fi.interested_at) AS interested_date, DATE_TRUNC(DATE(fi.interested_at), MONTH) AS interested_month,
@@ -318,25 +339,31 @@ BEGIN
 
     -- 06. app_fact: 応募 ----------------------------------------------------------------------------------------
     CREATE TEMP TABLE app_fact AS
-    SELECT a.application_id, a.member_id, pcm.company_id, a.profile_id, a.job_id, a.application_type,
+    SELECT a.application_id, a.member_id, pcm.company_id, a.profile_id, pcm.account_type, a.job_id, a.application_type,
            DATE(a.applicated_at) AS app_date, DATE_TRUNC(DATE(a.applicated_at), MONTH) AS app_month,
            IF(a.status IS NULL OR TRIM(a.status) = '', '(未設定)', a.status) AS status
     FROM `bq-hgt.dwh.member_applications` a
     JOIN pcm USING (profile_id)
     WHERE DATE(a.applicated_at) BETWEEN window_start AND data_date;
 
-    -- 07. view_day: 求人閲覧（企業 × 日） ------------------------------------------------------------------------
-    CREATE TEMP TABLE view_day AS
-    SELECT pcm.company_id, DATE(v.viewed_at) AS view_date,
-           COUNT(DISTINCT v.view_id) AS job_views, COUNT(DISTINCT v.member_id) AS job_view_members
+    -- 07. view_raw: 求人閲覧（生テーブルは 1 回だけ読む）→ view_day（企業 × 日）/ view_acct_day（企業 × アカウント種別 × 日） --------------
+    CREATE TEMP TABLE view_raw AS
+    SELECT pcm.company_id, pcm.account_type, v.view_id, v.member_id, DATE(v.viewed_at) AS view_date
     FROM `bq-hgt.dwh.member_job_detail_views` v
     JOIN pcm USING (profile_id)
-    WHERE DATE(v.viewed_at) BETWEEN window_start AND data_date
-    GROUP BY 1, 2;
+    WHERE DATE(v.viewed_at) BETWEEN window_start AND data_date;
+
+    CREATE TEMP TABLE view_day AS
+    SELECT company_id, view_date, COUNT(DISTINCT view_id) AS job_views, COUNT(DISTINCT member_id) AS job_view_members
+    FROM view_raw GROUP BY 1, 2;
+
+    CREATE TEMP TABLE view_acct_day AS
+    SELECT company_id, account_type, view_date, COUNT(DISTINCT view_id) AS job_views, COUNT(DISTINCT member_id) AS job_view_members
+    FROM view_raw GROUP BY 1, 2, 3;
 
     -- 08. job_month: 月末（当月は今日）時点の掲載求人数と新規掲載数（set_id で日英重複排除） ----------------------
     CREATE TEMP TABLE jph AS
-    SELECT pcm.company_id, COALESCE(ja.set_id, j.job_id) AS job_key, j.job_publish_start_date AS s, j.job_publish_end_date AS e
+    SELECT pcm.company_id, pcm.account_type, COALESCE(ja.set_id, j.job_id) AS job_key, j.job_publish_start_date AS s, j.job_publish_end_date AS e
     FROM `bq-hgt.dwh.job_publish_history` j
     JOIN pcm USING (profile_id)
     LEFT JOIN (SELECT DISTINCT job_id, set_id FROM `bq-hgt.dwh.jobs_all`) ja USING (job_id)
@@ -364,11 +391,43 @@ BEGIN
            IFNULL(a.active_jobs_eom, 0) AS active_jobs_eom, IFNULL(n.new_jobs, 0) AS new_jobs
     FROM active_m a FULL OUTER JOIN new_m n USING (month, company_id);
 
+    -- 同じ集計をアカウント種別ごとに（企業ページの種別切替用。2026-10-30）
+    CREATE TEMP TABLE job_month_acct AS
+    WITH months AS (
+      SELECT m AS month, IF(m = cur_month, run_date, LAST_DAY(m)) AS as_of
+      FROM UNNEST(GENERATE_DATE_ARRAY(window_start, cur_month, INTERVAL 1 MONTH)) AS m
+    ),
+    active_m AS (
+      SELECT mo.month, x.company_id, x.account_type,
+             COUNT(DISTINCT IF(x.s <= mo.as_of AND (x.e IS NULL OR x.e >= mo.as_of), x.job_key, NULL)) AS active_jobs_eom
+      FROM jph x CROSS JOIN months mo
+      GROUP BY 1, 2, 3
+    ),
+    first_pub AS (SELECT company_id, account_type, job_key, MIN(s) AS first_start FROM jph GROUP BY 1, 2, 3),
+    new_m AS (
+      SELECT company_id, account_type, DATE_TRUNC(first_start, MONTH) AS month, COUNT(*) AS new_jobs
+      FROM first_pub WHERE first_start >= window_start GROUP BY 1, 2, 3
+    )
+    SELECT COALESCE(a.month, n.month) AS month, COALESCE(a.company_id, n.company_id) AS company_id, COALESCE(a.account_type, n.account_type) AS account_type,
+           IFNULL(a.active_jobs_eom, 0) AS active_jobs_eom, IFNULL(n.new_jobs, 0) AS new_jobs
+    FROM active_m a FULL OUTER JOIN new_m n USING (month, company_id, account_type);
+
     -- 08b. 窓（13 か月前〜今日）に掲載期間が重なる求人の数（set_id で日英重複排除）。企業ページの「掲載求人数（直近 13 か月）」用（2026-10-27）
+    --   jobs_json: 窓に掛かる求人の一覧 [{a: アカウント種別, k: job_key, s: 掲載開始, e: 掲載終了（NULL = 掲載中）}]。企業ページが任意の期間・種別で重複排除して数える（2026-10-30）
     ALTER TABLE `bq-hgt.dwh.cms_company_master` ADD COLUMN IF NOT EXISTS jobs_window_distinct INT64;
+    ALTER TABLE `bq-hgt.dwh.cms_company_master` ADD COLUMN IF NOT EXISTS jobs_json STRING;
+    CREATE TEMP TABLE job_json AS
+    SELECT company_id, COUNT(DISTINCT k) AS jobs_window_distinct,
+           TO_JSON_STRING(ARRAY_AGG(STRUCT(a, k, s, e) ORDER BY s DESC, k LIMIT 3000)) AS jobs_json
+    FROM (
+      SELECT company_id, account_type AS a, job_key AS k, MIN(s) AS s, IF(LOGICAL_OR(e IS NULL), NULL, MAX(e)) AS e
+      FROM jph GROUP BY 1, 2, 3
+    )
+    GROUP BY 1;
     UPDATE `bq-hgt.dwh.cms_company_master` m
-    SET jobs_window_distinct = IFNULL((SELECT COUNT(DISTINCT job_key) FROM jph j WHERE j.company_id = m.company_id), 0)
-    WHERE TRUE;
+    SET jobs_window_distinct = IFNULL(j.jobs_window_distinct, 0), jobs_json = IFNULL(j.jobs_json, '[]')
+    FROM (SELECT cb.company_id, j.jobs_window_distinct, j.jobs_json FROM company_base cb LEFT JOIN job_json j USING (company_id)) j
+    WHERE m.company_id = j.company_id;
 
     -- 09. hire_fact: 11.採用 を会員 × 企業で重複排除（応募経路・スカウト経路） ----------------------------------
     CREATE TEMP TABLE hire_fact AS
@@ -382,6 +441,19 @@ BEGIN
     )
     WHERE member_id IS NOT NULL
     GROUP BY member_id, company_id;
+
+    -- 同じ重複排除をアカウント種別ごとに（同じ会員が 2 つの種別で採用になれば両方に 1 ずつ立つ。全体の hires は 1 のまま。2026-10-30）
+    CREATE TEMP TABLE hire_fact_acct AS
+    SELECT member_id, company_id, account_type,
+           MIN(origin_date) AS origin_date, DATE_TRUNC(MIN(origin_date), MONTH) AS origin_month,
+           LOGICAL_OR(path = 'application') AS via_application, LOGICAL_OR(path = 'scout') AS via_scout
+    FROM (
+      SELECT member_id, company_id, account_type, 'application' AS path, app_date AS origin_date FROM app_fact WHERE status = '11.採用'
+      UNION ALL
+      SELECT member_id, company_id, account_type, 'scout', COALESCE(interested_date, sent_date) FROM scout_fact WHERE application_status = '11.採用'
+    )
+    WHERE member_id IS NOT NULL
+    GROUP BY member_id, company_id, account_type;
 
     -- 10. GA4 ログイン（直近 N 日を取り直し）→ cms_company_login -------------------------------------------------
     --   確定表 events_YYYYMMDD は翌朝 09〜10 時台に作られ 07:45 の実行では前日分が無いので、前日分は速報表 events_intraday_YYYYMMDD からも読む
@@ -446,10 +518,11 @@ BEGIN
     LEFT JOIN `bq-hgt.dwh.cms_company_login_daily` l USING (company_id)
     GROUP BY cb.company_id;
 
-    -- 11. cms_company_monthly（企業 × 月、13 か月 + 当月 MTD） -----------------------------------------------------
+    -- 11. cms_company_monthly（企業 × 月、13 か月 + 当月 MTD。account_type = '__ALL__' が企業全体、直接 / 紹介 / 派遣 の行はアカウント種別ごとの内訳） --------
+    --   企業全体の行だけを読むクエリ（ボード・ベンチマーク）は WHERE account_type = '__ALL__' を付ける（2026-10-30）
     CREATE OR REPLACE TABLE `bq-hgt.dwh.cms_company_monthly`
     PARTITION BY month CLUSTER BY company_id
-    OPTIONS (description = '契約企業マネジメントシステム: 企業 × 月の実績（掲載求人・スカウト・興味あり・応募・閲覧・採用・現ステータス別件数）。13 か月 + 当月 MTD。毎朝 07:45 JST に全件差し替え') AS
+    OPTIONS (description = '契約企業マネジメントシステム: 企業 × 月の実績（掲載求人・スカウト・興味あり・応募・閲覧・採用・現ステータス別件数）。13 か月 + 当月 MTD。account_type = __ALL__ が企業全体、直接 / 紹介 / 派遣 はアカウント種別ごとの内訳。毎朝 07:45 JST に全件差し替え') AS
     WITH months AS (SELECT m AS month FROM UNNEST(GENERATE_DATE_ARRAY(window_start, cur_month, INTERVAL 1 MONTH)) AS m),
     grid AS (SELECT cb.company_id, mo.month FROM company_base cb CROSS JOIN months mo),
     contracted_m AS (
@@ -462,23 +535,25 @@ BEGIN
              ON sn.company_id = g.company_id AND sn.recorded_on BETWEEN g.month AND LAST_DAY(g.month)
       GROUP BY 1, 2
     ),
+    -- 集計の軸: 企業全体（'__ALL__'）とアカウント種別。facts 側の account_type を UNNEST([account_type, '__ALL__']) で二重化し、1 回の GROUP BY で両方を出す
     sc_send AS (
-      SELECT company_id, sent_month AS month,
+      SELECT company_id, acct, sent_month AS month,
              COUNT(*) AS scout_sent, COUNTIF(NOT is_auto) AS scout_sent_manual, COUNTIF(is_auto) AS scout_sent_auto,
              COUNTIF(interested_date IS NOT NULL) AS interested_by_send_month,
              COUNTIF(interested_date IS NOT NULL AND NOT is_auto) AS interested_manual_by_send_month
-      FROM scout_fact WHERE sent_month >= window_start GROUP BY 1, 2
+      FROM scout_fact, UNNEST([account_type, '__ALL__']) AS acct WHERE sent_month >= window_start GROUP BY 1, 2, 3
     ),
     sc_reply AS (
-      SELECT company_id, interested_month AS month, COUNT(*) AS interested_by_reply_month,
+      SELECT company_id, acct, interested_month AS month, COUNT(*) AS interested_by_reply_month,
              COUNTIF(application_status = '1.未対応') AS s01, COUNTIF(application_status = '2.連絡予定') AS s02,
              COUNTIF(application_status = '3.見送り予定') AS s03, COUNTIF(application_status = '4.連絡済み') AS s04,
              COUNTIF(application_status = '5.不採用') AS s05, COUNTIF(application_status = '6.面接調整中') AS s06,
              COUNTIF(application_status = '7.1stインタビュー') AS s07, COUNTIF(application_status = '8.2ndインタビュー') AS s08,
              COUNTIF(application_status = '9.3rdインタビュー') AS s09, COUNTIF(application_status = '10.Finalインタビュー') AS s10,
              COUNTIF(application_status = '11.採用') AS s11, COUNTIF(application_status = '12.辞退') AS s12
-      FROM scout_fact WHERE interested_month >= window_start GROUP BY 1, 2
+      FROM scout_fact, UNNEST([account_type, '__ALL__']) AS acct WHERE interested_month >= window_start GROUP BY 1, 2, 3
     ),
+    -- 契約開始からの累計送信（企業全体のみ）
     sc_ctd AS (
       SELECT g.company_id, g.month, COUNT(sf.scout_id) AS scout_sent_contract_to_date
       FROM grid g
@@ -489,30 +564,52 @@ BEGIN
       GROUP BY 1, 2
     ),
     ap AS (
-      SELECT company_id, app_month AS month, COUNT(*) AS applications,
+      SELECT company_id, acct, app_month AS month, COUNT(*) AS applications,
              COUNTIF(application_type = '求人') AS applications_job, COUNTIF(application_type = '企業') AS applications_direct,
              COUNTIF(status = '1.未対応') AS a01, COUNTIF(status = '2.連絡予定') AS a02, COUNTIF(status = '3.見送り予定') AS a03,
              COUNTIF(status = '4.連絡済み') AS a04, COUNTIF(status = '5.不採用') AS a05, COUNTIF(status = '6.面接調整中') AS a06,
              COUNTIF(status = '7.1stインタビュー') AS a07, COUNTIF(status = '8.2ndインタビュー') AS a08, COUNTIF(status = '9.3rdインタビュー') AS a09,
              COUNTIF(status = '10.Finalインタビュー') AS a10, COUNTIF(status = '11.採用') AS a11, COUNTIF(status = '12.辞退') AS a12
-      FROM app_fact GROUP BY 1, 2
+      FROM app_fact, UNNEST([account_type, '__ALL__']) AS acct GROUP BY 1, 2, 3
     ),
-    vw AS (SELECT company_id, DATE_TRUNC(view_date, MONTH) AS month, SUM(job_views) AS job_views, SUM(job_view_members) AS job_view_members FROM view_day GROUP BY 1, 2),
-    hr AS (SELECT company_id, origin_month AS month, COUNT(*) AS hires, COUNTIF(via_application) AS hires_from_application, COUNTIF(via_scout) AS hires_from_scout
-           FROM hire_fact WHERE origin_month >= window_start GROUP BY 1, 2),
-    lg AS (SELECT company_id, DATE_TRUNC(login_date, MONTH) AS month, COUNT(DISTINCT login_date) AS login_days FROM `bq-hgt.dwh.cms_company_login_daily` GROUP BY 1, 2)
+    vw AS (
+      SELECT company_id, '__ALL__' AS acct, DATE_TRUNC(view_date, MONTH) AS month, SUM(job_views) AS job_views, SUM(job_view_members) AS job_view_members FROM view_day GROUP BY 1, 2, 3
+      UNION ALL
+      SELECT company_id, account_type, DATE_TRUNC(view_date, MONTH), SUM(job_views), SUM(job_view_members) FROM view_acct_day GROUP BY 1, 2, 3
+    ),
+    hr AS (
+      SELECT company_id, '__ALL__' AS acct, origin_month AS month, COUNT(*) AS hires, COUNTIF(via_application) AS hires_from_application, COUNTIF(via_scout) AS hires_from_scout
+      FROM hire_fact WHERE origin_month >= window_start GROUP BY 1, 2, 3
+      UNION ALL
+      SELECT company_id, account_type, origin_month, COUNT(*), COUNTIF(via_application), COUNTIF(via_scout)
+      FROM hire_fact_acct WHERE origin_month >= window_start GROUP BY 1, 2, 3
+    ),
+    jm AS (
+      SELECT month, company_id, '__ALL__' AS acct, active_jobs_eom, new_jobs FROM job_month
+      UNION ALL
+      SELECT month, company_id, account_type, active_jobs_eom, new_jobs FROM job_month_acct
+    ),
+    lg AS (SELECT company_id, DATE_TRUNC(login_date, MONTH) AS month, COUNT(DISTINCT login_date) AS login_days FROM `bq-hgt.dwh.cms_company_login_daily` GROUP BY 1, 2),
+    -- 行の軸: 企業 × 月 × ('__ALL__' + その企業のアカウント種別)
+    accts AS (
+      SELECT company_id, '__ALL__' AS acct FROM company_base
+      UNION ALL
+      SELECT DISTINCT cb.company_id, pcm.account_type FROM company_base cb JOIN pcm USING (company_id)
+    ),
+    grid_a AS (SELECT a.company_id, a.acct, mo.month FROM accts a CROSS JOIN months mo)
     SELECT g.month,
            FORMAT_DATE('%Y-%m', g.month) AS month_ym,
            g.month = cur_month AS is_current_month,
            IF(g.month = cur_month, run_date, LAST_DAY(g.month)) AS as_of_date,
            IF(g.month = cur_month, EXTRACT(DAY FROM data_date), EXTRACT(DAY FROM LAST_DAY(g.month))) AS data_days,
            g.company_id,
+           g.acct AS account_type,
            IFNULL(cm.by_companies, FALSE) OR IFNULL(cm.by_snapshot, FALSE) AS is_contracted_in_month,
            CASE WHEN IFNULL(cm.by_snapshot, FALSE) THEN 'snapshot' WHEN IFNULL(cm.by_companies, FALSE) THEN 'companies' ELSE 'none' END AS contracted_source,
            cb.scout_limit, cb.job_posting_limit,
            IFNULL(jm.active_jobs_eom, 0) AS active_jobs_eom, IFNULL(jm.new_jobs, 0) AS new_jobs,
            IFNULL(ss.scout_sent, 0) AS scout_sent, IFNULL(ss.scout_sent_manual, 0) AS scout_sent_manual, IFNULL(ss.scout_sent_auto, 0) AS scout_sent_auto,
-           IFNULL(sc.scout_sent_contract_to_date, 0) AS scout_sent_contract_to_date,
+           IF(g.acct = '__ALL__', IFNULL(sc.scout_sent_contract_to_date, 0), 0) AS scout_sent_contract_to_date,
            IFNULL(ss.interested_by_send_month, 0) AS interested_by_send_month,
            IFNULL(sr.interested_by_reply_month, 0) AS interested_by_reply_month,
            IFNULL(ss.interested_manual_by_send_month, 0) AS interested_manual_by_send_month,
@@ -534,19 +631,19 @@ BEGIN
            IFNULL(ap.a12, 0) + IFNULL(sr.s12, 0) AS st12_declined,
            IFNULL(ap.a06, 0) + IFNULL(ap.a07, 0) + IFNULL(ap.a08, 0) + IFNULL(ap.a09, 0) + IFNULL(ap.a10, 0)
              + IFNULL(sr.s06, 0) + IFNULL(sr.s07, 0) + IFNULL(sr.s08, 0) + IFNULL(sr.s09, 0) + IFNULL(sr.s10, 0) AS in_selection,
-           IF(g.month < DATE '2026-05-01', NULL, IFNULL(lg.login_days, 0)) AS login_days,
+           IF(g.month < DATE '2026-05-01' OR g.acct != '__ALL__', NULL, IFNULL(lg.login_days, 0)) AS login_days,
            CURRENT_TIMESTAMP() AS refreshed_at
-    FROM grid g
-    JOIN company_base cb USING (company_id)
-    LEFT JOIN contracted_m cm USING (company_id, month)
-    LEFT JOIN job_month jm USING (company_id, month)
-    LEFT JOIN sc_send ss USING (company_id, month)
-    LEFT JOIN sc_reply sr USING (company_id, month)
-    LEFT JOIN sc_ctd sc USING (company_id, month)
-    LEFT JOIN ap USING (company_id, month)
-    LEFT JOIN vw USING (company_id, month)
-    LEFT JOIN hr USING (company_id, month)
-    LEFT JOIN lg USING (company_id, month);
+    FROM grid_a g
+    JOIN company_base cb ON cb.company_id = g.company_id
+    LEFT JOIN contracted_m cm ON cm.company_id = g.company_id AND cm.month = g.month
+    LEFT JOIN jm ON jm.company_id = g.company_id AND jm.month = g.month AND jm.acct = g.acct
+    LEFT JOIN sc_send ss ON ss.company_id = g.company_id AND ss.month = g.month AND ss.acct = g.acct
+    LEFT JOIN sc_reply sr ON sr.company_id = g.company_id AND sr.month = g.month AND sr.acct = g.acct
+    LEFT JOIN sc_ctd sc ON sc.company_id = g.company_id AND sc.month = g.month
+    LEFT JOIN ap ON ap.company_id = g.company_id AND ap.month = g.month AND ap.acct = g.acct
+    LEFT JOIN vw ON vw.company_id = g.company_id AND vw.month = g.month AND vw.acct = g.acct
+    LEFT JOIN hr ON hr.company_id = g.company_id AND hr.month = g.month AND hr.acct = g.acct
+    LEFT JOIN lg ON lg.company_id = g.company_id AND lg.month = g.month;
 
     -- 12. cms_company_daily_usage（企業 × 日、前月 + 当月。累積列でペース曲線） -------------------------------------
     CREATE OR REPLACE TABLE `bq-hgt.dwh.cms_company_daily_usage`
@@ -616,25 +713,28 @@ BEGIN
     --   語学・年収帯・年代・職種 12 区分はビュー member_profile_latest を流用（導出ロジックの唯一の定義場所）
     CREATE OR REPLACE TABLE `bq-hgt.dwh.cms_scout_member_attributes_monthly`
     CLUSTER BY company_id, attribute_type
-    OPTIONS (description = '契約企業マネジメントシステム: スカウトを送った会員（kind = scout。企業 × 送信月）と求人を閲覧した会員（kind = view。企業 × 閲覧月）の属性の内訳（× 属性種別 × 値）。scouts = 送信数 / 閲覧数、members = 会員数、interested_scouts = 興味あり返信（view は 0）。属性は現在のプロフィール') AS
+    OPTIONS (description = '契約企業マネジメントシステム: スカウトを送った会員（kind = scout。企業 × 送信月）・求人を閲覧した会員（kind = view。閲覧月）・応募した会員（kind = application。応募月）の属性の内訳（× アカウント種別 × 属性種別 × 値）。scouts = 送信数 / 閲覧数 / 応募数、members = 会員数、interested_scouts = 興味あり返信（view / application は 0）。属性は現在のプロフィール') AS
     WITH latest_raw AS (
       SELECT member_id, member_category, country_of_residence, experienced_occupation, desired_occupation, desired_annual_income_yen
       FROM `bq-hgt.dwh.member_details`
       QUALIFY ROW_NUMBER() OVER (PARTITION BY member_id ORDER BY recorded_on DESC NULLS LAST) = 1
     ),
-    -- 対象: スカウト（送信月）と求人閲覧（閲覧月）。2026-10-27 に閲覧を追加
+    -- 対象: スカウト（送信月）・求人閲覧（閲覧月。2026-10-27 追加）・応募（応募月。2026-10-30 追加）。account_type はアカウント種別（企業ページの切替用）
     subj AS (
-      SELECT 'scout' AS kind, sf.company_id, sf.sent_month, CAST(sf.scout_id AS STRING) AS subj_id, sf.member_id, sf.interested_date IS NOT NULL AS interested
+      SELECT 'scout' AS kind, sf.company_id, sf.account_type, sf.sent_month, CAST(sf.scout_id AS STRING) AS subj_id, sf.member_id, sf.interested_date IS NOT NULL AS interested
       FROM scout_fact sf
       WHERE sf.sent_month >= window_start
       UNION ALL
-      SELECT 'view', pcm.company_id, DATE_TRUNC(DATE(v.viewed_at), MONTH), CAST(v.view_id AS STRING), v.member_id, FALSE
-      FROM `bq-hgt.dwh.member_job_detail_views` v
-      JOIN pcm USING (profile_id)
-      WHERE DATE(v.viewed_at) BETWEEN window_start AND data_date AND v.member_id IS NOT NULL
+      SELECT 'view', v.company_id, v.account_type, DATE_TRUNC(v.view_date, MONTH), CAST(v.view_id AS STRING), v.member_id, FALSE
+      FROM view_raw v
+      WHERE v.member_id IS NOT NULL
+      UNION ALL
+      SELECT 'application', a.company_id, a.account_type, a.app_month, CAST(a.application_id AS STRING), a.member_id, FALSE
+      FROM app_fact a
+      WHERE a.member_id IS NOT NULL
     ),
     sm AS (
-      SELECT s.kind, s.company_id, s.sent_month, s.subj_id AS scout_id, s.member_id, s.interested,
+      SELECT s.kind, s.company_id, s.account_type, s.sent_month, s.subj_id AS scout_id, s.member_id, s.interested,
              v.japanese_level, v.english_level, v.last_occupation AS last_occupation_group, v.annual_income_range AS current_income_range, v.age_group,
              r.member_category, r.country_of_residence, r.experienced_occupation, r.desired_occupation, r.desired_annual_income_yen
       FROM subj s
@@ -642,38 +742,38 @@ BEGIN
       LEFT JOIN latest_raw r USING (member_id)
     ),
     long AS (
-      SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'japanese_level' AS attribute_type, IFNULL(japanese_level, '(未入力)') AS attribute_value FROM sm
-      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'english_level', IFNULL(english_level, '(未入力)') FROM sm
-      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'residence_prefecture',
+      SELECT kind, company_id, account_type, sent_month, scout_id, member_id, interested, 'japanese_level' AS attribute_type, IFNULL(japanese_level, '(未入力)') AS attribute_value FROM sm
+      UNION ALL SELECT kind, company_id, account_type, sent_month, scout_id, member_id, interested, 'english_level', IFNULL(english_level, '(未入力)') FROM sm
+      UNION ALL SELECT kind, company_id, account_type, sent_month, scout_id, member_id, interested, 'residence_prefecture',
         CASE
           WHEN country_of_residence IS NULL OR TRIM(country_of_residence) = '' THEN '(未入力)'
           WHEN NOT STARTS_WITH(country_of_residence, '日本') THEN '日本以外'
           ELSE COALESCE(NULLIF(REGEXP_EXTRACT(country_of_residence, r'^日本[\s\x{3000}]+(\S+)'), ''), '日本（都道府県不明）')
         END FROM sm
-      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'last_occupation_group', IFNULL(last_occupation_group, '(未入力)') FROM sm
-      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'current_income_range', IFNULL(current_income_range, '(未入力)') FROM sm
-      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'desired_income_range',
+      UNION ALL SELECT kind, company_id, account_type, sent_month, scout_id, member_id, interested, 'last_occupation_group', IFNULL(last_occupation_group, '(未入力)') FROM sm
+      UNION ALL SELECT kind, company_id, account_type, sent_month, scout_id, member_id, interested, 'current_income_range', IFNULL(current_income_range, '(未入力)') FROM sm
+      UNION ALL SELECT kind, company_id, account_type, sent_month, scout_id, member_id, interested, 'desired_income_range',
         CASE WHEN SAFE_CAST(desired_annual_income_yen AS FLOAT64) IS NULL OR SAFE_CAST(desired_annual_income_yen AS FLOAT64) <= 0 THEN '(未入力)'
              WHEN SAFE_CAST(desired_annual_income_yen AS FLOAT64) <= 3000000 THEN '300万円以下'
              WHEN SAFE_CAST(desired_annual_income_yen AS FLOAT64) <= 5000000 THEN '301万円〜500万円'
              WHEN SAFE_CAST(desired_annual_income_yen AS FLOAT64) <= 8000000 THEN '501万円〜800万円'
              ELSE '801万円以上' END FROM sm
-      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'member_category', IFNULL(member_category, '(未入力)') FROM sm
-      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'target_flag',
+      UNION ALL SELECT kind, company_id, account_type, sent_month, scout_id, member_id, interested, 'member_category', IFNULL(member_category, '(未入力)') FROM sm
+      UNION ALL SELECT kind, company_id, account_type, sent_month, scout_id, member_id, interested, 'target_flag',
         CASE WHEN member_category IN ('A', 'B', 'C', 'I') THEN 'ターゲット' WHEN member_category IS NULL OR member_category = '' THEN '(未入力)' ELSE 'ターゲット外' END FROM sm
-      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'age_group', IFNULL(age_group, '(未入力)') FROM sm
-      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'experienced_occupation', occ
+      UNION ALL SELECT kind, company_id, account_type, sent_month, scout_id, member_id, interested, 'age_group', IFNULL(age_group, '(未入力)') FROM sm
+      UNION ALL SELECT kind, company_id, account_type, sent_month, scout_id, member_id, interested, 'experienced_occupation', occ
         FROM sm, UNNEST(IF(experienced_occupation IS NULL OR TRIM(experienced_occupation) = '', ['(未入力)'],
           ARRAY(SELECT DISTINCT TRIM(SPLIT(x, ' - ')[SAFE_OFFSET(0)]) FROM UNNEST(SPLIT(experienced_occupation, ',')) x WHERE TRIM(x) != ''))) AS occ
-      UNION ALL SELECT kind, company_id, sent_month, scout_id, member_id, interested, 'desired_occupation', occ
+      UNION ALL SELECT kind, company_id, account_type, sent_month, scout_id, member_id, interested, 'desired_occupation', occ
         FROM sm, UNNEST(IF(desired_occupation IS NULL OR TRIM(desired_occupation) = '', ['(未入力)'],
           ARRAY(SELECT DISTINCT TRIM(SPLIT(x, ' - ')[SAFE_OFFSET(0)]) FROM UNNEST(SPLIT(desired_occupation, ',')) x WHERE TRIM(x) != ''))) AS occ
     )
-    SELECT company_id, sent_month, kind, attribute_type, attribute_value,
+    SELECT company_id, sent_month, kind, account_type, attribute_type, attribute_value,
            COUNT(DISTINCT scout_id) AS scouts, COUNT(DISTINCT member_id) AS members,
            COUNT(DISTINCT IF(interested, scout_id, NULL)) AS interested_scouts, CURRENT_TIMESTAMP() AS refreshed_at
     FROM long
-    GROUP BY 1, 2, 3, 4, 5;
+    GROUP BY 1, 2, 3, 4, 5, 6;
 
     -- 15. 業界ベンチマーク（月 × 業種 × 企業種別 × 指標。__ALL__ のロールアップ行付き） -----------------------------
     CREATE OR REPLACE TABLE `bq-hgt.dwh.cms_industry_benchmark_monthly`
@@ -691,7 +791,7 @@ BEGIN
               STRUCT('login_days', CAST(m.login_days AS FLOAT64))] AS metrics
       FROM `bq-hgt.dwh.cms_company_monthly` m
       JOIN `bq-hgt.dwh.cms_company_master` cm USING (company_id)
-      WHERE m.is_contracted_in_month
+      WHERE m.is_contracted_in_month AND m.account_type = '__ALL__'
     ),
     long AS (
       SELECT b.month, b.company_id, ind, typ, x.metric, x.v
@@ -712,7 +812,7 @@ BEGIN
     INSERT INTO `bq-hgt.dwh.cms_refresh_log` (run_date, step, started_at, finished_at, status, rows_master, rows_monthly, note)
     SELECT run_date, 'all', t0, CURRENT_TIMESTAMP(), 'ok',
            (SELECT COUNT(*) FROM `bq-hgt.dwh.cms_company_master`),
-           (SELECT COUNT(*) FROM `bq-hgt.dwh.cms_company_monthly`),
+           (SELECT COUNT(*) FROM `bq-hgt.dwh.cms_company_monthly` WHERE account_type = '__ALL__'),
            NULL;
   EXCEPTION WHEN ERROR THEN
     INSERT INTO `bq-hgt.dwh.cms_refresh_log` (run_date, step, started_at, finished_at, status, note)
