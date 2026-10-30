@@ -30,7 +30,7 @@ status: active
 `from=YYYY-MM` / `to=YYYY-MM`（期間。既定は契約開始月（窓より前なら窓の先頭）〜当月）、`account=<直接|紹介|派遣>`（アカウント種別。空 = 全体。複数アカウント企業だけ）、`tab=jobs|scout|selection`（既定 jobs）、`job=<set_id|job_id|direct>`（求人フィルタ）、`attr=<attribute_type>`（属性タブ）。詳細本体は `to` で取得し、期間・アカウントの切替は再取得しない（属性の内訳だけ別 API）。戻るとボードのフィルタが復元される（History API）。
 
 ## 編集するときの入口
-CompanyPage.tsx（URL 状態・取得。詳細本体 + 属性 API + 求人 API、タブの出し分け）→ companyModel.ts（期間・アカウント・求人の確定 `resolvePeriod`、スコア・累積と推移の系列（求人選択時は求人の月次）、求人の期間集計 `countJobs`、選考状況 `selection`、属性の内訳 `buildBreakdown`）→ components/（CompanyHeader（期間・アカウント切替）/ CompanyTabs / SummaryPanel / ViewsAppsPanel / ScoutTrendPanel / AttributePiePanel / JobsTablePanel（求人の表・フィルタ）/ SelectionPanel / ScoutUnusedPanel。TargetVsActualPanel は未使用で保管）。
+CompanyPage.tsx（URL 状態・取得。詳細本体 + 属性 API + 求人 API、タブの出し分け。タブの中身は `key={tab}` で別インスタンスにし、求人タブの 閲覧 / 応募 の選択がスカウトタブの円グラフに残らないようにする）→ companyModel.ts（期間・アカウント・求人の確定 `resolvePeriod`、スコア・累積と推移の系列（求人選択時は求人の月次）、求人の期間集計 `countJobs`、選考状況 `selection`、属性の内訳 `buildBreakdown`）→ components/（CompanyHeader（期間・アカウント切替）/ CompanyTabs / SummaryPanel / ViewsAppsPanel / ScoutTrendPanel / AttributePiePanel / JobsTablePanel（求人の表・フィルタ）/ SelectionPanel / ScoutUnusedPanel。TargetVsActualPanel は未使用で保管）。
 チャート部品は `src/app/components/charts/`（DualLineChart / PieChart。Bullet / AttributeBars / TimelineBar は未使用で保管）。
 応答の形は `src/shared/schema/company.ts`、Worker 側は `routes/companies.ts` → `services/companyService.ts` → `sql/companyDetail.ts`。
 

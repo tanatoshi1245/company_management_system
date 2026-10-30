@@ -69,13 +69,14 @@ export function BoardFilterBar(p: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q]);
   const typeCount = new Map(p.types.map((t) => [t.key, t.count]));
-  // 不明・NW は稀なので 0 件なら選択肢に出さない
-  const typeOptions = COMPANY_TYPES.filter((t) => (t !== '不明' && t !== 'NW') || typeCount.get(t)).map((t) => ({ key: t, label: COMPANY_TYPE_SHORT[t], count: typeCount.get(t) ?? 0 }));
+  const typeIsDefault = isDefaultTypeFilter(p.filters.type);
+  // 不明・NW は稀なので 0 件なら選択肢に出さない（既定以外で選択中なら 0 件でも残す）。件数は他のフィルタを通った企業で数える（連動）
+  const typeOptions = COMPANY_TYPES.filter((t) => (t !== '不明' && t !== 'NW') || typeCount.get(t) || (!typeIsDefault && p.filters.type.includes(t))).map((t) => ({ key: t, label: COMPANY_TYPE_SHORT[t], count: typeCount.get(t) ?? 0 }));
   return (
     <div className="sticky-bar" role="search" aria-label="絞り込み">
       <Chip label="担当 = 自分" on={p.filters.mine} onClick={() => p.onChange({ mine: !p.filters.mine })} count={p.mineCount} disabled={p.mineCount === 0 && !p.filters.mine} title={p.mineCount === 0 ? 'ログイン中のメールが担当になっている企業がありません（設定で担当を上書きできます）' : '自分が担当の企業だけ'} icon={<Icon name="filter" size={14} />} />
       <MultiPick label="CS 担当" ariaLabel="CS 担当" options={p.owners.map((o) => ({ key: o.key, label: o.label, title: o.name, count: o.count }))} value={p.filters.owner} onChange={(owner) => p.onChange({ owner })} />
-      <MultiPick label="企業種別" ariaLabel="企業種別" options={typeOptions} value={p.filters.type} onChange={(type) => p.onChange({ type })} isDefault={isDefaultTypeFilter(p.filters.type)} />
+      <MultiPick label="企業種別" ariaLabel="企業種別" options={typeOptions} value={p.filters.type} onChange={(type) => p.onChange({ type })} isDefault={typeIsDefault} />
       <div className="field">
         <label htmlFor="f-ending">契約終了</label>
         <select id="f-ending" className="ctl" value={p.filters.ending ?? ''} onChange={(e) => p.onChange({ ending: (e.target.value || null) as EndingFilter | null })}>

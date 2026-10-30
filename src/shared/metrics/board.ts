@@ -69,6 +69,18 @@ export function normalizeQuery(s: string): string {
   return s.normalize('NFKC').toLowerCase().replace(/\s+/g, '');
 }
 
+/** 各フィルタの「絞らない」値（フィルタ同士の連動で、その項目だけ外すときに使う） */
+const NEUTRAL_FILTER: BoardFilters = { mine: false, owner: [], type: [], ending: null, jobs: null, sent: null, q: '' };
+
+/**
+ * フィルタ同士の連動: except の項目だけ外して絞り込む。
+ * 選択肢（CS 担当・企業種別・担当 = 自分 の件数）は「その項目以外のフィルタを通った契約中の企業」から作る
+ * （例: 企業種別で 直接 だけを選んでいると、CS 担当の選択肢は 直接 の企業の担当だけになる）
+ */
+export function filterCompaniesExcept(rows: ScoredCompany[], f: BoardFilters, meta: Pick<BoardMeta, 'isCurrentMonth'>, except: keyof BoardFilters): ScoredCompany[] {
+  return filterCompanies(rows, { ...f, [except]: NEUTRAL_FILTER[except] }, meta);
+}
+
 export function filterCompanies(rows: ScoredCompany[], f: BoardFilters, meta: Pick<BoardMeta, 'isCurrentMonth'>): ScoredCompany[] {
   const q = normalizeQuery(f.q);
   return rows.filter((r) => {

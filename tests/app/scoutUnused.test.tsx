@@ -10,7 +10,7 @@ import { monthProgress } from '../../src/shared/calendar/businessDays';
 import { CAVEATS } from '../../src/shared/caveats';
 import { SCOUT_UNUSED_REASONS } from '../../src/shared/labels';
 import { isScoutUnused } from '../../src/app/features/scoutUnused/ScoutUnusedPage';
-import { ownerKey } from '../../src/shared/metrics/board';
+import { boardAccountTypes, ownerKey } from '../../src/shared/metrics/board';
 import type { ScoutUnusedEntry } from '../../src/shared/schema/scoutUnused';
 import type { BoardResponse } from '../../src/shared/schema/board';
 
@@ -87,7 +87,15 @@ describe('スカウト未利用の登録ページ', () => {
     const table = screen.getByRole('table', { name: 'スカウト未使用の企業と理由の登録' });
     const rows = table.querySelectorAll('tbody tr');
     expect(rows.length).toBe(expected.length);
-    expect(Array.from(table.querySelectorAll('thead th')).map((h) => h.textContent)).toEqual(['企業名', '種別', '営業担当', '枠', '理由', '補足', '保存']);
+    // 列順は 種別 / CS 担当 / 企業名 / 理由 / 補足 / 登録（枠の列は無い。列幅は固定）
+    expect(Array.from(table.querySelectorAll('thead th')).map((h) => h.textContent)).toEqual(['種別', 'CS 担当', '企業名', '理由', '補足', '登録']);
+    expect(table.querySelectorAll('colgroup col').length).toBe(6);
+    // 広告掲載の企業は企業名セルに ad クラス（黄色）、それ以外には無い
+    for (const tr of rows) {
+      const c = expected.find((x) => x.id === tr.getAttribute('data-company'))!;
+      expect(tr.querySelector('td.company')!.classList.contains('ad')).toBe(c.contractKind === 'ad');
+      expect(tr.querySelector('td.company')!.getAttribute('title')).toContain(c.name);
+    }
     // プルダウンは 8 件（8 → 1 の順）
     const first = rows[0];
     const sel = within(first as HTMLElement).getByRole('combobox') as HTMLSelectElement;
@@ -96,12 +104,14 @@ describe('スカウト未利用の登録ページ', () => {
     // BQ に既にある記録（シート取込）は入力欄にそのまま出る。「取り込む」ボタンは無い。保存ボタンは変更するまで無効
     expect(sel.value).toBe(SCOUT_UNUSED_REASONS[3]);
     expect((within(first as HTMLElement).getByRole('textbox') as HTMLInputElement).value).toBe('先方事情');
-    expect(within(first as HTMLElement).getByText('BQ 登録済み（シート）')).toBeTruthy();
+    expect(within(first as HTMLElement).getByText('登録済み')).toBeTruthy();
+    expect(screen.queryByText('BQ 登録済み（シート）')).toBeNull();
     expect(screen.queryByRole('button', { name: '取り込む' })).toBeNull();
     expect(screen.getByText(/登録済み 2 社/)).toBeTruthy();
     // DA / RPO は対象外
-    for (const tr of rows) expect(['DA', 'RPO', 'NW']).not.toContain(within(tr as HTMLElement).getAllByRole('cell')[1].textContent);
-    const save = within(first as HTMLElement).getByRole('button', { name: '保存' }) as HTMLButtonElement;
+    for (const tr of rows) expect(['DA', 'RPO', 'NW']).not.toContain(within(tr as HTMLElement).getAllByRole('cell')[0].textContent);
+    expect(screen.queryByRole('button', { name: '保存' })).toBeNull();
+    const save = within(first as HTMLElement).getByRole('button', { name: '登録' }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
     fireEvent.change(sel, { target: { value: SCOUT_UNUSED_REASONS[4] } });
     fireEvent.change(within(first as HTMLElement).getByRole('textbox'), { target: { value: '運用開始直後' } });
@@ -117,7 +127,7 @@ describe('スカウト未利用の登録ページ', () => {
     fireEvent.change(within(first as HTMLElement).getByRole('textbox'), { target: { value: '' } });
     fireEvent.click(within(first as HTMLElement).getByRole('button', { name: '削除' }));
     await waitFor(() => expect(f.calls).toContain(`DELETE /api/scout-unused/${id}/${f.prev}`));
-    await waitFor(() => expect(within(first as HTMLElement).getByText('BQ 登録済み（シート）')).toBeTruthy());
+    await waitFor(() => expect(within(first as HTMLElement).getByText('登録済み')).toBeTruthy());
     expect(sel.value).toBe(SCOUT_UNUSED_REASONS[3]);
   });
 
@@ -130,14 +140,14 @@ describe('スカウト未利用の登録ページ', () => {
     const id = first.getAttribute('data-company')!;
     const sel = within(first as HTMLElement).getByRole('combobox') as HTMLSelectElement;
     fireEvent.change(sel, { target: { value: SCOUT_UNUSED_REASONS[0] } });
-    fireEvent.click(within(first as HTMLElement).getByRole('button', { name: '保存' }));
+    fireEvent.click(within(first as HTMLElement).getByRole('button', { name: '登録' }));
     await waitFor(() => expect(within(first as HTMLElement).getByText('BQ 反映済み')).toBeTruthy());
-    // 保存後も入力欄は有効で、値を変えると保存ボタンが再び有効になる
+    // 登録後も入力欄は有効で、値を変えると登録ボタンが再び有効になる
     expect(sel.disabled).toBe(false);
-    expect((within(first as HTMLElement).getByRole('button', { name: '保存' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(first as HTMLElement).getByRole('button', { name: '登録' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(sel, { target: { value: SCOUT_UNUSED_REASONS[2] } });
     fireEvent.change(within(first as HTMLElement).getByRole('textbox'), { target: { value: '更新後の補足' } });
-    fireEvent.click(within(first as HTMLElement).getByRole('button', { name: '保存' }));
+    fireEvent.click(within(first as HTMLElement).getByRole('button', { name: '登録' }));
     await waitFor(() => expect(f.calls.filter((c) => c === `PUT /api/scout-unused/${id}/${f.prev}`).length).toBe(2));
     expect(f.bodies[1]).toEqual({ reason: '6. 既に採用でき、案件クローズ', remarks: '更新後の補足' });
     expect(f.entries.get(`${id}|${f.prev}`)?.reason).toBe('6. 既に採用でき、案件クローズ');
@@ -178,5 +188,66 @@ describe('スカウト未利用の登録ページ', () => {
     fireEvent.change(screen.getByLabelText('対象月'), { target: { value: f.cur } });
     await waitFor(() => expect(window.location.search).toContain(`month=${f.cur}`));
     await waitFor(() => expect(f.calls).toContain(`GET /api/scout-unused?month=${f.cur}`));
+  });
+
+  it('登録状況 / 企業種別 / 契約種別 のフィルタで行数と URL が変わり、CS 担当の選択肢は他のフィルタに連動する。クリアで全部消える', async () => {
+    const f = await setup();
+    window.history.replaceState(null, '', '/scout-unused');
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('table', { name: 'スカウト未使用の企業と理由の登録' })).toBeTruthy(), { timeout: 8000 });
+    const tableRows = () => screen.getByRole('table', { name: 'スカウト未使用の企業と理由の登録' }).querySelectorAll('tbody tr').length;
+    const all = f.unused;
+    // 登録状況: 登録済み = シートの 2 社、未登録 = 残り
+    fireEvent.change(screen.getByLabelText('登録状況'), { target: { value: 'done' } });
+    await waitFor(() => expect(window.location.search).toContain('status=done'));
+    await waitFor(() => expect(tableRows()).toBe(2));
+    expect(screen.getByText(/登録済み 2 社/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('登録状況'), { target: { value: 'none' } });
+    await waitFor(() => expect(tableRows()).toBe(all.length - 2));
+    expect(screen.getByText(/登録済み 0 社/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('登録状況'), { target: { value: '' } });
+    await waitFor(() => expect(window.location.search).not.toContain('status='));
+    // 契約種別: 広告掲載 だけ
+    const kindGroup = screen.getByRole('group', { name: '契約種別' });
+    const kindBox = (name: string) => Array.from(kindGroup.querySelectorAll('label')).find((l) => l.textContent?.startsWith(name))!.querySelector('input[type=checkbox]') as HTMLInputElement;
+    const adCount = all.filter((c) => c.contractKind === 'ad').length;
+    expect(kindGroup.textContent).toContain(String(adCount));
+    fireEvent.click(kindBox('広告掲載'));
+    await waitFor(() => expect(window.location.search).toContain('kind=ad'));
+    await waitFor(() => expect(tableRows()).toBe(adCount));
+    for (const td of screen.getByRole('table', { name: 'スカウト未使用の企業と理由の登録' }).querySelectorAll('td.company')) expect(td.classList.contains('ad')).toBe(true);
+    fireEvent.click(kindBox('広告掲載'));
+    await waitFor(() => expect(window.location.search).not.toContain('kind='));
+    // 企業種別: 直接 だけ → CS 担当の選択肢が 直接 のアカウントを持つ企業の担当だけになる（件数も合う）
+    const typeGroup = screen.getByRole('group', { name: '企業種別' });
+    expect(Array.from(typeGroup.querySelectorAll('label')).map((l) => l.textContent?.replace(/\d+$/, ''))).toEqual(expect.arrayContaining(['直接', '紹介', '派遣']));
+    expect(Array.from(typeGroup.querySelectorAll('label')).some((l) => /^(DA|RPO|NW)/.test(l.textContent ?? ''))).toBe(false);
+    const typeBox = (name: string) => Array.from(typeGroup.querySelectorAll('label')).find((l) => l.textContent?.startsWith(name))!.querySelector('input[type=checkbox]') as HTMLInputElement;
+    fireEvent.click(typeBox('直接'));
+    await waitFor(() => expect(window.location.search).toContain('type='));
+    const direct = all.filter((c) => boardAccountTypes(c).includes('直接'));
+    expect(direct.length).toBeLessThan(all.length);
+    await waitFor(() => expect(tableRows()).toBe(direct.length));
+    const ownerGroup = screen.getByRole('group', { name: 'CS 担当' });
+    const expectedOwners = new Map<string, number>();
+    for (const c of direct) expectedOwners.set(ownerKey(c), (expectedOwners.get(ownerKey(c)) ?? 0) + 1);
+    const labels = Array.from(ownerGroup.querySelectorAll('label'));
+    expect(labels.length).toBe(expectedOwners.size);
+    expect(labels.map((l) => Number(l.querySelector('.cnt')?.textContent)).reduce((a, b) => a + b, 0)).toBe(direct.length);
+    // 直接 の企業を担当していない担当は選択肢から消えている
+    const allOwners = new Set(all.map((c) => ownerKey(c)));
+    expect(allOwners.size).toBeGreaterThan(expectedOwners.size);
+    // 逆に、CS 担当を選ぶと企業種別の件数がその担当の企業だけになる
+    fireEvent.click(ownerGroup.querySelector('input[type=checkbox]')!);
+    await waitFor(() => expect(window.location.search).toContain('owner='));
+    const key = decodeURIComponent(window.location.search.match(/owner=([^&]+)/)![1]);
+    const ofOwner = all.filter((c) => ownerKey(c) === key);
+    const typeCounts = new Map(Array.from(typeGroup.querySelectorAll('label')).map((l) => [l.textContent?.replace(/\d+$/, ''), Number(l.querySelector('.cnt')?.textContent)]));
+    expect(typeCounts.get('直接')).toBe(ofOwner.filter((c) => boardAccountTypes(c).includes('直接')).length);
+    expect(typeCounts.get('紹介')).toBe(ofOwner.filter((c) => boardAccountTypes(c).includes('紹介')).length);
+    // クリアで全部消える
+    fireEvent.click(screen.getByRole('button', { name: /クリア/ }));
+    await waitFor(() => expect(window.location.search).toBe(''));
+    await waitFor(() => expect(tableRows()).toBe(all.length));
   });
 });

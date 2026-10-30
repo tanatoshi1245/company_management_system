@@ -227,9 +227,31 @@ describe('ホーム（ボード）', () => {
     // 直接のアカウントを持つ企業だけ（主種別が 直接、または 紹介 + 直接 のように副アカウントが 直接）。DA / RPO は出ない
     for (const td of table0.querySelectorAll('td.col-type')) expect(td.querySelector('.badge')?.textContent === '直接' || td.querySelector('.acct-more')?.textContent?.includes('直接')).toBe(true);
     for (const b of table0.querySelectorAll('td.col-type .badge')) expect(['DA', 'RPO']).not.toContain(b.textContent);
+    // フィルタの連動: CS 担当の選択肢は 直接 の企業の担当だけ（件数の合計 = 行数）。DA / RPO しか担当しない人は出ない
+    const ownerGroup = screen.getByRole('group', { name: 'CS 担当' });
+    const ownerLabels = () => Array.from(ownerGroup.querySelectorAll('label'));
+    const directRows = table0.querySelectorAll('tbody tr').length;
+    expect(ownerLabels().map((l) => Number(l.querySelector('.cnt')?.textContent)).reduce((a, b) => a + b, 0)).toBe(directRows);
+    const directOwners = new Set(Array.from(table0.querySelectorAll('tbody td.col-owner')).map((td) => td.getAttribute('title') ?? td.textContent));
+    expect(ownerLabels().length).toBe(directOwners.size);
+    // 選択中の担当は、種別を変えて 0 件になっても選択肢に残る（0 件と出る）
+    const ownersAllTypesSize = ownerLabels().length;
+    fireEvent.click(ownerLabels()[0].querySelector('input')!);
+    await waitFor(() => expect(window.location.search).toContain('owner='));
+    fireEvent.click(boxOf('直接'));
+    fireEvent.click(boxOf('DA'));
+    await waitFor(() => expect(decodeURIComponent(window.location.search)).toMatch(/type=[^&]*DA/));
+    expect(ownerLabels().some((l) => l.querySelector('input')!.checked)).toBe(true);
+    expect(ownerLabels().length).toBeLessThanOrEqual(ownersAllTypesSize);
+    fireEvent.click(ownerLabels().find((l) => l.querySelector('input')!.checked)!.querySelector('input')!);
+    fireEvent.click(boxOf('DA'));
+    fireEvent.click(boxOf('直接'));
+    await waitFor(() => expect(window.location.search).not.toContain('owner='));
+    // 0 件の間は表が外れるので、以降は表を取り直す
+    const tbl = () => screen.getByRole('table', { name: '契約企業の実績一覧' });
     // DA を足すと DA の行が出る
     fireEvent.click(boxOf('DA'));
-    await waitFor(() => expect(Array.from(table0.querySelectorAll('td.col-type .badge')).some((b) => b.textContent === 'DA')).toBe(true));
+    await waitFor(() => expect(Array.from(tbl().querySelectorAll('td.col-type .badge')).some((b) => b.textContent === 'DA')).toBe(true));
     fireEvent.click(boxOf('DA'));
     fireEvent.click(boxOf('紹介'));
     fireEvent.click(boxOf('派遣'));
@@ -237,7 +259,7 @@ describe('ホーム（ボード）', () => {
     // 契約終了: 90 日以上先
     fireEvent.change(screen.getByLabelText('契約終了'), { target: { value: 'over90' } });
     await waitFor(() => expect(window.location.search).toContain('ending=over90'));
-    for (const td of table0.querySelectorAll('td[data-col="daysToEnd"]')) expect(td.textContent).toMatch(/無期限|^(9[1-9]|[1-9]\d{2,})/);
+    for (const td of tbl().querySelectorAll('td[data-col="daysToEnd"]')) expect(td.textContent).toMatch(/無期限|^(9[1-9]|[1-9]\d{2,})/);
     fireEvent.change(screen.getByLabelText('契約終了'), { target: { value: '' } });
     fireEvent.change(screen.getByLabelText('企業名で検索'), { target: { value: 'アーク' } });
     await waitFor(() => expect(window.location.search).toContain('q='));
