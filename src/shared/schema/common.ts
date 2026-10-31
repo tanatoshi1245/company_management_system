@@ -7,8 +7,9 @@ import { isYmd } from '../calendar/periods';
  *   1: 初版（M0）
  *   2: 企業種別に 派遣 を追加（紹介（派遣含む）→ 紹介 / 派遣）、ボードの列を実数表示に変更（2026-10-23）
  *   3: companies.publishing_sites に WAWW を含む企業をマートから除外（2026-10-23）
+ *   22: CT ログインから社内メンバー（company_users.email が @daijob.com）のログインを除外（最終ログイン・ログイン日数が変わる。2026-10-31）
  */
-export const DATA_VERSION = 21;
+export const DATA_VERSION = 22;
 
 export const MonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'YYYY-MM で指定してください');
 export const YmdSchema = z.string().refine((s) => isYmd(s), 'YYYY-MM-DD で指定してください');

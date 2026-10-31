@@ -12,7 +12,7 @@ status: active
 Worker がリクエスト時に読む日次マート（`cms_*` 13 表）の SQL と定義。生テーブルは毎朝 1 本のスケジュールドスクリプトが 1 回ずつ走査し、**Worker は生テーブルを読まない**（各クエリ < 10 MB、上限 200 MB）。
 
 ## 依存するデータ（元テーブル）
-companies / company_profiles_full / company_profiles_all / active_companies / active_jobs / scouts / scout_histories / member_applications / member_details / member_profile_latest / member_job_detail_views / job_publish_history / jobs_all / sf_contracts / sf_accounts / sf_opportunities / sf_users / htdb_applications_wo_FEE（働くDB の【0円】申込。Network 契約の判定）/ GA4 analytics_258261950（旧CT）・analytics_553479599（新CT）。各マートの列は `marts/<table>/README.md`。
+companies / company_profiles_full / company_profiles_all / active_companies / active_jobs / scouts / scout_histories / member_applications / member_details / member_profile_latest / member_job_detail_views / job_publish_history / jobs_all / sf_contracts / sf_accounts / sf_opportunities / sf_users / company_users（CT ログインの社内メンバー `@daijob.com` の判定）/ htdb_applications_wo_FEE（働くDB の【0円】申込。Network 契約の判定）/ GA4 analytics_258261950（旧CT）・analytics_553479599（新CT）。各マートの列は `marts/<table>/README.md`。
 
 | マート | 粒度 | 更新 |
 |---|---|---|

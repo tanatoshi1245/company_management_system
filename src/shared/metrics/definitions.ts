@@ -30,7 +30,7 @@ export const METRICS: readonly MetricDef[] = [
   { key: 'views_per_active_job', label: '閲覧 / 求人', short: '閲覧/求人', group: 'response', unit: 'ratio', polarity: 'higher', formula: '当月の求人閲覧数 ÷ 掲載中の求人数', source: 'cms_company_monthly.job_views / active_jobs_eom', caveats: [], benchMetric: 'views_per_active_job', targetKey: 'views', decimals: 0 },
   { key: 'in_selection', label: '選考中', short: '選考中', group: 'selection', unit: 'count', polarity: 'higher', formula: '当月の応募 + 当月に興味あり返信があったスカウトのうち、現在 面接調整中〜最終面接 の件数', source: 'cms_company_monthly.in_selection', caveats: ['status_current_only'], decimals: 0 },
   { key: 'hires', label: '採用', short: '採用', group: 'selection', unit: 'count', polarity: 'higher', formula: '11.採用 を会員 × 企業で重複排除し、応募月 / 興味あり返信月に帰属', source: 'cms_company_monthly.hires', caveats: ['hire_month', 'status_current_only'], benchMetric: 'hires', targetKey: 'hires', decimals: 0 },
-  { key: 'login_days', label: 'ログイン日数（30 日）', short: 'ログイン', group: 'touch', unit: 'days', polarity: 'higher', formula: '直近 30 日に企業管理ツール（CT）にログインした日数（GA4 get_ID）', source: 'cms_company_login.login_days_30d', caveats: ['login_from'], benchMetric: 'login_days', decimals: 0 },
+  { key: 'login_days', label: 'ログイン日数（30 日）', short: 'ログイン', group: 'touch', unit: 'days', polarity: 'higher', formula: '直近 30 日に企業管理ツール（CT）にログインした日数（GA4 get_ID。社内メンバー @daijob.com のログインは除く）', source: 'cms_company_login.login_days_30d', caveats: ['login_from'], benchMetric: 'login_days', decimals: 0 },
 ];
 
 export const METRIC_BY_KEY: Record<string, MetricDef> = Object.fromEntries(METRICS.map((m) => [m.key, m]));

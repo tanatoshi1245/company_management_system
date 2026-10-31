@@ -80,6 +80,13 @@ BEGIN
   WHEN NOT MATCHED THEN INSERT (customer_name, note) VALUES (s.customer_name, s.note);
 
   -- 3. GA4 ログインの一括取込（既に入っている日は取り直す） -------------------------------------
+  --   社内メンバー（company_users.email が @daijob.com。GA4 user_id = company_users.id）のログインは数えない（2026-10-31）。
+  --   scheduled_query.sql のステップ 10 と同じ条件。user_id なし・company_users に無い user_id（削除済みアカウント）は数える
+  CREATE TEMP TABLE internal_ct_users AS
+  SELECT DISTINCT CAST(id AS STRING) AS user_id
+  FROM `bq-hgt.dwh.company_users`
+  WHERE id IS NOT NULL AND LOWER(email) LIKE '%@daijob.com' AND NOT STARTS_WITH(LOWER(email), 'staging+');
+
   FOR src IN (SELECT ds, from_date FROM UNNEST(ga4_sources)) DO
     EXECUTE IMMEDIATE FORMAT("""
       DELETE FROM `bq-hgt.dwh.cms_company_login_daily` WHERE source_dataset = '%s' AND login_date >= DATE '%t'
@@ -95,6 +102,7 @@ BEGIN
       FROM `bq-hgt.%s.events_*`
       WHERE _TABLE_SUFFIX BETWEEN '%s' AND '%s'
         AND event_name = 'get_ID'
+        AND (user_id IS NULL OR user_id NOT IN (SELECT user_id FROM internal_ct_users))
       GROUP BY 1, 2
       HAVING company_id IS NOT NULL
     """, src.ds, src.ds, FORMAT_DATE('%Y%m%d', src.from_date), FORMAT_DATE('%Y%m%d', run_date));

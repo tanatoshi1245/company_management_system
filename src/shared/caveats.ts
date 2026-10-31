@@ -2,7 +2,7 @@ import type { Caveat } from './schema/me';
 
 /** 画面に出すデータの注記。id を指標・パネルから参照する（docs/指標定義.md と対応） */
 export const CAVEATS: readonly Caveat[] = [
-  { id: 'login_from', text: '企業ログイン（CT 画面）は 2026-05-15 以降のデータのみ。前日分は GA4 の速報表から取り込み（確定表は翌朝に届く）、3 日以内に確定値で取り直す', doc: '00_セマンティックレイヤー/既知の課題.md' },
+  { id: 'login_from', text: '企業ログイン（CT 画面）は 2026-05-15 以降のデータのみ。社内メンバー（@daijob.com のアカウント）のログインは数えない。前日分は GA4 の速報表から取り込み（確定表は翌朝に届く）、3 日以内に確定値で取り直す', doc: '00_セマンティックレイヤー/既知の課題.md' },
   { id: 'status_current_only', text: '選考ステータスは現在値のみ（履歴なし）。過去月コホートの面接・採用数は今日時点の値', doc: '02_データエンジニアリング/dm_sales_company/README.md' },
   { id: 'hire_month', text: '採用月は応募月／興味あり返信月で代替している（採用日が存在しない）', doc: 'docs/指標定義.md' },
   { id: 'scout_quota_period', text: 'スカウト枠（resume_bank_scout_limit）は「月間枠」として扱う。企業設定で契約期間に切替可', doc: 'docs/指標定義.md' },
