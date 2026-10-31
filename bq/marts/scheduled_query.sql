@@ -6,6 +6,7 @@
 --   スキャン: 約 1.1 GB/日。失敗時は EXCEPTION で cms_refresh_log に error 行を残し、前日のマートがそのまま残る
 --   設計: company_management_system/bq/README.md、列定義: bq/marts/<table>/README.md
 --   2026-10-30: account_type（アカウント種別 = プロファイルの 直接 / 紹介 / 派遣）を cms_company_monthly（'__ALL__' + 種別の行）・属性・master（account_types / accounts_json / jobs_json）に追加
+--   2026-10-31: cms_company_monthly に jobs_in_month（月内に 1 日でも掲載期間が重なった求人数）。スカウト未利用の登録画面の対象 = 前月に掲載あり・送信 0・現在契約中
 --   2026-10-30: 求人単位 cms_company_job_monthly（企業 × 種別 × 求人 × 月）を新設、属性に job_key を追加。jobs_all は jobs_latest で 1 回だけ読む
 --   2026-10-30: Network 契約の除外を dm_network_contract_candidates（SF の NetworkWW 行動＝接触履歴）から、働くDB の【0円】申込（htdb_applications_wo_FEE）の申込元で判定する方式に変更（ステップ 01b）
 -- 変更時の注意: Worker 側の読み取り SQL（src/worker/sql/*.ts）と zod スキーマ（src/shared/schema/*）を合わせ、DATA_VERSION を +1 する
@@ -434,7 +435,9 @@ BEGIN
     ),
     active_m AS (
       SELECT mo.month, x.company_id,
-             COUNT(DISTINCT IF(x.s <= mo.as_of AND (x.e IS NULL OR x.e >= mo.as_of), x.job_key, NULL)) AS active_jobs_eom
+             COUNT(DISTINCT IF(x.s <= mo.as_of AND (x.e IS NULL OR x.e >= mo.as_of), x.job_key, NULL)) AS active_jobs_eom,
+             -- 月内に 1 日でも掲載期間が重なった求人（スカウト未利用の登録画面の対象判定。2026-10-31）
+             COUNT(DISTINCT IF(x.s <= mo.as_of AND (x.e IS NULL OR x.e >= mo.month), x.job_key, NULL)) AS jobs_in_month
       FROM jph x CROSS JOIN months mo
       GROUP BY 1, 2
     ),
@@ -444,7 +447,7 @@ BEGIN
       FROM first_pub WHERE first_start >= window_start GROUP BY 1, 2
     )
     SELECT COALESCE(a.month, n.month) AS month, COALESCE(a.company_id, n.company_id) AS company_id,
-           IFNULL(a.active_jobs_eom, 0) AS active_jobs_eom, IFNULL(n.new_jobs, 0) AS new_jobs
+           IFNULL(a.active_jobs_eom, 0) AS active_jobs_eom, IFNULL(a.jobs_in_month, 0) AS jobs_in_month, IFNULL(n.new_jobs, 0) AS new_jobs
     FROM active_m a FULL OUTER JOIN new_m n USING (month, company_id);
 
     -- 同じ集計をアカウント種別ごとに（企業ページの種別切替用。2026-10-30）
@@ -455,7 +458,8 @@ BEGIN
     ),
     active_m AS (
       SELECT mo.month, x.company_id, x.account_type,
-             COUNT(DISTINCT IF(x.s <= mo.as_of AND (x.e IS NULL OR x.e >= mo.as_of), x.job_key, NULL)) AS active_jobs_eom
+             COUNT(DISTINCT IF(x.s <= mo.as_of AND (x.e IS NULL OR x.e >= mo.as_of), x.job_key, NULL)) AS active_jobs_eom,
+             COUNT(DISTINCT IF(x.s <= mo.as_of AND (x.e IS NULL OR x.e >= mo.month), x.job_key, NULL)) AS jobs_in_month
       FROM jph x CROSS JOIN months mo
       GROUP BY 1, 2, 3
     ),
@@ -465,7 +469,7 @@ BEGIN
       FROM first_pub WHERE first_start >= window_start GROUP BY 1, 2, 3
     )
     SELECT COALESCE(a.month, n.month) AS month, COALESCE(a.company_id, n.company_id) AS company_id, COALESCE(a.account_type, n.account_type) AS account_type,
-           IFNULL(a.active_jobs_eom, 0) AS active_jobs_eom, IFNULL(n.new_jobs, 0) AS new_jobs
+           IFNULL(a.active_jobs_eom, 0) AS active_jobs_eom, IFNULL(a.jobs_in_month, 0) AS jobs_in_month, IFNULL(n.new_jobs, 0) AS new_jobs
     FROM active_m a FULL OUTER JOIN new_m n USING (month, company_id, account_type);
 
     -- 08b. 窓（13 か月前〜今日）に掲載期間が重なる求人の数（set_id で日英重複排除）。企業ページの「掲載求人数（直近 13 か月）」用（2026-10-27）
@@ -681,9 +685,9 @@ BEGIN
       FROM hire_fact_acct WHERE origin_month >= window_start GROUP BY 1, 2, 3
     ),
     jm AS (
-      SELECT month, company_id, '__ALL__' AS acct, active_jobs_eom, new_jobs FROM job_month
+      SELECT month, company_id, '__ALL__' AS acct, active_jobs_eom, jobs_in_month, new_jobs FROM job_month
       UNION ALL
-      SELECT month, company_id, account_type, active_jobs_eom, new_jobs FROM job_month_acct
+      SELECT month, company_id, account_type, active_jobs_eom, jobs_in_month, new_jobs FROM job_month_acct
     ),
     lg AS (SELECT company_id, DATE_TRUNC(login_date, MONTH) AS month, COUNT(DISTINCT login_date) AS login_days FROM `bq-hgt.dwh.cms_company_login_daily` GROUP BY 1, 2),
     -- 行の軸: 企業 × 月 × ('__ALL__' + その企業のアカウント種別)
@@ -703,7 +707,7 @@ BEGIN
            IFNULL(cm.by_companies, FALSE) OR IFNULL(cm.by_snapshot, FALSE) AS is_contracted_in_month,
            CASE WHEN IFNULL(cm.by_snapshot, FALSE) THEN 'snapshot' WHEN IFNULL(cm.by_companies, FALSE) THEN 'companies' ELSE 'none' END AS contracted_source,
            cb.scout_limit, cb.job_posting_limit,
-           IFNULL(jm.active_jobs_eom, 0) AS active_jobs_eom, IFNULL(jm.new_jobs, 0) AS new_jobs,
+           IFNULL(jm.active_jobs_eom, 0) AS active_jobs_eom, IFNULL(jm.jobs_in_month, 0) AS jobs_in_month, IFNULL(jm.new_jobs, 0) AS new_jobs,
            IFNULL(ss.scout_sent, 0) AS scout_sent, IFNULL(ss.scout_sent_manual, 0) AS scout_sent_manual, IFNULL(ss.scout_sent_auto, 0) AS scout_sent_auto,
            IF(g.acct = '__ALL__', IFNULL(sc.scout_sent_contract_to_date, 0), 0) AS scout_sent_contract_to_date,
            IFNULL(ss.interested_by_send_month, 0) AS interested_by_send_month,

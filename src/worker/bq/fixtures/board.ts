@@ -155,12 +155,15 @@ export function mockCompanyMonthly(today = todayJst()): Row[] {
       const contracted = c.from <= `${ym}-31` && (c.to === null || c.to >= `${ym}-01`);
       const frac = isCur ? Math.max(0.05, (dayOfMonth - 1) / 30) : 1;
       const limit = c.scoutLimit ?? 120;
-      // 7 社に 1 社は奇数月にスカウトを送らない（スカウト未利用の登録ページ・フィルタのサンプル）
-      const skipMonth = Number(c.id) % 7 === 0 && Number(ym.slice(5, 7)) % 2 === 1;
+      // 4 社に 1 社は奇数月に、7 社に 1 社は偶数月にスカウトを送らない（スカウト未利用の登録ページ・フィルタのサンプル）
+      const odd = Number(ym.slice(5, 7)) % 2 === 1;
+      const skipMonth = (Number(c.id) % 4 === 0 && odd) || (Number(c.id) % 7 === 0 && !odd);
+      // 送らない月のうち 8 社に 1 社は求人の掲載も無い（登録ページの対象外になるサンプル）
+      const noJobs = skipMonth && Number(c.id) % 8 === 0;
       const sent = contracted && !skipMonth ? Math.round(limit * c.activity * frac * (0.75 + rand() * 0.5)) : 0;
       const manual = Math.round(sent * (0.5 + rand() * 0.4));
       const interested = Math.round(sent * (0.06 + rand() * 0.14));
-      const jobs = contracted && c.jobLimit !== 0 ? Math.min(c.jobLimit ?? 12, Math.max(1, Math.round((c.jobLimit ?? 12) * c.activity * (0.8 + rand() * 0.3)))) : 0;
+      const jobs = contracted && c.jobLimit !== 0 && !noJobs ? Math.min(c.jobLimit ?? 12, Math.max(1, Math.round((c.jobLimit ?? 12) * c.activity * (0.8 + rand() * 0.3)))) : 0;
       const apps = contracted ? Math.round(jobs * (0.3 + rand() * 1.2) * frac) : 0;
       const views = contracted ? Math.round(jobs * (15 + rand() * 40) * frac) : 0;
       const hires = contracted && rand() < 0.12 * c.activity ? 1 : 0;
@@ -175,6 +178,8 @@ export function mockCompanyMonthly(today = todayJst()): Row[] {
         scout_limit: c.scoutLimit,
         job_posting_limit: c.jobLimit,
         active_jobs_eom: jobs,
+        // 月内掲載 = 月末時点の掲載 + 月の途中で終わった分（0〜2 件）。送信 0 の月（skipMonth）も掲載はある
+        jobs_in_month: jobs + (contracted && c.jobLimit !== 0 && !noJobs ? between(rand, 0, 2) : 0),
         new_jobs: contracted ? between(rand, 0, 3) : 0,
         scout_sent: sent,
         scout_sent_manual: manual,

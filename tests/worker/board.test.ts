@@ -154,6 +154,9 @@ describe('アカウント種別（複数アカウント企業）', () => {
     const res = await app.fetch(new Request('http://x/api/board'), baseEnv, ctx);
     const body = BoardResponseSchema.parse(await res.json());
     for (const c of body.companies) expect(Array.isArray(c.accountTypes)).toBe(true);
+    // 月内掲載求人数（jobsInMonth）は月末時点の掲載（jobs）以上
+    for (const c of body.companies) expect(c.m.jobsInMonth).toBeGreaterThanOrEqual(c.m.jobs);
+    expect(body.companies.some((c) => c.m.jobsInMonth > c.m.jobs)).toBe(true);
     const multi = body.companies.filter((c) => c.accountTypes.length > 1 && (c.state === 'active' || c.state === 'ending_30d'));
     expect(multi.length).toBeGreaterThan(0);
     for (const c of multi) expect(c.accountTypes).toContain(c.type);

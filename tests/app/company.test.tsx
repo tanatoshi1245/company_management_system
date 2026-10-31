@@ -241,7 +241,7 @@ describe('企業詳細', () => {
     await waitFor(() => expect(window.location.search).toContain('attr='));
     // スカウト未利用状況の表（モックは 3 社に 1 社に記録がある）
     const unused = screen.getByRole('region', { name: 'スカウト未利用状況' });
-    expect(within(unused).getByRole('link', { name: '理由を登録する' }).getAttribute('href')).toBe(`/scout-unused?month=${f.month}`);
+    expect(within(unused).getByRole('link', { name: '理由を登録する' }).getAttribute('href')).toBe('/scout-unused');
     if (f.unused.length) {
       const table = screen.getByRole('table', { name: 'スカウト未利用の記録' });
       expect(table.querySelectorAll('tbody tr').length).toBe(f.unused.length);

@@ -20,6 +20,7 @@ status: active
 | is_contracted_in_month / contracted_source | BOOL / STRING | companies の期間が月に重なる、または cms_contract_snapshot_daily に契約中の記録がある（companies / snapshot / none） |
 | scout_limit / job_posting_limit | INT64 | 現在の枠数（履歴ではない） |
 | active_jobs_eom / new_jobs | INT64 | as_of_date 時点の掲載求人（set_id 重複排除）/ 初掲載がその月の求人 |
+| jobs_in_month | INT64 | 月内に 1 日でも掲載期間が重なった求人（set_id 重複排除。`active_jobs_eom` 以上）。スカウト未利用の登録画面の対象判定（2026-10-31〜） |
 | scout_sent / scout_sent_manual / scout_sent_auto | INT64 | 送信月基準の送信数（手動 / 自動） |
 | scout_sent_contract_to_date | INT64 | 契約開始〜月末（当月は昨日）までの累計送信（枠の期間 = 契約期間 のとき使う） |
 | interested_by_send_month | INT64 | その月に送ったスカウトのうち興味あり返信があった数（dmt_company_daily と同じ） |
