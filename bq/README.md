@@ -12,7 +12,7 @@ status: active
 Worker がリクエスト時に読む日次マート（`cms_*` 13 表）の SQL と定義。生テーブルは毎朝 1 本のスケジュールドスクリプトが 1 回ずつ走査し、**Worker は生テーブルを読まない**（各クエリ < 10 MB、上限 200 MB）。
 
 ## 依存するデータ（元テーブル）
-companies / company_profiles_full / company_profiles_all / active_companies / active_jobs / scouts / scout_histories / member_applications / member_details / member_profile_latest / member_job_detail_views / job_publish_history / jobs_all / sf_contracts / sf_accounts / sf_opportunities / sf_users / GA4 analytics_258261950（旧CT）・analytics_553479599（新CT）。各マートの列は `marts/<table>/README.md`。
+companies / company_profiles_full / company_profiles_all / active_companies / active_jobs / scouts / scout_histories / member_applications / member_details / member_profile_latest / member_job_detail_views / job_publish_history / jobs_all / sf_contracts / sf_accounts / sf_opportunities / sf_users / htdb_applications_wo_FEE（働くDB の【0円】申込。Network 契約の判定）/ GA4 analytics_258261950（旧CT）・analytics_553479599（新CT）。各マートの列は `marts/<table>/README.md`。
 
 | マート | 粒度 | 更新 |
 |---|---|---|
@@ -27,6 +27,7 @@ companies / company_profiles_full / company_profiles_all / active_companies / ac
 | cms_company_login_daily / cms_company_login | 日 × 企業 / 企業 | 追記（直近 3 日取り直し）/ 全件差し替え |
 | cms_industry_benchmark_monthly | 月 × 業種 × 種別 × 指標 | 全件差し替え |
 | cms_dim_industry_alias | 表記ゆれ | 手動（init.sql） |
+| cms_dim_network_partner | Network 契約の申込元 | 手動（init.sql。2026-10-30〜） |
 | cms_refresh_log | 実行記録 | 追記 |
 
 ## 更新スケジュール（登録済み）
@@ -55,7 +56,8 @@ companies / company_profiles_full / company_profiles_all / active_companies / ac
 
 | 日付 | 変更 | スキャン | 反映 |
 |---|---|---|---|
-| 2026-10-31 | `cms_company_monthly` に **`jobs_in_month`**（月内に 1 日でも掲載期間が重なった求人数。`job_month` / `job_month_acct` で `active_jobs_eom` と並べて集計）。スカウト未利用の登録画面の対象を「前月に掲載あり・前月の送信 0・今日時点で契約中・DA / RPO / NW 以外」に変更（枠数で絞らない。契約終了で枠が 0 に戻り過去月の企業が落ちていた）。`DATA_VERSION` 19 → 20 | 手動実行 1,695 MB | 設定 `6aee95cf-…` に反映済み・手動実行 ok（`jobs_in_month < active_jobs_eom` の行 0、`__ALL__` 12,362 行、2026-09 分の対象 58 社・2026-10 分 69 社、`scout_unused_companies_monthly` 2,711 行は不変） |
+| 2026-10-31 | `cms_company_monthly` に **`jobs_in_month`**（月内に 1 日でも掲載期間が重なった求人数。`job_month` / `job_month_acct` で `active_jobs_eom` と並べて集計）。スカウト未利用の登録画面の対象を「前月に掲載あり・前月の送信 0・今日時点で契約中・DA / RPO / NW 以外」に変更（枠数で絞らない。契約終了で枠が 0 に戻り過去月の企業が落ちていた）。`DATA_VERSION` 20 → 21（#38 と同日のため） | 手動実行 1,695 MB | 設定 `6aee95cf-…` に反映済み・手動実行 ok（`jobs_in_month < active_jobs_eom` の行 0、`__ALL__` 12,362 行、2026-09 分の対象 58 社・2026-10 分 69 社、`scout_unused_companies_monthly` 2,711 行は不変） |
+| 2026-10-30 | **Network 契約の除外の判定元を変更**。旧: `dm_network_contract_candidates`（SF の件名「NetworkWW」の行動 = 接触履歴。「3 ヶ月アプローチ不可」のメモで契約の有無を表さず、10 社中 3 社（ハーティング・ハリバートン・ネオヴィア）が Network 契約でないのに除外、逆に Network 契約の約 20 社が除外されていなかった）。新: 働くDB の【0円】申込 `htdb_applications_wo_FEE` の `customer_name`（申込元）が新設 `cms_dim_network_partner`（Totaljobs / StepStone / Appcast / Figaro / IrishJobs / Nexxt / Network eG）、またはサービス名に Network を含む申込の `publishing_company_name` を、`companies.internal_name`・`company_profiles_full` の企業名で突き合わせ、申込期間が契約期間に重なる企業をステップ 01b（`network_companies`）で除外。実行記録の `note` に `network_excluded`（除外社数）・`network_unmatched`（社名が結べなかった有効な Network 申込）・`htdb_loaded_at` を残し、働くDB 申込テーブルが 48 時間以上更新されていなければ WARN。master 881 → 863 社（契約中 364 → 356。ハーティング・ネオヴィアが契約中に戻り、Totaljobs 等の Network 契約 10 社が外れる）。事前バックアップ `cms_company_master_bak_20261030` / `cms_company_monthly_bak_20261030` / `cms_industry_benchmark_monthly_bak_20261030` | 手動実行 1.1 GB 程度（1 分 35 秒）。単体検証（新ステップのみ）は数 MB | スケジュールドクエリを PATCH で差し替え済み、転送ランの手動起動でも成功確認。`DATA_VERSION` 20 |
 | 2026-10-30 | **障害対応**: 属性マートが約 500 MB になり、Worker の属性照会が「推定スキャン量 > maximumBytesBilled 200 MB」で拒否され、企業ページの円グラフが出なくなった（実際の読み取りは 35 MB）。`memberAttributesQuery` だけ上限を 2 GB に（`BuiltQuery.maxBytes`）。パーティション変更は `CREATE OR REPLACE` でできず、DROP は表の IAM を消すので見送り | — | Worker 側のみ（PR #34） |
 | 2026-10-30 | **求人単位の軸を追加**。新表 `cms_company_job_monthly`（企業 × 種別 × 求人 × 月。タイトル・閲覧・応募・応募側の現ステータス st06〜st11・掲載期間。`(direct)` = 企業への直接応募）、`cms_scout_member_attributes_monthly` に `job_key`（view / application の行だけ。scout は NULL）。`jobs_all` は `jobs_latest` で 1 回だけ読み（`job_set` / `job_title`）、`jph` / `view_raw` / `app_fact` で共用。企業ページの「求人ごとの実績」の表と求人フィルタ用。**Worker 用 SA に新表の dataViewer 付与が要る**（README 作業 8）。`DATA_VERSION` 18 → 19 | 手動実行 1,694 MB | 設定 `6aee95cf-…` に反映済み・手動実行 ok（求人行 69,194・求人 22,169 件・直接応募の行 575・タイトル無し 36 行。企業 × 種別 × 月の閲覧・応募が `cms_company_monthly` の種別行と一致（差 0）。属性マート 4,310,184 行（90 万 → 430 万）。所要 約 9 分） |
 | 2026-10-30 | **アカウント種別（`account_type` = プロファイルの 直接 / 紹介 / 派遣）の軸を追加**。`pcm` に `account_type`、`cms_company_master` に `account_types`（例 `直接,紹介`）/ `accounts_json`（プロファイル一覧）/ `jobs_json`（窓に掛かる求人の一覧。企業ページが任意の期間で重複排除して数える）、`cms_company_monthly` に `account_type` 列（`'__ALL__'` = 企業全体 + 種別ごとの行。全体だけ読むクエリは `WHERE account_type = '__ALL__'`）、`cms_scout_member_attributes_monthly` に `account_type` と `kind = 'application'`（応募した会員）。`view_raw` で `member_job_detail_views` を 1 回だけ読む。同じ会員が 2 種別で採用なら種別の行には両方に 1 ずつ（全体は 1）。Worker の属性照会は期間・種別で集約する形に変更（`DATA_VERSION` 17 → 18） | 手動実行 1,132 MB | 設定 `6aee95cf-…` に反映済み・手動実行 ok（`__ALL__` 12,334 行 + 直接 10,332 / 紹介 2,100 / 派遣 168 行。種別の合計 = 全体を送信・応募・閲覧・返信・選考中で確認、差 0。`jobs_json` 最大 161 KB） |
