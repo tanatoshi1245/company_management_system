@@ -17,13 +17,12 @@ import { Help } from '../../components/ui/Help';
 import { BoardResponseSchema, type BoardCompany } from '../../../shared/schema/board';
 import { ScoutUnusedMonthResponseSchema, ScoutUnusedSaveResponseSchema, ScoutUnusedSyncResponseSchema, type ScoutUnusedEntry, type ScoutUnusedSheetRow } from '../../../shared/schema/scoutUnused';
 import { COMPANY_TYPES, COMPANY_TYPE_SHORT, CONTRACT_KIND_LABEL, SCOUT_UNUSED_REASONS, surname } from '../../../shared/labels';
-import { addMonths, fmtMonthJa, isoToJstDisplay, lastNMonths } from '../../../shared/calendar/periods';
-import { boardAccountTypes, isContracted, normalizeQuery, ownerKey } from '../../../shared/metrics/board';
+import { addMonths, fmtMonthJa, isoToJstDisplay } from '../../../shared/calendar/periods';
+import { boardAccountTypes, normalizeQuery, ownerKey } from '../../../shared/metrics/board';
 import { MultiPick } from '../home/components/BoardFilterBar';
 import { fmtInt } from '../../lib/format';
 
 const UrlSchema = z.object({
-  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).or(z.literal('')).default(''),
   mine: z.enum(['0', '1']).default('0'),
   /** CS 担当（ownerKey をカンマ区切り） */
   owner: z.string().max(2000).default(''),
@@ -43,9 +42,12 @@ type FilterKey = 'mine' | 'owner' | 'status' | 'type' | 'kind' | 'q';
 /** 登録の対象外の企業種別（DA・RPO は Daijob 側でスカウトを運用、NW はスカウト枠の無い Network 契約） */
 export const SCOUT_UNUSED_EXCLUDED_TYPES: ReadonlySet<string> = new Set(['DA', 'RPO', 'NW']);
 
-/** スカウト未使用の企業 = その月に契約中・送信 0 件・スカウト枠あり・DA / RPO / NW 以外 */
-export function isScoutUnused(c: BoardCompany, meta: { isCurrentMonth: boolean }): boolean {
-  return isContracted(c, meta) && c.m.sent === 0 && c.limits.scout !== null && c.limits.scout > 0 && !SCOUT_UNUSED_EXCLUDED_TYPES.has(c.type);
+/**
+ * スカウト未使用の企業 = 前月に 1 日でも求人を掲載し（jobsInMonth > 0）、前月の送信が 0 件で、今日時点で契約中（active / ending_30d）の企業。DA / RPO / NW 以外（2026-10-31〜）。
+ * 枠数では絞らない（契約が終わると枠が 0 に戻るため）。`/api/board?month=<前月>` の m は前月の値、state は今日時点の契約状態
+ */
+export function isScoutUnused(c: BoardCompany): boolean {
+  return (c.state === 'active' || c.state === 'ending_30d') && c.m.sent === 0 && c.m.jobsInMonth > 0 && !SCOUT_UNUSED_EXCLUDED_TYPES.has(c.type);
 }
 
 type Draft = { reason: string; remarks: string };
@@ -53,17 +55,16 @@ type Draft = { reason: string; remarks: string };
 const draftOf = (e: ScoutUnusedEntry | null, sh: ScoutUnusedSheetRow | null = null): Draft => ({ reason: e?.reason ?? sh?.reason ?? '', remarks: e?.remarks ?? sh?.remarks ?? '' });
 const same = (a: Draft, b: Draft) => a.reason === b.reason && a.remarks.trim() === b.remarks.trim();
 
-/** スカウト未利用の理由・補足の登録。既定は前月。登録は行ごと（D1 に保存 → BigQuery に反映）。フィルタ（CS 担当 / 登録状況 / 企業種別 / 契約種別）は互いに連動する */
+/** スカウト未利用の理由・補足の登録。対象は前月（固定）。登録は行ごと（D1 に保存 → BigQuery に反映）。フィルタ（CS 担当 / 登録状況 / 企業種別 / 契約種別）は互いに連動する */
 export default function ScoutUnusedPage(_props: PageProps) {
   const { meta, me } = useSession();
-  const [url, setUrl] = useUrlState(UrlSchema, { month: '', mine: '0', owner: '', status: '', type: '', kind: '', q: '' });
+  const [url, setUrl] = useUrlState(UrlSchema, { mine: '0', owner: '', status: '', type: '', kind: '', q: '' });
   const split = (v: string) => (v ? v.split(',').filter(Boolean) : []);
   const ownerFilter = useMemo(() => split(url.owner), [url.owner]);
   const typeFilter = useMemo(() => split(url.type), [url.type]);
   const kindFilter = useMemo(() => split(url.kind), [url.kind]);
-  const defaultMonth = meta ? addMonths(meta.month, -1) : null;
-  const month = url.month || defaultMonth;
-  const months = meta ? lastNMonths(meta.month, 14) : [];
+  /** 対象月 = 前月（固定。登録期間が終わった月は振り返らない） */
+  const month = meta ? addMonths(meta.month, -1) : null;
   const board = useResource(month ? `/api/board?month=${month}` : null, BoardResponseSchema, { ttlMs: 5 * 60_000 });
   const reg = useResource(month ? `/api/scout-unused?month=${month}` : null, ScoutUnusedMonthResponseSchema, { ttlMs: 0 });
   const canEdit = Boolean(me?.canEdit);
@@ -78,7 +79,7 @@ export default function ScoutUnusedPage(_props: PageProps) {
     setErrors(new Map());
   }, [month]);
   /** その月のスカウト未使用の企業（絞り込み前） */
-  const unusedAll = useMemo(() => (board.data ? board.data.companies.filter((c) => isScoutUnused(c, board.data!.meta)) : null), [board.data]);
+  const unusedAll = useMemo(() => (board.data ? board.data.companies.filter((c) => isScoutUnused(c)) : null), [board.data]);
   /** 登録状況（アプリの登録が BQ 未反映なら unsynced、アプリかシートに登録があれば done） */
   const statusOf = (id: string): RegStatus => {
     const e = entries.get(id);
@@ -194,19 +195,9 @@ export default function ScoutUnusedPage(_props: PageProps) {
     <>
       <PageHeader
         title="スカウト未利用の理由"
-        context={month ? `${fmtMonthJa(month)} にスカウトを 1 件も送っていない契約中の企業（スカウト枠あり）${rows ? ` ・ ${fmtInt(rows.length)} 社` : ''}${reg.data && rows ? ` ・ 登録済み ${fmtInt(rows.filter((c) => statusOf(c.id) !== 'none').length)} 社` : ''}` : null}
+        context={month ? `${fmtMonthJa(month)} に求人を掲載しながらスカウトを 1 件も送らなかった、現在契約中の企業${rows ? ` ・ ${fmtInt(rows.length)} 社` : ''}${reg.data && rows ? ` ・ 登録済み ${fmtInt(rows.filter((c) => statusOf(c.id) !== 'none').length)} 社` : ''}` : null}
         actions={
           <>
-            <label className="field">
-              <span>月</span>
-              <select className="ctl" value={month ?? ''} aria-label="対象月" onChange={(e) => setUrl({ month: e.target.value === defaultMonth ? '' : e.target.value })}>
-                {[...months].reverse().map((m) => (
-                  <option key={m} value={m}>
-                    {fmtMonthJa(m)}
-                  </option>
-                ))}
-              </select>
-            </label>
             {unsynced > 0 ? (
               <Button size="sm" disabled={!canEdit} onClick={sync} title="D1 に保存済みで BigQuery に未反映の登録を書き直す">
                 <Icon name="refresh" size={14} /> BQ に再同期（{fmtInt(unsynced)}）
@@ -243,7 +234,7 @@ export default function ScoutUnusedPage(_props: PageProps) {
         <input type="search" className="ctl" placeholder="企業名・担当で検索" aria-label="企業名・担当で検索" value={url.q} onChange={(e) => setUrl({ q: e.target.value })} />
         <span className="spacer" />
         <span className="muted small">
-          <span className="ad-mark">広告掲載</span> の企業は企業名を黄色で表示。理由はプルダウン、補足は自由記述（500 文字まで）。BQ に既にある記録（シート取込）は入力欄にそのまま出る。登録すると企業ページの「スカウト未利用状況」に即時反映、BigQuery（scout_unused_companies_monthly）にも書き込む <Help text="登録先は D1（アプリの DB）が正。BigQuery にはシート取込と同じ表に match_method = 'app' の行として書き、失敗しても登録は残り「BQ に再同期」で再試行できる。同じ企業・月にシートの記録がある場合もアプリの登録が優先され、重複して数えない。対象は契約中・送信 0 件・スカウト枠あり・DA / RPO 以外" />
+          <span className="ad-mark">広告掲載</span> の企業は企業名を黄色で表示。理由はプルダウン、補足は自由記述（500 文字まで）。BQ に既にある記録（シート取込）は入力欄にそのまま出る。登録すると企業ページの「スカウト未利用状況」に即時反映、BigQuery（scout_unused_companies_monthly）にも書き込む <Help text="登録先は D1（アプリの DB）が正。BigQuery にはシート取込と同じ表に match_method = 'app' の行として書き、失敗しても登録は残り「BQ に再同期」で再試行できる。同じ企業・月にシートの記録がある場合もアプリの登録が優先され、重複して数えない。対象は前月に 1 日でも求人を掲載し、前月のスカウト送信が 0 件で、今日時点で契約中の企業（DA / RPO / NW 以外）。枠数では絞らない。前月分だけを扱う" />
         </span>
       </div>
       {!rows || !bm ? (
@@ -251,7 +242,7 @@ export default function ScoutUnusedPage(_props: PageProps) {
       ) : rows.length === 0 ? (
         <div className="empty">
           <b>該当する企業がありません</b>
-          {unusedAll && unusedAll.length ? '絞り込みを変えてください（担当 = 自分 / CS 担当 / 登録状況 / 企業種別 / 契約種別 / 検索）' : `${fmtMonthJa(bm.month)} はスカウト枠のある契約中の企業がすべて 1 件以上送信しています`}
+          {unusedAll && unusedAll.length ? '絞り込みを変えてください（担当 = 自分 / CS 担当 / 登録状況 / 企業種別 / 契約種別 / 検索）' : `${fmtMonthJa(bm.month)} に求人を掲載した現在契約中の企業は、すべて 1 件以上送信しています`}
         </div>
       ) : (
         <div className="table-wrap card">

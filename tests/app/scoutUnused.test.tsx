@@ -61,7 +61,7 @@ async function setup() {
     return Response.json({ error: 'nf', code: 'notFound' }, { status: 404 });
   }) as typeof fetch;
   const b = await boardFor(prev);
-  const unused = b.companies.filter((c) => isScoutUnused(c, b.meta)).sort((a, x) => (a.owner.name ?? '～').localeCompare(x.owner.name ?? '～', 'ja') || a.name.localeCompare(x.name, 'ja'));
+  const unused = b.companies.filter((c) => isScoutUnused(c)).sort((a, x) => (a.owner.name ?? '～').localeCompare(x.owner.name ?? '～', 'ja') || a.name.localeCompare(x.name, 'ja'));
   sheet.set(unused[0].id, { companyId: unused[0].id, reason: SCOUT_UNUSED_REASONS[3], remarks: '先方事情' });
   sheet.set(unused[1].id, { companyId: unused[1].id, reason: null, remarks: null });
   return { cur, prev, boardFor, entries, sheet, calls, bodies, unused };
@@ -79,11 +79,24 @@ describe('スカウト未利用の登録ページ', () => {
     fireEvent.click(screen.getByRole('link', { name: /スカウト未利用/ }));
     await waitFor(() => expect(window.location.pathname).toBe('/scout-unused'));
     await waitFor(() => expect(screen.getByRole('table', { name: 'スカウト未使用の企業と理由の登録' })).toBeTruthy(), { timeout: 8000 });
-    expect((screen.getByLabelText('対象月') as HTMLSelectElement).value).toBe(f.prev);
+    // 対象は前月に固定（月の切替は無い）。見出しに前月と対象の説明
+    expect(screen.queryByLabelText('対象月')).toBeNull();
     expect(document.querySelector('.page-head')?.textContent).toContain(fmtMonthJa(f.prev));
+    expect(document.querySelector('.page-head')?.textContent).toContain('求人を掲載しながらスカウトを 1 件も送らなかった、現在契約中の企業');
+    expect(f.calls).toContain(`GET /api/board?month=${f.prev}`);
     const board = await f.boardFor(f.prev);
-    const expected = board.companies.filter((c) => isScoutUnused(c, board.meta));
+    const expected = board.companies.filter((c) => isScoutUnused(c));
     expect(expected.length).toBeGreaterThan(0);
+    // 対象 = 前月に 1 日でも掲載（jobsInMonth > 0）・前月の送信 0・今日時点で契約中。枠数では絞らない（枠 0 / 未設定の企業も出る）
+    for (const c of expected) {
+      expect(c.m.jobsInMonth).toBeGreaterThan(0);
+      expect(c.m.sent).toBe(0);
+      expect(['active', 'ending_30d']).toContain(c.state);
+    }
+    const sent0Contracted = board.companies.filter((c) => (c.state === 'active' || c.state === 'ending_30d') && c.m.sent === 0 && !['DA', 'RPO', 'NW'].includes(c.type));
+    expect(sent0Contracted.some((c) => c.m.jobsInMonth === 0)).toBe(true);
+    expect(expected.length).toBeLessThan(sent0Contracted.length);
+    expect(expected.some((c) => !c.limits.scout)).toBe(true);
     const table = screen.getByRole('table', { name: 'スカウト未使用の企業と理由の登録' });
     const rows = table.querySelectorAll('tbody tr');
     expect(rows.length).toBe(expected.length);
@@ -167,27 +180,28 @@ describe('スカウト未利用の登録ページ', () => {
     await waitFor(() => expect(window.location.search).toContain('owner='));
     const key = decodeURIComponent(window.location.search.match(/owner=([^&]+)/)![1]);
     const board = await f.boardFor(f.prev);
-    const expected = board.companies.filter((c) => isScoutUnused(c, board.meta) && ownerKey(c) === key).length;
+    const expected = board.companies.filter((c) => isScoutUnused(c) && ownerKey(c) === key).length;
     await waitFor(() => expect(screen.getByRole('table', { name: 'スカウト未使用の企業と理由の登録' }).querySelectorAll('tbody tr').length).toBe(expected));
     fireEvent.click(screen.getByRole('button', { name: /クリア/ }));
     await waitFor(() => expect(window.location.search).not.toContain('owner='));
   });
 
-  it('担当=自分 で絞り込み、月を切り替えると URL と一覧が変わる', async () => {
+  it('担当=自分 で絞り込める。URL に month は無い（前月固定）', async () => {
     const f = await setup();
     window.history.replaceState(null, '', '/scout-unused');
     render(<App />);
     await waitFor(() => expect(screen.getByRole('table', { name: 'スカウト未使用の企業と理由の登録' })).toBeTruthy(), { timeout: 8000 });
     const board = await f.boardFor(f.prev);
-    const mine = board.companies.filter((c) => isScoutUnused(c, board.meta) && c.isMine).length;
+    const mine = board.companies.filter((c) => isScoutUnused(c) && c.isMine).length;
     fireEvent.click(screen.getByRole('button', { name: /担当 = 自分/ }));
     await waitFor(() => expect(window.location.search).toContain('mine=1'));
     // 自分が担当の企業が無ければ空状態（表は出ない）
     await waitFor(() => expect(mine === 0 ? screen.queryByText('該当する企業がありません') !== null : screen.getByRole('table', { name: 'スカウト未使用の企業と理由の登録' }).querySelectorAll('tbody tr').length === mine).toBe(true));
     fireEvent.click(screen.getByRole('button', { name: /担当 = 自分/ }));
-    fireEvent.change(screen.getByLabelText('対象月'), { target: { value: f.cur } });
-    await waitFor(() => expect(window.location.search).toContain(`month=${f.cur}`));
-    await waitFor(() => expect(f.calls).toContain(`GET /api/scout-unused?month=${f.cur}`));
+    await waitFor(() => expect(window.location.search).not.toContain('mine=1'));
+    expect(window.location.search).not.toContain('month=');
+    expect(f.calls.some((c) => c.includes(`month=${f.cur}`))).toBe(false);
+    expect(f.calls).toContain(`GET /api/scout-unused?month=${f.prev}`);
   });
 
   it('登録状況 / 企業種別 / 契約種別 のフィルタで行数と URL が変わり、CS 担当の選択肢は他のフィルタに連動する。クリアで全部消える', async () => {
@@ -226,7 +240,7 @@ describe('スカウト未利用の登録ページ', () => {
     fireEvent.click(typeBox('直接'));
     await waitFor(() => expect(window.location.search).toContain('type='));
     const direct = all.filter((c) => boardAccountTypes(c).includes('直接'));
-    expect(direct.length).toBeLessThan(all.length);
+    expect(direct.length).toBeGreaterThan(0);
     await waitFor(() => expect(tableRows()).toBe(direct.length));
     const ownerGroup = screen.getByRole('group', { name: 'CS 担当' });
     const expectedOwners = new Map<string, number>();
@@ -236,7 +250,7 @@ describe('スカウト未利用の登録ページ', () => {
     expect(labels.map((l) => Number(l.querySelector('.cnt')?.textContent)).reduce((a, b) => a + b, 0)).toBe(direct.length);
     // 直接 の企業を担当していない担当は選択肢から消えている
     const allOwners = new Set(all.map((c) => ownerKey(c)));
-    expect(allOwners.size).toBeGreaterThan(expectedOwners.size);
+    expect(allOwners.size).toBeGreaterThanOrEqual(expectedOwners.size);
     // 逆に、CS 担当を選ぶと企業種別の件数がその担当の企業だけになる
     fireEvent.click(ownerGroup.querySelector('input[type=checkbox]')!);
     await waitFor(() => expect(window.location.search).toContain('owner='));

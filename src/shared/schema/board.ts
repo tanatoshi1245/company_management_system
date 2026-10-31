@@ -25,6 +25,8 @@ export const BoardCompanySchema = z.object({
   m: z.object({
     contracted: z.boolean(),
     jobs: z.number(),
+    /** 月内に 1 日でも掲載期間が重なった求人数 */
+    jobsInMonth: z.number(),
     newJobs: z.number(),
     sent: z.number(),
     sentManual: z.number(),

@@ -123,7 +123,7 @@ export default function CompanyPage({ params }: PageProps) {
             <ScoutTrendPanel m={model} />
             <AttributePiePanel title="誰にスカウトを送っているか" help={attrHelp('スカウトを送った')} breakdown={breakdownAll} range={range} modes={['sent', 'replied']} state={stateOf(attrsAll)} initial={url.attr} onChange={(a) => setUrl({ attr: a === 'japanese_level' ? '' : a })} testId="pie-scout" />
           </div>
-          <ScoutUnusedPanel rows={d.scoutUnused} month={d.meta.month} />
+          <ScoutUnusedPanel rows={d.scoutUnused} />
         </div>
       ) : (
         <div key="selection" className="stack" role="tabpanel" id="co-panel-selection" aria-labelledby="co-tab-selection">

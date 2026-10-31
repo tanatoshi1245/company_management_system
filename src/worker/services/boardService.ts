@@ -31,6 +31,8 @@ const bool = (v: unknown): boolean => v === true || v === 'true';
 interface MonthlyRow {
   contracted: boolean;
   jobs: number;
+  /** 月内に 1 日でも掲載期間が重なった求人数（スカウト未利用の登録画面の対象判定） */
+  jobsInMonth: number;
   newJobs: number;
   sent: number;
   sentManual: number;
@@ -47,7 +49,7 @@ interface MonthlyRow {
   loginDays: number | null;
 }
 
-const ZERO: MonthlyRow = { contracted: false, jobs: 0, newJobs: 0, sent: 0, sentManual: 0, sentAuto: 0, sentCtd: 0, int: 0, intReply: 0, apps: 0, views: 0, hires: 0, inSel: 0, noResp: 0, hired: 0, loginDays: null };
+const ZERO: MonthlyRow = { contracted: false, jobs: 0, jobsInMonth: 0, newJobs: 0, sent: 0, sentManual: 0, sentAuto: 0, sentCtd: 0, int: 0, intReply: 0, apps: 0, views: 0, hires: 0, inSel: 0, noResp: 0, hired: 0, loginDays: null };
 
 /**
  * 契約体系。Daijob プロファイルの contract_type（広告掲載型 / 採用成功報酬型）を正、無ければ SF のプラン名
@@ -113,6 +115,7 @@ function toMonthly(r: Row): MonthlyRow {
   return {
     contracted: bool(r.is_contracted_in_month),
     jobs: num(r.active_jobs_eom),
+    jobsInMonth: num(r.jobs_in_month),
     newJobs: num(r.new_jobs),
     sent: num(r.scout_sent),
     sentManual: num(r.scout_sent_manual),
