@@ -6,7 +6,7 @@
 --   スキャン: 約 1.1 GB/日。失敗時は EXCEPTION で cms_refresh_log に error 行を残し、前日のマートがそのまま残る
 --   設計: company_management_system/bq/README.md、列定義: bq/marts/<table>/README.md
 --   2026-10-30: account_type（アカウント種別 = プロファイルの 直接 / 紹介 / 派遣）を cms_company_monthly（'__ALL__' + 種別の行）・属性・master（account_types / accounts_json / jobs_json）に追加
---   2026-10-31: CT ログイン（ステップ 10）から社内メンバー（company_users.email が @daijob.com）のログインを除外（企業の最終ログインが CS の確認操作で更新されないように）
+--   2026-10-31: CT ログイン（ステップ 10）から社内メンバー（company_users.email が @daijob.com）のログインを除外（企業の最終ログインが CS の確認操作で更新されないように）。対象は直接・紹介・派遣の企業のみで、DA / RPO は社内メンバーのログインも数える
 --   2026-10-31: cms_company_monthly に jobs_in_month（月内に 1 日でも掲載期間が重なった求人数）。スカウト未利用の登録画面の対象 = 前月に掲載あり・送信 0・現在契約中
 --   2026-10-30: 求人単位 cms_company_job_monthly（企業 × 種別 × 求人 × 月）を新設、属性に job_key を追加。jobs_all は jobs_latest で 1 回だけ読む
 --   2026-10-30: Network 契約の除外を dm_network_contract_candidates（SF の NetworkWW 行動＝接触履歴）から、働くDB の【0円】申込（htdb_applications_wo_FEE）の申込元で判定する方式に変更（ステップ 01b）
@@ -559,14 +559,18 @@ BEGIN
     -- 10. GA4 ログイン（直近 N 日を取り直し）→ cms_company_login -------------------------------------------------
     --   確定表 events_YYYYMMDD は翌朝 09〜10 時台に作られ 07:45 の実行では前日分が無いので、前日分は速報表 events_intraday_YYYYMMDD からも読む
     --   （確定表ができると GA4 がその日の速報表を消す）。同じ (日, 企業) は確定表を優先。速報値は 3 日以内の取り直しで確定値に置き換わる（2026-10-27）
-    --   社内メンバー（company_users.email が @daijob.com）のログインは数えない（2026-10-31）。CS が自分のアカウントで企業の画面に入ると
-    --   企業の最終ログインが更新されてしまうため。get_ID の GA4 user_id = company_users.id（旧 CT で company_id の不一致 0 を確認）。
+    --   直接・紹介・派遣の企業では、社内メンバー（company_users.email が @daijob.com）のログインは数えない（2026-10-31）。CS が自分のアカウントで
+    --   企業の画面に入ると企業の最終ログインが更新されてしまうため。get_ID の GA4 user_id = company_users.id（旧 CT で company_id の不一致 0 を確認）
+    --   なので、アカウントの所属企業（company_users.company_id）の企業種別（company_base.company_type）で絞る。
+    --   DA / RPO（社内のコンサルタントが運営する企業。NW・不明も）は社内メンバーのログインも数える。
     --   user_id が無いイベント・company_users に無い user_id（削除済みアカウント）は判定できないので数える。
     --   取り込み時のマスク値 staging+company_<ID>@daijob.com は実在の社内アカウントではないので社内扱いにしない
     CREATE TEMP TABLE internal_ct_users AS
-    SELECT DISTINCT CAST(id AS STRING) AS user_id
-    FROM `bq-hgt.dwh.company_users`
-    WHERE id IS NOT NULL AND LOWER(email) LIKE '%@daijob.com' AND NOT STARTS_WITH(LOWER(email), 'staging+');
+    SELECT DISTINCT CAST(cu.id AS STRING) AS user_id
+    FROM `bq-hgt.dwh.company_users` cu
+    JOIN company_base cb ON cb.company_id = cu.company_id
+    WHERE cu.id IS NOT NULL AND LOWER(cu.email) LIKE '%@daijob.com' AND NOT STARTS_WITH(LOWER(cu.email), 'staging+')
+      AND cb.company_type IN ('直接', '紹介', '派遣');
 
     DELETE FROM `bq-hgt.dwh.cms_company_login_daily` WHERE login_date >= DATE_SUB(run_date, INTERVAL login_backfill_days DAY);
     FOR ds IN (SELECT d FROM UNNEST(ga4_datasets) AS d) DO
