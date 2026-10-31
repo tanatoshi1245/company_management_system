@@ -8,6 +8,7 @@
 -- =============================================================================
 BEGIN
   DECLARE run_date DATE DEFAULT CURRENT_DATE('Asia/Tokyo');
+  DECLARE n_master INT64 DEFAULT 0;   -- cms_company_master があるか（社内ログインの除外対象の企業種別を引く）
   -- データセット ID と取込開始日（GA4 の BigQuery リンク作成日以降しか events_* は無い）
   DECLARE ga4_sources ARRAY<STRUCT<ds STRING, from_date DATE>> DEFAULT [
     STRUCT('analytics_258261950', DATE '2026-05-15'),   -- 旧 CT 画面
@@ -80,6 +81,21 @@ BEGIN
   WHEN NOT MATCHED THEN INSERT (customer_name, note) VALUES (s.customer_name, s.note);
 
   -- 3. GA4 ログインの一括取込（既に入っている日は取り直す） -------------------------------------
+  --   直接・紹介・派遣の企業では、社内メンバー（company_users.email が @daijob.com。GA4 user_id = company_users.id）のログインは数えない（2026-10-31）。
+  --   scheduled_query.sql のステップ 10 と同じ条件（DA / RPO は社内メンバーのログインも数える）。企業種別は cms_company_master から引く。
+  --   user_id なし・company_users に無い user_id（削除済みアカウント）は数える。
+  --   cms_company_master がまだ無い初回構築では社内除外なしで入るので、scheduled_query.sql の初回実行後に login_backfill_days を大きくして取り直す
+  CREATE TEMP TABLE internal_ct_users (user_id STRING);
+  EXECUTE IMMEDIATE "SELECT COUNT(*) FROM `bq-hgt.dwh.INFORMATION_SCHEMA.TABLES` WHERE table_name = 'cms_company_master'" INTO n_master;
+  IF n_master > 0 THEN
+    INSERT INTO internal_ct_users
+    SELECT DISTINCT CAST(cu.id AS STRING)
+    FROM `bq-hgt.dwh.company_users` cu
+    JOIN `bq-hgt.dwh.cms_company_master` m ON m.company_id = cu.company_id
+    WHERE cu.id IS NOT NULL AND LOWER(cu.email) LIKE '%@daijob.com' AND NOT STARTS_WITH(LOWER(cu.email), 'staging+')
+      AND m.company_type IN ('直接', '紹介', '派遣');
+  END IF;
+
   FOR src IN (SELECT ds, from_date FROM UNNEST(ga4_sources)) DO
     EXECUTE IMMEDIATE FORMAT("""
       DELETE FROM `bq-hgt.dwh.cms_company_login_daily` WHERE source_dataset = '%s' AND login_date >= DATE '%t'
@@ -95,6 +111,7 @@ BEGIN
       FROM `bq-hgt.%s.events_*`
       WHERE _TABLE_SUFFIX BETWEEN '%s' AND '%s'
         AND event_name = 'get_ID'
+        AND (user_id IS NULL OR user_id NOT IN (SELECT user_id FROM internal_ct_users))
       GROUP BY 1, 2
       HAVING company_id IS NOT NULL
     """, src.ds, src.ds, FORMAT_DATE('%Y%m%d', src.from_date), FORMAT_DATE('%Y%m%d', run_date));

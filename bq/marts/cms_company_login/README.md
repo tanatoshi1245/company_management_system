@@ -20,7 +20,7 @@ status: active
 
 ## 元テーブル（依存するデータ）
 
-cms_company_login_daily（GA4 `analytics_258261950` / `analytics_553479599` の `events_*`（確定表）と `events_intraday_*`（速報表。前日分まで）から `get_ID` を企業 × 日に集計。同じ日・企業は確定表を優先し、直近 3 日を毎朝取り直すので速報値は 3 日以内に確定値に置き換わる。2026-10-27〜）, cms_company_master
+cms_company_login_daily（GA4 `analytics_258261950` / `analytics_553479599` の `events_*`（確定表）と `events_intraday_*`（速報表。前日分まで）から `get_ID` を企業 × 日に集計。同じ日・企業は確定表を優先し、直近 3 日を毎朝取り直すので速報値は 3 日以内に確定値に置き換わる。2026-10-27〜。直接・紹介・派遣の企業は社内メンバー `@daijob.com` のログインを除外 2026-10-31〜、詳細は [`cms_company_login_daily`](../cms_company_login_daily/README.md)）, cms_company_master
 
 ## 更新
 `bq/marts/scheduled_query.sql`（毎日 22:45 UTC = 07:45 JST）。生成ロジックの変更時は Worker の `src/worker/sql/` と `src/shared/schema/` を合わせ、`DATA_VERSION` を +1 する。
