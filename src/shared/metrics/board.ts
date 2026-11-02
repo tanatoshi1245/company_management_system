@@ -114,7 +114,8 @@ export const BOARD_COLUMNS: BoardColumn[] = [
   { key: 'intReply', label: '興味あり返信', group: 'スカウト' },
   { key: 'inSel', label: '選考中', group: '選考' },
   { key: 'hires', label: '採用', group: '選考', metric: 'hires' },
-  { key: 'login', label: '最終ログイン', group: '接点', metric: 'login_days' },
+  // グループ名は空（見出しは「最終ログイン」の列だけ。ログイン計測の注釈も列の見出しに。2026-11-02〜）
+  { key: 'login', label: '最終ログイン', group: '', metric: 'login_days' },
   { key: 'daysToEnd', label: '契約残', group: '契約' },
 ];
 

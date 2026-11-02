@@ -236,18 +236,38 @@ describe('企業詳細', () => {
     expect(filter.value).toBe(pick.key);
     expect(screen.getByRole('table', { name: '求人ごとの実績の表' }).querySelector('tbody tr[aria-selected=true]')?.textContent).toContain(pick.title);
     expect(jobs.querySelector('.lead')?.textContent).toContain(pick.title);
-    // 求人を選んでも「掲載した求人の条件」は全求人のまま（注記が出る）
-    expect(condTotal()).toBe(nJobs);
-    expect(cond.querySelector('.lead')?.textContent).toContain('求人フィルタは効きません');
+    // 求人を選ぶと「掲載した求人の条件」はその求人の 5 項目の一覧になる（円は消える）
+    await waitFor(() => expect(cond.querySelector('[data-testid=job-cond-one]')).toBeTruthy());
+    expect(cond.querySelector('.pie svg')).toBeNull();
+    expect(cond.querySelector('.lead')?.textContent).toContain(`求人: ${pick.title}`);
+    const kv = Array.from(cond.querySelectorAll('[data-testid=job-cond-one] > div')).map((d) => [d.querySelector('dt')?.textContent, d.querySelector('dd')?.textContent]);
+    expect(kv).toEqual([
+      ['日本語レベル', pick.cond!.japanese],
+      ['英語レベル', pick.cond!.english],
+      ['勤務地', pick.cond!.location],
+      ['職種', pick.cond!.occupation],
+      ['年収幅', pick.cond!.salary],
+    ]);
     await waitFor(() => expect(calls.some((u) => u.startsWith(`/api/companies/${c.id}/attributes?`) && u.endsWith(`&job=${pick.key}`))).toBe(true));
     const jobMonthly = await loadJobs(f.client, c.id, fromSel.value, f.month, null, pick.key);
     fireEvent.click(screen.getByRole('button', { name: '表で見る' }));
     const va2 = screen.getByRole('table', { name: '閲覧と応募の推移の表' });
     const last2 = Array.from(va2.querySelector('tbody tr:last-child')!.querySelectorAll('td')).map((td) => td.textContent?.replace(/,/g, ''));
     expect(Number(last2[1])).toBe(jobMonthly.monthly.find((m) => m.month === f.month)?.views ?? 0);
-    // 解除で戻る
+    // 解除で戻る（条件は全求人の円に戻る）
     fireEvent.click(screen.getByRole('button', { name: '解除' }));
     await waitFor(() => expect(window.location.search).not.toContain('job='));
+    await waitFor(() => expect(cond.querySelector('.pie svg')).toBeTruthy());
+    expect(cond.querySelector('[data-testid=job-cond-one]')).toBeNull();
+    expect(condTotal()).toBe(nJobs);
+    // 企業への直接応募を選ぶと条件は無い旨の空状態
+    const directRow = jobsApi.rows.find((r) => r.direct);
+    if (directRow) {
+      fireEvent.change(filter, { target: { value: directRow.key } });
+      await waitFor(() => expect(cond.textContent).toContain('企業への直接応募には求人の条件がありません'));
+      fireEvent.click(screen.getByRole('button', { name: '解除' }));
+      await waitFor(() => expect(window.location.search).not.toContain('job='));
+    }
     await waitFor(() => expect(num(jobs, 'views')).toBe(inWindow.reduce((a, m) => a + m.views, 0)));
     // 詳細の取得は 1 回（属性・求人 API は別）
     expect(calls.filter((u) => u.startsWith(`/api/companies/${c.id}?`)).length).toBe(1);

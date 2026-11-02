@@ -140,20 +140,21 @@ describe('ホーム（ボード）', () => {
     expect(boardCalls()).toBe(1);
   });
 
-  it('「接点」グループと最終ログイン列の見出しに、ログイン計測開始日の注釈がマウスオーバーで出る', async () => {
+  it('最終ログイン列の見出しだけに、ログイン計測開始日の注釈がマウスオーバーで出る（「接点」のグループ見出しは無い）', async () => {
     render(<App />);
     await waitFor(() => expect(screen.getByRole('table', { name: '契約企業の実績一覧' })).toBeTruthy());
     const table = screen.getByRole('table', { name: '契約企業の実績一覧' });
-    const group = screen.getByRole('columnheader', { name: '接点' });
-    expect(group.getAttribute('title')).toContain('2026-05-15');
-    expect(group.classList.contains('note')).toBe(true);
-    expect(screen.getByRole('columnheader', { name: /最終ログイン/ }).getAttribute('title')).toContain('2026-05-15');
+    expect(screen.queryByRole('columnheader', { name: '接点' })).toBeNull();
+    expect(Array.from(table.querySelectorAll('thead tr.groups th')).some((th) => th.textContent === '接点')).toBe(false);
+    const login = screen.getByRole('columnheader', { name: /最終ログイン/ });
+    expect(login.getAttribute('title')).toContain('2026-05-15');
+    expect(login.classList.contains('note')).toBe(true);
     expect(screen.getByRole('columnheader', { name: 'スカウト' }).getAttribute('title')).toBeNull();
     // 求人・反応は「応募」の 1 グループ（掲載 / 枠・閲覧・応募）
     expect(screen.queryByRole('columnheader', { name: '反応' })).toBeNull();
     expect(screen.queryByRole('columnheader', { name: '求人' })).toBeNull();
     expect(table.querySelector('thead tr.groups th[colspan="3"]:not(.first)')?.textContent).toBe('応募');
-    // 列グループの先頭列に区切り線用の gs クラス（応募 / スカウト / 選考 / 接点 / 契約 = 5 列）
+    // 列グループの先頭列に区切り線用の gs クラス（応募 / スカウト / 選考 / 最終ログイン / 契約 = 5 列）
     expect(table.querySelectorAll('thead tr.metrics th.num.gs').length).toBe(5);
     expect(table.querySelector('tbody tr td[data-col=jobs]')?.classList.contains('gs')).toBe(true);
     expect(table.querySelector('tbody tr td[data-col=views]')?.classList.contains('gs')).toBe(false);

@@ -103,7 +103,7 @@ export default function CompanyPage({ params }: PageProps) {
           <ViewsAppsPanel m={model} jobLabel={jobLabel} />
           <div className="grid-2">
             <AttributePiePanel title="誰が求人を見ているか" help={attrHelp('求人を閲覧 / 応募した')} breakdown={breakdownJobs} range={range} modes={['viewed', 'applied']} state={stateOf(attrsJobs)} testId="pie-views" />
-            <JobConditionsPanel jobs={jobs.data} state={stateOf(jobs)} errorCode={jobs.error instanceof ApiError ? jobs.error.code : jobs.error ? 'error' : null} range={range} jobSelected={Boolean(sel.job)} />
+            <JobConditionsPanel jobs={jobs.data} state={stateOf(jobs)} errorCode={jobs.error instanceof ApiError ? jobs.error.code : jobs.error ? 'error' : null} range={range} selected={sel.job} />
           </div>
           <JobsTablePanel jobs={jobs.data} state={stateOf(jobs)} errorCode={jobs.error instanceof ApiError ? jobs.error.code : jobs.error ? 'error' : null} selected={sel.job} onSelect={setJob} range={range} />
         </div>

@@ -132,4 +132,9 @@ table.unused-reg .status .ok { color: var(--good); font-weight: 600; }
 .pie-legend .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .pie-legend .val { text-align: right; }
 .pie-legend .pct { text-align: right; color: var(--ink-soft); }
+/* 求人を 1 件選んだときの条件の一覧（掲載した求人の条件） */
+dl.kv { margin: 0; display: grid; gap: 6px; }
+dl.kv > div { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--rule); }
+dl.kv dt { color: var(--ink-soft); font-size: var(--fs-12); }
+dl.kv dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 .card-head .segmented { margin-left: auto; }
