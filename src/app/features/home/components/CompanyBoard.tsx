@@ -103,8 +103,8 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
             <th className="col-type first" scope="colgroup" colSpan={3}>
               企業（{fmtInt(rows.length)} 社）
             </th>
-            {groups.map((g) => (
-              <th key={g.label} colSpan={g.span} scope="colgroup" className={g.label === '接点' ? 'note' : undefined} title={g.label === '接点' ? loginNote : undefined}>
+            {groups.map((g, gi) => (
+              <th key={`${g.label}-${gi}`} colSpan={g.span} scope="colgroup" aria-hidden={g.label === '' ? true : undefined}>
                 {g.label}
               </th>
             ))}
@@ -120,7 +120,7 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
               企業名{sortInd('name')}
             </th>
             {BOARD_COLUMNS.map((col) => (
-              <th key={col.key} className={`num sortable${groupStart.has(col.key) ? ' gs' : ''}`} scope="col" aria-sort={ariaSort(col.key)} onClick={() => toggleSort(col.key)} title={col.key === 'login' ? `${col.label}\n${loginNote}` : col.metric ? `${col.label}\n参考: ${METRIC_BY_KEY[col.metric].label}（${METRIC_BY_KEY[col.metric].formula}）` : col.label}>
+              <th key={col.key} className={`num sortable${groupStart.has(col.key) ? ' gs' : ''}${col.key === 'login' ? ' note' : ''}`} scope="col" aria-sort={ariaSort(col.key)} onClick={() => toggleSort(col.key)} title={col.key === 'login' ? `${col.label}\n${loginNote}` : col.metric ? `${col.label}\n参考: ${METRIC_BY_KEY[col.metric].label}（${METRIC_BY_KEY[col.metric].formula}）` : col.label}>
                 {col.label}
                 {sortInd(col.key)}
               </th>
