@@ -13,6 +13,18 @@ export interface LineSeries {
 
 const PAD = { l: 44, r: 64, t: 12, b: 22 };
 
+/** 右軸の最大値 = 左軸の最大値 × 比率。比率は「右 ÷ 左」の最大率を 10% 以上のきりのよい値に切り上げる（応募の線が閲覧の線より上に出ない） */
+const NICE_RATIOS = [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.75, 1];
+export function rightAxisRatio(left: (number | null)[], right: (number | null)[]): number {
+  let maxRate = 0;
+  left.forEach((l, i) => {
+    const r = right[i];
+    if (l !== null && r !== null && Number.isFinite(l) && Number.isFinite(r) && l > 0) maxRate = Math.max(maxRate, r / l);
+  });
+  const want = Math.max(0.1, maxRate);
+  return NICE_RATIOS.find((x) => x >= want) ?? Math.ceil(want);
+}
+
 function niceMax(v: number): number {
   if (v <= 0) return 1;
   const p = 10 ** Math.floor(Math.log10(v));
@@ -24,7 +36,9 @@ function niceMax(v: number): number {
 /**
  * 2 本の折れ線（月次）。凡例 + 最終点の直接ラベル + ホバーのツールチップ。
  * 既定は 1 軸。dualAxis = true のときだけ系列 0 を左軸、系列 1 を右軸にする（閲覧と応募のように桁が違う組み合わせ。ユーザー指示の例外。
- * 誤読を防ぐため目盛の数字を系列の色で塗り、凡例に左軸 / 右軸を書く）
+ * 誤読を防ぐため目盛の数字を系列の色で塗り、凡例に左軸 / 右軸を書く）。
+ * 右軸の最大値は左軸の最大値 × 比率（rightAxisRatio。既定 10%、「右 ÷ 左」の最大率がそれを超えたら 15% → 20% → … に連動）に固定し、
+ * 右軸の線（応募・返信）が左軸の線（閲覧・送信）より常に下に描かれるようにする（2026-11-02）
  */
 export function DualLineChart({ months, series, format, ariaLabel, partialLast = false, height = 200, dualAxis = false }: { months: string[]; series: LineSeries[]; format: (v: number) => string; ariaLabel: string; partialLast?: boolean; height?: number; dualAxis?: boolean }) {
   const [ref, w] = useWidth<HTMLDivElement>(480);
@@ -33,8 +47,10 @@ export function DualLineChart({ months, series, format, ariaLabel, partialLast =
   const n = months.length;
   const finite = (vals: (number | null)[]) => vals.filter((v): v is number => v !== null && Number.isFinite(v));
   const maxAll = niceMax(Math.max(0, ...finite(series.flatMap((s) => s.values))));
-  /** 系列ごとの軸の最大値（1 軸なら共通、2 軸なら系列 0 = 左、系列 1 以降 = 右） */
-  const axisMax = (si: number) => (dualAxis ? niceMax(Math.max(0, ...finite(series[si]?.values ?? []))) : maxAll);
+  const leftMax = niceMax(Math.max(0, ...finite(series[0]?.values ?? [])));
+  const ratio = dualAxis ? rightAxisRatio(series[0]?.values ?? [], series[1]?.values ?? []) : 1;
+  /** 系列ごとの軸の最大値（1 軸なら共通、2 軸なら系列 0 = 左、系列 1 以降 = 右 = 左 × 比率） */
+  const axisMax = (si: number) => (dualAxis ? (si === 0 ? leftMax : leftMax * ratio) : maxAll);
   const iw = Math.max(40, w - PAD.l - PAD.r);
   const ih = height - PAD.t - PAD.b;
   const sx = (i: number) => PAD.l + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw);
@@ -82,12 +98,12 @@ export function DualLineChart({ months, series, format, ariaLabel, partialLast =
   };
   if (!n) return <div className="empty">データがありません</div>;
   return (
-    <div className="chart dual" ref={ref} style={{ position: 'relative' }}>
+    <div className="chart dual" ref={ref} style={{ position: 'relative' }} data-right-ratio={dualAxis ? ratio : undefined}>
       <div className="legend" aria-hidden="true">
         {series.map((s, si) => (
           <span key={s.key}>
             <span className="sw" style={{ background: `var(${s.color})` }} /> {s.label}
-            {dualAxis ? <span className="muted">（{si === 0 ? '左軸' : '右軸'}）</span> : null}
+            {dualAxis ? <span className="muted">（{si === 0 ? '左軸' : `右軸。最大値は左軸の ${Math.round(ratio * 100)}%`}）</span> : null}
           </span>
         ))}
       </div>

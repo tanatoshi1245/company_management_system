@@ -183,6 +183,13 @@ export async function getAttributes(client: BqClient, companyId: string, from: s
 }
 
 /** 求人単位の集計（期間・アカウント種別）と、求人指定時はその求人の月次。cms_company_job_monthly から */
+/** 職種の大分類（jobs_all.occupation は「営業 - 法人営業」の形。円グラフは大分類で数える） */
+export function occupationGroup(v: string | null): string {
+  if (!v) return '未設定';
+  const i = v.indexOf(' - ');
+  return (i > 0 ? v.slice(0, i) : v).trim() || '未設定';
+}
+
 export async function loadJobs(client: BqClient, companyId: string, from: string, to: string, account: string | null, job: string | null): Promise<JobsResponse> {
   const [agg, monthly] = await Promise.all([
     client.run(companyJobsQuery(companyId, `${from}-01`, `${to}-01`, account)),
@@ -199,6 +206,7 @@ export async function loadJobs(client: BqClient, companyId: string, from: string
     apps: num(r.applications),
     hiresApp: num(r.hires_from_application),
     st: stOf(r),
+    cond: bool(r.is_direct) ? null : { japanese: str(r.job_japanese_level) ?? '未設定', english: str(r.job_english_level) ?? '未設定', occupation: occupationGroup(str(r.job_occupation)), location: str(r.job_location) ?? '未設定', salary: str(r.job_salary_band) ?? '未設定' },
   }));
   return { from, to, account, job, rows, monthly: (monthly?.rows ?? []).map((r) => ({ month: String(r.month_ym), views: num(r.job_views), apps: num(r.applications), hiresApp: num(r.hires_from_application), st: stOf(r) })) };
 }

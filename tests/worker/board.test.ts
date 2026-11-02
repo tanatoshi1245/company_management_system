@@ -5,6 +5,7 @@ import { baseEnv, ctx } from '../helpers/env';
 import { BoardResponseSchema } from '../../src/shared/schema/board';
 import { addMonths, monthOf, todayJst } from '../../src/shared/calendar/periods';
 import { makeContext, scoreCompany } from '../../src/shared/metrics/score';
+import { PACE_MIN_DAYS } from '../../src/shared/metrics/pace';
 import { filterCompanies, isContracted, isNoLogin, kpiStrip, ownerKey, sortCompanies, DEFAULT_FILTERS } from '../../src/shared/metrics/board';
 import { companyMasterQuery } from '../../src/worker/sql/companyMaster';
 import { contractKindOf } from '../../src/worker/services/boardService';
@@ -67,7 +68,9 @@ describe('/api/board（モック）', () => {
     const body = BoardResponseSchema.parse(await (await get('', { ...baseEnv, DEV_USER_EMAIL: 'preview@daijob.com' })).json());
     const ctx = makeContext(body.benchmarks, body.meta.benchMinN, body.meta.bizDays.rate, body.meta.bizDays.elapsed, body.meta.isCurrentMonth);
     const scored = body.companies.map((c) => scoreCompany(c, ctx));
-    expect(scored.some((s) => s.pace.status === 'behind')).toBe(true);
+    // 月初（経過営業日 < PACE_MIN_DAYS）はすべて early になるので、その日はペース判定の有無だけ見る
+    if (body.meta.bizDays.elapsed >= PACE_MIN_DAYS) expect(scored.some((s) => s.pace.status === 'behind')).toBe(true);
+    else expect(scored.every((s) => s.pace.status === 'early' || s.pace.status === 'na')).toBe(true);
     expect(scored.some((s) => s.bench.scout_utilization?.score !== null)).toBe(true);
     expect(scored.every((s) => s.health.target.level === 'none')).toBe(true); // 目標なし
     // 契約中の企業だけ（終了済み・開始前・直近終了は出ない）。type: [] = 種別で絞らない（既定は DA / RPO 以外）

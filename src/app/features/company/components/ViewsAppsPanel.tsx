@@ -15,7 +15,7 @@ export function ViewsAppsPanel({ m, jobLabel }: { m: CompanyModel; jobLabel?: st
     <section className="card" aria-label="閲覧と応募の推移">
       <div className="card-head">
         <h2>
-          閲覧と応募の推移 <Help text="月ごとの実績（累積ではない）。閲覧 = 求人の閲覧件数、応募 = 応募件数。ボードの「閲覧」「応募」と同じ値。求人を選ぶとその求人の分。桁が違うため左軸 = 閲覧件数、右軸 = 応募件数（目盛の数字は線の色）" />
+          閲覧と応募の推移 <Help text="月ごとの実績（累積ではない）。閲覧 = 求人の閲覧件数、応募 = 応募件数。ボードの「閲覧」「応募」と同じ値。求人を選ぶとその求人の分。桁が違うため左軸 = 閲覧件数、右軸 = 応募件数（目盛の数字は線の色）。右軸の最大値は左軸の最大値 × 最大応募率（応募 ÷ 閲覧。10% 以上に切り上げ）に固定するので、応募の線は常に閲覧の線より下に描かれる" />
         </h2>
         <span className="lead">{lead}</span>
         <button type="button" className="btn ghost sm" onClick={() => setTable((t) => !t)}>

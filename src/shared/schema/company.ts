@@ -68,7 +68,10 @@ export type AttributesResponse = z.infer<typeof AttributesResponseSchema>;
 /** 求人キー（API の job パラメータ）: 求人の set_id / job_id、または 'direct'（企業への直接応募） */
 export const JobKeySchema = z.string().regex(/^(\d{1,12}|direct)$/);
 /** 求人 1 件の期間集計（cms_company_job_monthly を job_key で SUM）。st は応募側の現ステータス別件数（st06〜st11） */
-export const JobRowSchema = z.object({ key: z.string(), title: z.string(), account: z.string(), direct: z.boolean(), publishFrom: z.string().nullable(), publishTo: z.string().nullable(), views: z.number(), apps: z.number(), hiresApp: z.number(), st: z.record(z.string(), z.number()) });
+/** 求人の条件（掲載した求人の条件の円グラフ用。(direct) は null。occupation は大分類（「営業 - 法人営業」の「営業」）） */
+export const JobCondSchema = z.object({ japanese: z.string(), english: z.string(), occupation: z.string(), location: z.string(), salary: z.string() });
+export type JobCond = z.infer<typeof JobCondSchema>;
+export const JobRowSchema = z.object({ key: z.string(), title: z.string(), account: z.string(), direct: z.boolean(), publishFrom: z.string().nullable(), publishTo: z.string().nullable(), views: z.number(), apps: z.number(), hiresApp: z.number(), st: z.record(z.string(), z.number()), cond: JobCondSchema.nullable() });
 export type JobRow = z.infer<typeof JobRowSchema>;
 export const JobMonthlyRowSchema = z.object({ month: z.string(), views: z.number(), apps: z.number(), hiresApp: z.number(), st: z.record(z.string(), z.number()) });
 export type JobMonthlyRow = z.infer<typeof JobMonthlyRowSchema>;

@@ -20,6 +20,7 @@ import { ScoutTrendPanel } from './components/ScoutTrendPanel';
 import { AttributePiePanel } from './components/AttributePiePanel';
 import { ScoutUnusedPanel } from './components/ScoutUnusedPanel';
 import { JobsTablePanel, jobLabelOf } from './components/JobsTablePanel';
+import { JobConditionsPanel } from './components/JobConditionsPanel';
 import { SelectionPanel } from './components/SelectionPanel';
 import { fmtInt } from '../../lib/format';
 
@@ -103,7 +104,10 @@ export default function CompanyPage({ params }: PageProps) {
             <ViewsAppsPanel m={model} jobLabel={jobLabel} />
             <AttributePiePanel title="誰が求人を見ているか" help={attrHelp('求人を閲覧 / 応募した')} breakdown={breakdownJobs} range={range} modes={['viewed', 'applied']} state={stateOf(attrsJobs)} testId="pie-views" />
           </div>
-          <JobsTablePanel jobs={jobs.data} state={stateOf(jobs)} errorCode={jobs.error instanceof ApiError ? jobs.error.code : jobs.error ? 'error' : null} selected={sel.job} onSelect={setJob} range={range} />
+          <div className="grid-2 wide-left">
+            <JobsTablePanel jobs={jobs.data} state={stateOf(jobs)} errorCode={jobs.error instanceof ApiError ? jobs.error.code : jobs.error ? 'error' : null} selected={sel.job} onSelect={setJob} range={range} />
+            <JobConditionsPanel jobs={jobs.data} state={stateOf(jobs)} errorCode={jobs.error instanceof ApiError ? jobs.error.code : jobs.error ? 'error' : null} range={range} jobSelected={Boolean(sel.job)} />
+          </div>
         </div>
       ) : tab === 'scout' ? (
         <div key="scout" className="stack" role="tabpanel" id="co-panel-scout" aria-labelledby="co-tab-scout">

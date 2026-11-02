@@ -137,6 +137,18 @@ describe('企業詳細', () => {
     expect(ch.querySelector('svg text.tick.right')?.getAttribute('fill')).toBe('var(--cat-2)');
     expect(ch.textContent).toContain('閲覧件数');
     expect(ch.textContent).toContain('応募件数');
+    // 右軸の最大値 = 左軸の最大値 × 比率（10% 以上）。応募の線は常に閲覧の線より下（SVG の y は下ほど大きい）
+    const ratio = Number(ch.getAttribute('data-right-ratio'));
+    expect(ratio).toBeGreaterThanOrEqual(0.1);
+    expect(ch.textContent).toContain(`右軸。最大値は左軸の ${Math.round(ratio * 100)}%`);
+    const pts = (key: string) => (ch.querySelector(`svg g[data-series=${key}] > path`)!.getAttribute('d') ?? '').split(/[ML]/).filter(Boolean).map((p) => p.split(',').map(Number));
+    const pv = pts('views');
+    const pa = pts('apps');
+    expect(pv.length).toBe(pa.length);
+    pv.forEach(([xv, yv], k) => {
+      expect(pa[k][0]).toBeCloseTo(xv, 1);
+      expect(pa[k][1]).toBeGreaterThanOrEqual(yv - 0.05);
+    });
     fireEvent.click(screen.getByRole('button', { name: '表で見る' }));
     const va = screen.getByRole('table', { name: '閲覧と応募の推移の表' });
     const lastRow = va.querySelector('tbody tr:last-child')!;
@@ -174,6 +186,24 @@ describe('企業詳細', () => {
     expect(trs.some((tr) => tr.textContent?.includes('企業への直接応募'))).toBe(jobsApi.rows.some((r) => r.direct));
     const filter = screen.getByLabelText('求人フィルタ') as HTMLSelectElement;
     expect(filter.options.length).toBe(jobsApi.rows.length + 1);
+    // 掲載した求人の条件（表の右）: タブ 5 つ、円の合計 = 直接応募以外の求人数、年収幅は帯の順
+    const cond = screen.getByTestId('job-conditions');
+    expect(Array.from(cond.querySelectorAll('[role=tab]')).map((t) => t.textContent)).toEqual(['日本語レベル', '英語レベル', '勤務地', '職種', '年収幅']);
+    const condTotal = () => Number(cond.querySelector('.pie svg text.num')?.textContent?.replace(/,/g, ''));
+    const nJobs = jobsApi.rows.filter((r) => r.cond).length;
+    expect(nJobs).toBeGreaterThan(0);
+    expect(condTotal()).toBe(nJobs);
+    expect(cond.querySelector('.lead')?.textContent).toContain(`${nJobs} 件`);
+    fireEvent.click(within(cond).getByRole('tab', { name: '年収幅' }));
+    const bands = Array.from(cond.querySelectorAll('.pie-legend li .lbl')).map((e) => e.textContent ?? '');
+    const order = ['〜400万円', '400〜600万円', '600〜800万円', '800〜1000万円', '1000万円〜', '応相談', '円以外'];
+    const seen = bands.filter((b) => order.includes(b));
+    expect(seen.length).toBeGreaterThan(2);
+    expect(seen).toEqual([...seen].sort((a, b) => order.indexOf(a) - order.indexOf(b)));
+    expect(condTotal()).toBe(nJobs);
+    fireEvent.click(within(cond).getByRole('tab', { name: '職種' }));
+    expect(cond.textContent).toMatch(/IT関連|営業|企画/);
+    expect(cond.textContent).not.toContain(' - ');
     // 行を選ぶ → URL に job=、掲載求人数 1、閲覧件数 = その求人、推移はその求人の月次、属性 API に job=
     const pick = jobsApi.rows.find((r) => !r.direct && r.views > 0)!;
     const pickTr = trs[jobsApi.rows.indexOf(pick)] as HTMLElement;
@@ -185,6 +215,9 @@ describe('企業詳細', () => {
     expect(filter.value).toBe(pick.key);
     expect(screen.getByRole('table', { name: '求人ごとの実績の表' }).querySelector('tbody tr[aria-selected=true]')?.textContent).toContain(pick.title);
     expect(jobs.querySelector('.lead')?.textContent).toContain(pick.title);
+    // 求人を選んでも「掲載した求人の条件」は全求人のまま（注記が出る）
+    expect(condTotal()).toBe(nJobs);
+    expect(cond.querySelector('.lead')?.textContent).toContain('求人フィルタは効きません');
     await waitFor(() => expect(calls.some((u) => u.startsWith(`/api/companies/${c.id}/attributes?`) && u.endsWith(`&job=${pick.key}`))).toBe(true));
     const jobMonthly = await loadJobs(f.client, c.id, fromSel.value, f.month, null, pick.key);
     fireEvent.click(screen.getByRole('button', { name: '表で見る' }));
