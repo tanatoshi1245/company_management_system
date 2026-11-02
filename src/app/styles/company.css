@@ -46,7 +46,8 @@
 .co-tabs button:hover { background: var(--surface-low); }
 .co-tabs button.on { color: var(--heading); border-bottom-color: var(--dj-gold); background: var(--surface-low); }
 /* 求人の表と求人フィルタ */
-.job-filter { display: flex; align-items: center; gap: 6px; }
+.job-filter { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.job-filter input[type='search'] { width: 240px; }
 .job-filter select { max-width: 360px; }
 table.data.jobs tbody tr { cursor: pointer; }
 table.data.jobs tbody tr:hover { background: var(--surface-low); }
@@ -131,7 +132,4 @@ table.unused-reg .status .ok { color: var(--good); font-weight: 600; }
 .pie-legend .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .pie-legend .val { text-align: right; }
 .pie-legend .pct { text-align: right; color: var(--ink-soft); }
-/* 掲載した求人の条件（幅の狭いカード）: 凡例を円の下に置いて「400〜600万円」のような長い値を切らない */
-.job-cond .pie { grid-template-columns: 1fr; justify-items: center; }
-.job-cond .pie-legend { width: 100%; max-width: 360px; }
 .card-head .segmented { margin-left: auto; }
