@@ -15,7 +15,7 @@ export function ScoutTrendPanel({ m }: { m: CompanyModel }) {
     <section className="card" aria-label="スカウト送信と興味あり返信の推移">
       <div className="card-head">
         <h2>
-          スカウト送信と興味あり返信の推移 <Help text="月ごとのスカウト送信数と、その月に「興味あり」返信があったスカウト数（送信月は問わない。質問・開封のみは含まない。ボードの「興味あり返信」と同じ）。桁が違うため左軸 = 送信件数、右軸 = 興味あり返信件数（目盛の数字は線の色）" />
+          スカウト送信と興味あり返信の推移 <Help text="月ごとのスカウト送信数と、その月に「興味あり」返信があったスカウト数（送信月は問わない。質問・開封のみは含まない。ボードの「興味あり返信」と同じ）。桁が違うため左軸 = 送信件数、右軸 = 興味あり返信件数（目盛の数字は線の色）。右軸の最大値は左軸の最大値 × 最大返信率（返信 ÷ 送信。10% 以上に切り上げ）に固定するので、返信の線は常に送信の線より下に描かれる" />
         </h2>
         <span className="lead">{lead}</span>
         <button type="button" className="btn ghost sm" onClick={() => setTable((v) => !v)}>

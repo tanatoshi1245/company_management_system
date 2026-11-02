@@ -6,6 +6,7 @@
 --   スキャン: 約 1.1 GB/日。失敗時は EXCEPTION で cms_refresh_log に error 行を残し、前日のマートがそのまま残る
 --   設計: company_management_system/bq/README.md、列定義: bq/marts/<table>/README.md
 --   2026-10-30: account_type（アカウント種別 = プロファイルの 直接 / 紹介 / 派遣）を cms_company_monthly（'__ALL__' + 種別の行）・属性・master（account_types / accounts_json / jobs_json）に追加
+--   2026-11-02: cms_company_job_monthly に求人の条件（job_japanese_level / job_english_level / job_occupation / job_location / job_salary_band）。企業ページの「掲載した求人の条件」の円グラフ用
 --   2026-10-31: cms_company_monthly に jobs_in_month（月内に 1 日でも掲載期間が重なった求人数）。スカウト未利用の登録画面の対象 = 前月に掲載あり・送信 0・現在契約中
 --   2026-10-30: 求人単位 cms_company_job_monthly（企業 × 種別 × 求人 × 月）を新設、属性に job_key を追加。jobs_all は jobs_latest で 1 回だけ読む
 --   2026-10-30: Network 契約の除外を dm_network_contract_candidates（SF の NetworkWW 行動＝接触履歴）から、働くDB の【0円】申込（htdb_applications_wo_FEE）の申込元で判定する方式に変更（ステップ 01b）
@@ -373,10 +374,12 @@ BEGIN
     LEFT JOIN first_interest fi USING (scout_id)
     WHERE DATE(s.sent_at) BETWEEN fact_start AND data_date;
 
-    -- 06a. jobs_latest / job_set / job_title: jobs_all は 1 回だけ読む（2026-10-30）
+    -- 06a. jobs_latest / job_set / job_attr: jobs_all は 1 回だけ読む（2026-10-30。job_title は 2026-11-02 に job_attr へ）
     --   求人キー job_key = set_id（日英セット）、無ければ job_id。タイトルは日本語プロファイル側を優先、同じなら最新のスナップショット
     CREATE TEMP TABLE jobs_latest AS
-    SELECT job_id, set_id, profile_id, position_name, recorded_on
+    SELECT job_id, set_id, profile_id, position_name, recorded_on,
+           -- 求人の条件（企業ページの「掲載した求人の条件」の円グラフ用。2026-11-02）
+           japanese_level, english_level, occupation, work_location1_area, work_location1_country, work_location1_city, annual_income, annual_income_min
     FROM `bq-hgt.dwh.jobs_all`
     WHERE job_id IS NOT NULL
     QUALIFY ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY recorded_on DESC NULLS LAST) = 1;
@@ -384,13 +387,44 @@ BEGIN
     CREATE TEMP TABLE job_set AS
     SELECT job_id, set_id, COALESCE(set_id, job_id) AS job_key FROM jobs_latest;
 
-    CREATE TEMP TABLE job_title AS
-    SELECT js.job_key,
-           ARRAY_AGG(NULLIF(TRIM(jl.position_name), '') IGNORE NULLS ORDER BY IF(ps.language = '日', 0, 1), jl.recorded_on DESC LIMIT 1)[SAFE_OFFSET(0)] AS job_title
-    FROM jobs_latest jl
-    JOIN job_set js USING (job_id)
-    LEFT JOIN (SELECT profile_id, language FROM `bq-hgt.dwh.company_profiles_full` QUALIFY ROW_NUMBER() OVER (PARTITION BY profile_id ORDER BY recorded_on DESC NULLS LAST) = 1) ps USING (profile_id)
-    GROUP BY 1;
+    -- job_attr: 求人キーごとのタイトルと条件（日本語レベル / 英語レベル / 職種 / 勤務地 / 年収帯）。日本語プロファイル側の行を優先し、同じなら最新のスナップショット（2026-11-02 に job_title から拡張）
+    --   勤務地 = 国が 日本 なら都道府県（work_location1_city。無ければエリア → '日本'）、日本以外なら国名。年収帯 = 下限（annual_income_min、円）で 5 帯。
+    --   「経験と能力に基づく」= 応相談、日本・円 以外の通貨 = 円以外、未入力 / (未選択) = 未設定
+    CREATE TEMP TABLE job_attr AS
+    WITH ranked AS (
+      SELECT js.job_key, jl.*,
+             ROW_NUMBER() OVER (PARTITION BY js.job_key ORDER BY IF(ps.language = '日', 0, 1), jl.recorded_on DESC) AS rn
+      FROM jobs_latest jl
+      JOIN job_set js USING (job_id)
+      LEFT JOIN (SELECT profile_id, language FROM `bq-hgt.dwh.company_profiles_full` QUALIFY ROW_NUMBER() OVER (PARTITION BY profile_id ORDER BY recorded_on DESC NULLS LAST) = 1) ps USING (profile_id)
+    ),
+    titled AS (
+      SELECT job_key,
+             ARRAY_AGG(NULLIF(TRIM(position_name), '') IGNORE NULLS ORDER BY rn LIMIT 1)[SAFE_OFFSET(0)] AS job_title
+      FROM ranked GROUP BY 1
+    )
+    SELECT r.job_key, t.job_title,
+           IF(NULLIF(TRIM(r.japanese_level), '') IS NULL OR r.japanese_level = '(未選択)', '未設定', TRIM(r.japanese_level)) AS job_japanese_level,
+           IF(NULLIF(TRIM(r.english_level), '') IS NULL OR r.english_level = '(未選択)', '未設定', TRIM(r.english_level)) AS job_english_level,
+           IFNULL(NULLIF(TRIM(r.occupation), ''), '未設定') AS job_occupation,
+           CASE
+             WHEN NULLIF(TRIM(r.work_location1_country), '') IS NULL THEN '未設定'
+             WHEN r.work_location1_country = '日本' THEN COALESCE(NULLIF(TRIM(r.work_location1_city), ''), NULLIF(TRIM(r.work_location1_area), ''), '日本')
+             ELSE TRIM(r.work_location1_country)
+           END AS job_location,
+           CASE
+             WHEN NULLIF(TRIM(r.annual_income), '') IS NULL OR r.annual_income = '(未選択)' THEN '未設定'
+             WHEN STARTS_WITH(r.annual_income, '経験と能力に基づく') THEN '応相談'
+             WHEN NOT STARTS_WITH(r.annual_income, '日本・円') THEN '円以外'
+             WHEN r.annual_income_min IS NULL OR r.annual_income_min <= 0 THEN '未設定'
+             WHEN r.annual_income_min < 4000000 THEN '〜400万円'
+             WHEN r.annual_income_min < 6000000 THEN '400〜600万円'
+             WHEN r.annual_income_min < 8000000 THEN '600〜800万円'
+             WHEN r.annual_income_min < 10000000 THEN '800〜1000万円'
+             ELSE '1000万円〜'
+           END AS job_salary_band
+    FROM ranked r JOIN titled t USING (job_key)
+    WHERE r.rn = 1;
 
     -- 06. app_fact: 応募（job_key = 応募した求人のキー。企業への直接応募は NULL） -------------------------------------------
     CREATE TEMP TABLE app_fact AS
@@ -521,12 +555,14 @@ BEGIN
     SELECT j.month, FORMAT_DATE('%Y-%m', j.month) AS month_ym, j.company_id, j.account_type, j.job_key,
            j.job_key = '(direct)' AS is_direct,
            IF(j.job_key = '(direct)', '企業への直接応募', IFNULL(jt.job_title, CONCAT('求人 ', j.job_key))) AS job_title,
+           -- 求人の条件（(direct) は NULL。2026-11-02）
+           jt.job_japanese_level, jt.job_english_level, jt.job_occupation, jt.job_location, jt.job_salary_band,
            j.job_views, j.applications, j.hires_from_application,
            j.st06_interview_adjusting, j.st07_interview_1st, j.st08_interview_2nd, j.st09_interview_3rd, j.st10_interview_final, j.st11_hired,
            pub.publish_from, pub.publish_to,
            CURRENT_TIMESTAMP() AS refreshed_at
     FROM joined j
-    LEFT JOIN job_title jt ON jt.job_key = SAFE_CAST(j.job_key AS INT64)
+    LEFT JOIN job_attr jt ON jt.job_key = SAFE_CAST(j.job_key AS INT64)
     LEFT JOIN pub ON pub.company_id = j.company_id AND pub.account_type = j.account_type AND pub.job_key = j.job_key;
 
     -- 09. hire_fact: 11.採用 を会員 × 企業で重複排除（応募経路・スカウト経路） ----------------------------------

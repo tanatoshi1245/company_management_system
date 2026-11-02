@@ -115,6 +115,15 @@ describe('/api/companies/:id（モック）', () => {
     expect(direct?.key).toBe('direct');
     expect(direct?.title).toBe('企業への直接応募');
     for (const r of body.rows) for (const k of SELECTION_CARD_KEYS) expect(typeof r.st[k]).toBe('number');
+    // 求人の条件: 直接応募は null、求人は 5 項目（職種は大分類で「 - 」を含まない、年収帯は許可リスト）
+    expect(direct?.cond).toBeNull();
+    const BANDS = ['〜400万円', '400〜600万円', '600〜800万円', '800〜1000万円', '1000万円〜', '応相談', '円以外', '未設定'];
+    for (const r of body.rows.filter((x) => !x.direct)) {
+      expect(r.cond).not.toBeNull();
+      expect(r.cond!.occupation).not.toContain(' - ');
+      expect(BANDS).toContain(r.cond!.salary);
+      for (const k of ['japanese', 'english', 'location'] as const) expect(r.cond![k].length).toBeGreaterThan(0);
+    }
     const pick = body.rows.find((r) => !r.direct)!;
     const one = JobsResponseSchema.parse(await (await get(`${c.id}/jobs?from=${from}&to=${cur}&job=${pick.key}`)).json());
     expect(one.job).toBe(pick.key);

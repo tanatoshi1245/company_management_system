@@ -93,6 +93,15 @@ export const ATTRIBUTE_LABEL: Record<AttributeType, string> = {
   age_group: '年代',
 };
 
+/** 企業ページ「掲載した求人の条件」のタブ（cms_company_job_monthly の job_* 列。職種は大分類） */
+export const JOB_CONDITION_TYPES = ['japanese', 'english', 'location', 'occupation', 'salary'] as const;
+export type JobConditionType = (typeof JOB_CONDITION_TYPES)[number];
+export const JOB_CONDITION_LABEL: Record<JobConditionType, string> = { japanese: '日本語レベル', english: '英語レベル', location: '勤務地', occupation: '職種', salary: '年収幅' };
+/** 語学レベルの段階（求人の条件。高い順に並べる） */
+export const JOB_LEVEL_ORDER = ['ネイティヴ', '流暢', 'ビジネス会話', '日常会話', '最低限のコミュニケーション', 'なし', '未設定'] as const;
+/** 年収帯（求人の最低年収、日本円）。この順に並べる */
+export const SALARY_BANDS = ['〜400万円', '400〜600万円', '600〜800万円', '800〜1000万円', '1000万円〜', '応相談', '円以外', '未設定'] as const;
+
 export const OWNER_SOURCE_LABEL: Record<string, string> = {
   override: '画面で上書き',
   sf_account_owner: 'Salesforce 取引先の所有者',

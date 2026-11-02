@@ -22,6 +22,10 @@ status: active
 | job_key | STRING | 求人キー。`jobs_all.set_id`（日英セットで 1 件）、無ければ `job_id`。`job_id` の無い応募（企業への直接応募）は `'(direct)'` |
 | is_direct | BOOL | `'(direct)'` の行 |
 | job_title | STRING | 求人タイトル（`jobs_all.position_name`。`job_id` ごとに最新のスナップショット、日英セットは日本語プロファイル側を優先）。`'(direct)'` は「企業への直接応募」、取れなければ `求人 <job_key>` |
+| job_japanese_level / job_english_level | STRING | 求人の必要語学レベル（`jobs_all.japanese_level / english_level`。`(未選択)` と空は 未設定）。`'(direct)'` は NULL（2026-11-02〜） |
+| job_occupation | STRING | 職種（`jobs_all.occupation`。「大分類 - 小分類」のまま。画面は大分類で数える） |
+| job_location | STRING | 勤務地（国が 日本 なら `work_location1_city` = 都道府県、無ければエリア → 日本。日本以外は国名。無ければ 未設定） |
+| job_salary_band | STRING | 年収帯（最低年収 `annual_income_min`（円）で 〜400万円 / 400〜600万円 / 600〜800万円 / 800〜1000万円 / 1000万円〜。「経験と能力に基づく」= 応相談、日本・円 以外 = 円以外、未入力 = 未設定） |
 | job_views | INT64 | 閲覧数（`member_job_detail_views` の `COUNT(DISTINCT view_id)`） |
 | applications | INT64 | 応募数（`member_applications`） |
 | hires_from_application | INT64 | `status = '11.採用'` の応募数 |

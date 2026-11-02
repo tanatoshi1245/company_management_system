@@ -131,4 +131,7 @@ table.unused-reg .status .ok { color: var(--good); font-weight: 600; }
 .pie-legend .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .pie-legend .val { text-align: right; }
 .pie-legend .pct { text-align: right; color: var(--ink-soft); }
+/* 掲載した求人の条件（幅の狭いカード）: 凡例を円の下に置いて「400〜600万円」のような長い値を切らない */
+.job-cond .pie { grid-template-columns: 1fr; justify-items: center; }
+.job-cond .pie-legend { width: 100%; max-width: 360px; }
 .card-head .segmented { margin-left: auto; }
