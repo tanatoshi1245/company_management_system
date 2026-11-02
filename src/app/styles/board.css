@@ -51,8 +51,8 @@ table.board thead th { position: sticky; top: 0; z-index: 3; background: var(--s
 table.board thead tr.groups th { top: 0; border-bottom: 0; color: var(--ink-soft); padding-bottom: 0; text-align: center; font-size: var(--fs-11); }
 table.board thead tr.groups th.first { text-align: left; }
 table.board thead tr.metrics th { top: 20px; }
-/* 上下統合の列見出し（最終ログイン・契約残。グループ行に rowSpan=2 で置く）: 列見出しと同じ見た目で縦は下寄せ */
-table.board thead tr.groups th.merged { text-align: right; border-bottom: 1px solid var(--rule-strong); color: var(--muted); padding: 4px 6px; vertical-align: bottom; }
+/* 上下統合の列見出し（最終ログイン・契約残。グループ行に rowSpan=2 で置く）: 列見出しと同じ見た目で縦は中央 */
+table.board thead tr.groups th.merged { text-align: right; border-bottom: 1px solid var(--rule-strong); color: var(--muted); padding: 4px 6px; vertical-align: middle; }
 table.board thead tr.groups th.merged[aria-sort] { color: var(--heading); }
 table.board thead th.num { text-align: right; }
 table.board thead th.sortable { cursor: pointer; }
