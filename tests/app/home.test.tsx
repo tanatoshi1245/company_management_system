@@ -87,7 +87,10 @@ describe('ホーム（ボード）', () => {
     // 列の順: 種別 → CS 担当 → 企業名 → 実績
     const headers = Array.from(table.querySelectorAll('thead tr.metrics th')).map((h) => h.textContent?.replace(/[▲▼]/g, '').trim());
     expect(headers.slice(0, 3)).toEqual(['種別', 'CS 担当', '企業名']);
-    for (const h of ['掲載 / 枠', '閲覧', '応募', '送信 / 枠', '興味あり返信', '選考中', '採用', '最終ログイン', '契約残']) expect(headers).toContain(h);
+    // 最終ログイン・契約残は上下統合でグループ行にあるので、両行の見出しで確認
+    const allHeaders = Array.from(table.querySelectorAll('thead th')).map((h) => h.textContent?.replace(/[▲▼]/g, '').trim());
+    for (const h of ['掲載 / 枠', '閲覧', '応募', '送信 / 枠', '興味あり返信', '選考中', '採用']) expect(headers).toContain(h);
+    for (const h of ['最終ログイン', '契約残']) expect(allHeaders).toContain(h);
     expect(headers).not.toContain('返信');
     // 契約中の企業だけ（終了済み・開始前・直近終了は出ない）。既定の種別フィルタは DA と RPO 以外（2026-10-30〜）。メーター・アイコンは無い
     const f = await fixtures();
@@ -145,17 +148,31 @@ describe('ホーム（ボード）', () => {
     await waitFor(() => expect(screen.getByRole('table', { name: '契約企業の実績一覧' })).toBeTruthy());
     const table = screen.getByRole('table', { name: '契約企業の実績一覧' });
     expect(screen.queryByRole('columnheader', { name: '接点' })).toBeNull();
-    expect(Array.from(table.querySelectorAll('thead tr.groups th')).some((th) => th.textContent === '接点')).toBe(false);
+    expect(screen.queryByRole('columnheader', { name: '契約' })).toBeNull();
+    const groupTexts = Array.from(table.querySelectorAll('thead tr.groups th')).map((th) => th.textContent);
+    expect(groupTexts.some((t) => t === '接点' || t === '契約' || t === '')).toBe(false);
+    // 最終ログイン・契約残はグループ行に rowspan=2 で置かれ（上下統合）、列見出し行には無い
     const login = screen.getByRole('columnheader', { name: /最終ログイン/ });
+    expect(login.getAttribute('rowspan')).toBe('2');
+    expect(login.closest('tr')?.classList.contains('groups')).toBe(true);
     expect(login.getAttribute('title')).toContain('2026-05-15');
     expect(login.classList.contains('note')).toBe(true);
+    const daysToEnd = screen.getByRole('columnheader', { name: /契約残/ });
+    expect(daysToEnd.getAttribute('rowspan')).toBe('2');
+    expect(daysToEnd.closest('tr')?.classList.contains('groups')).toBe(true);
+    expect(Array.from(table.querySelectorAll('thead tr.metrics th')).map((th) => th.textContent)).not.toContain('最終ログイン');
+    fireEvent.click(daysToEnd);
+    await waitFor(() => expect(window.location.search).toContain('sort='));
+    expect(decodeURIComponent(window.location.search)).toMatch(/sort=-?daysToEnd/);
+    fireEvent.click(screen.getByRole('columnheader', { name: /企業名/ }));
+    await waitFor(() => expect(window.location.search).not.toContain('daysToEnd'));
     expect(screen.getByRole('columnheader', { name: 'スカウト' }).getAttribute('title')).toBeNull();
     // 求人・反応は「応募」の 1 グループ（掲載 / 枠・閲覧・応募）
     expect(screen.queryByRole('columnheader', { name: '反応' })).toBeNull();
     expect(screen.queryByRole('columnheader', { name: '求人' })).toBeNull();
     expect(table.querySelector('thead tr.groups th[colspan="3"]:not(.first)')?.textContent).toBe('応募');
-    // 列グループの先頭列に区切り線用の gs クラス（応募 / スカウト / 選考 / 最終ログイン / 契約 = 5 列）
-    expect(table.querySelectorAll('thead tr.metrics th.num.gs').length).toBe(5);
+    // 列グループの先頭列に区切り線用の gs クラス（応募 / スカウト / 選考 / 最終ログイン / 契約残 = 5 列。上下統合の 2 列はグループ行にある）
+    expect(table.querySelectorAll('thead th.num.gs').length).toBe(5);
     expect(table.querySelector('tbody tr td[data-col=jobs]')?.classList.contains('gs')).toBe(true);
     expect(table.querySelector('tbody tr td[data-col=views]')?.classList.contains('gs')).toBe(false);
     // 複数アカウントの企業は種別セルに +紹介 のような副アカウントを出す（モックは 4 社に 1 社）

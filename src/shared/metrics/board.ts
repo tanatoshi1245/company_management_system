@@ -114,9 +114,9 @@ export const BOARD_COLUMNS: BoardColumn[] = [
   { key: 'intReply', label: '興味あり返信', group: 'スカウト' },
   { key: 'inSel', label: '選考中', group: '選考' },
   { key: 'hires', label: '採用', group: '選考', metric: 'hires' },
-  // グループ名は空（見出しは「最終ログイン」の列だけ。ログイン計測の注釈も列の見出しに。2026-11-02〜）
+  // グループ名が空の列は、ボードの見出しでグループ行と列行を上下に統合して 1 セルで出す（最終ログイン・契約残。ログイン計測の注釈は最終ログインのセルに。2026-11-02〜）
   { key: 'login', label: '最終ログイン', group: '', metric: 'login_days' },
-  { key: 'daysToEnd', label: '契約残', group: '契約' },
+  { key: 'daysToEnd', label: '契約残', group: '' },
 ];
 
 /** 列キー → 並べ替えに使う生の値 */

@@ -72,14 +72,16 @@ interface Props {
 /** 契約中の企業 × 実績の表。種別・担当・企業名の 3 列は固定。0 件と 30 日以上ログインなしだけ赤 */
 export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
   const [limit, setLimit] = useState(PAGE_SIZE);
-  const groups: { label: string; span: number }[] = [];
+  /** グループ行のセル。group が空の列は 1 列ずつ（上下統合の列見出しを置く）、それ以外は同じグループ名を横にまとめる */
+  const groups: { label: string; span: number; col?: BoardColumn }[] = [];
   for (const col of BOARD_COLUMNS) {
     const last = groups[groups.length - 1];
-    if (last && last.label === col.group) last.span += 1;
+    if (col.group === '') groups.push({ label: '', span: 1, col });
+    else if (last && !last.col && last.label === col.group) last.span += 1;
     else groups.push({ label: col.group, span: 1 });
   }
   /** 列グループの先頭列（やや濃い区切り線を引く） */
-  const groupStart = new Set(BOARD_COLUMNS.filter((col, i) => i === 0 || BOARD_COLUMNS[i - 1].group !== col.group).map((col) => col.key));
+  const groupStart = new Set(BOARD_COLUMNS.filter((col, i) => i === 0 || col.group === '' || BOARD_COLUMNS[i - 1].group !== col.group).map((col) => col.key));
   const open = (id: string) => navigate(`/companies/${id}?month=${meta.month}`);
   const onRowKey = (e: KeyboardEvent<HTMLTableRowElement>, id: string) => {
     if (e.key === 'Enter') open(id);
@@ -92,6 +94,13 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
   const sortDesc = sort.startsWith('-');
   const toggleSort = (k: string, defaultDesc = true) => onSort(sortKey === k ? (sortDesc ? k : `-${k}`) : defaultDesc ? `-${k}` : k);
   const sortInd = (k: string) => (sortKey === k ? <span className="sort-ind">{sortDesc ? '▼' : '▲'}</span> : null);
+  /** 実績列の見出し。merged = グループ行に置いて 2 段分（rowSpan）にする（最終ログイン・契約残） */
+  const metricTh = (col: BoardColumn, merged: boolean) => (
+    <th key={col.key} rowSpan={merged ? 2 : undefined} className={`num sortable${groupStart.has(col.key) ? ' gs' : ''}${col.key === 'login' ? ' note' : ''}${merged ? ' merged' : ''}`} scope="col" aria-sort={ariaSort(col.key)} onClick={() => toggleSort(col.key)} title={col.key === 'login' ? `${col.label}\n${loginNote}` : col.metric ? `${col.label}\n参考: ${METRIC_BY_KEY[col.metric].label}（${METRIC_BY_KEY[col.metric].formula}）` : col.label}>
+      {col.label}
+      {sortInd(col.key)}
+    </th>
+  );
   const ariaSort = (k: string) => (sortKey === k ? (sortDesc ? 'descending' : 'ascending') : undefined);
   const shown = rows.slice(0, limit);
   const loginNote = `CT 画面へのログイン（GA4）。データは ${meta.loginAvailableFrom} 以降のみ。それ以前のログインは「記録なし」になる。前日分は速報値（3 日以内に確定値で置き換え）`;
@@ -103,11 +112,15 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
             <th className="col-type first" scope="colgroup" colSpan={3}>
               企業（{fmtInt(rows.length)} 社）
             </th>
-            {groups.map((g, gi) => (
-              <th key={`${g.label}-${gi}`} colSpan={g.span} scope="colgroup" aria-hidden={g.label === '' ? true : undefined}>
-                {g.label}
-              </th>
-            ))}
+            {groups.map((g, gi) =>
+              g.col ? (
+                metricTh(g.col, true)
+              ) : (
+                <th key={`${g.label}-${gi}`} colSpan={g.span} scope="colgroup">
+                  {g.label}
+                </th>
+              ),
+            )}
           </tr>
           <tr className="metrics">
             <th className="col-type sortable" scope="col" aria-sort={ariaSort('type')} onClick={() => toggleSort('type', false)}>
@@ -119,12 +132,7 @@ export function CompanyBoard({ rows, meta, sort, onSort }: Props) {
             <th className="company sortable" scope="col" aria-sort={ariaSort('name')} onClick={() => toggleSort('name', false)}>
               企業名{sortInd('name')}
             </th>
-            {BOARD_COLUMNS.map((col) => (
-              <th key={col.key} className={`num sortable${groupStart.has(col.key) ? ' gs' : ''}${col.key === 'login' ? ' note' : ''}`} scope="col" aria-sort={ariaSort(col.key)} onClick={() => toggleSort(col.key)} title={col.key === 'login' ? `${col.label}\n${loginNote}` : col.metric ? `${col.label}\n参考: ${METRIC_BY_KEY[col.metric].label}（${METRIC_BY_KEY[col.metric].formula}）` : col.label}>
-                {col.label}
-                {sortInd(col.key)}
-              </th>
-            ))}
+            {BOARD_COLUMNS.filter((col) => col.group !== '').map((col) => metricTh(col, false))}
           </tr>
         </thead>
         <tbody>
