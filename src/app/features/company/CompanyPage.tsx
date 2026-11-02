@@ -100,14 +100,12 @@ export default function CompanyPage({ params }: PageProps) {
               { key: 'hiresApp', label: '採用（応募経由）', value: t.hiresApp, unit: '人' },
             ]}
           />
+          <ViewsAppsPanel m={model} jobLabel={jobLabel} />
           <div className="grid-2">
-            <ViewsAppsPanel m={model} jobLabel={jobLabel} />
             <AttributePiePanel title="誰が求人を見ているか" help={attrHelp('求人を閲覧 / 応募した')} breakdown={breakdownJobs} range={range} modes={['viewed', 'applied']} state={stateOf(attrsJobs)} testId="pie-views" />
-          </div>
-          <div className="grid-2 wide-left">
-            <JobsTablePanel jobs={jobs.data} state={stateOf(jobs)} errorCode={jobs.error instanceof ApiError ? jobs.error.code : jobs.error ? 'error' : null} selected={sel.job} onSelect={setJob} range={range} />
             <JobConditionsPanel jobs={jobs.data} state={stateOf(jobs)} errorCode={jobs.error instanceof ApiError ? jobs.error.code : jobs.error ? 'error' : null} range={range} jobSelected={Boolean(sel.job)} />
           </div>
+          <JobsTablePanel jobs={jobs.data} state={stateOf(jobs)} errorCode={jobs.error instanceof ApiError ? jobs.error.code : jobs.error ? 'error' : null} selected={sel.job} onSelect={setJob} range={range} />
         </div>
       ) : tab === 'scout' ? (
         <div key="scout" className="stack" role="tabpanel" id="co-panel-scout" aria-labelledby="co-tab-scout">

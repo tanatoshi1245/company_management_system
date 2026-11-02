@@ -48,8 +48,6 @@
 .card .lead { color: var(--muted); font-size: var(--fs-12); }
 .card h3 { font-size: var(--fs-13); margin: 0 0 var(--s2); color: var(--ink); border-left: 3px solid var(--dj-gold); padding-left: 8px; }
 .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); }
-/* 左が表、右が円グラフのとき（求人ごとの実績 + 掲載した求人の条件）は 5:4（表の 6 列が収まり、円の凡例（円の下）も切れない） */
-.grid-2.wide-left { grid-template-columns: minmax(0, 5fr) minmax(0, 4fr); }
 .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s4); }
 @media (max-width: 1100px) { .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }

@@ -176,15 +176,36 @@ describe('企業詳細', () => {
     const jobsApi = await loadJobs(f.client, c.id, fromSel.value, f.month, null, null);
     expect(jobsApi.rows.length).toBeGreaterThan(1);
     const table = await screen.findByRole('table', { name: '求人ごとの実績の表' });
-    expect(Array.from(table.querySelectorAll('thead th')).map((h) => h.textContent)).toEqual(['求人タイトル', 'アカウント', '掲載期間', '閲覧件数', '応募件数', '採用']);
+    expect(Array.from(table.querySelectorAll('thead th')).map((h) => h.textContent)).toEqual(['求人タイトル', '掲載期間', '閲覧件数', '応募件数']);
     const trs = Array.from(table.querySelectorAll('tbody tr'));
     expect(trs.length).toBe(jobsApi.rows.length);
-    const shownViews = trs.map((tr) => Number(tr.querySelectorAll('td')[3].textContent?.replace(/[^\d]/g, '') || 0));
+    const shownViews = trs.map((tr) => Number(tr.querySelectorAll('td')[2].textContent?.replace(/[^\d]/g, '') || 0));
     for (let k = 1; k < shownViews.length; k++) expect(shownViews[k - 1]).toBeGreaterThanOrEqual(shownViews[k]);
     expect(jobsApi.rows.reduce((a, r) => a + r.views, 0)).toBe(num(jobs, 'views'));
     expect(jobsApi.rows.reduce((a, r) => a + r.apps, 0)).toBe(num(jobs, 'apps'));
     expect(trs.some((tr) => tr.textContent?.includes('企業への直接応募'))).toBe(jobsApi.rows.some((r) => r.direct));
     const filter = screen.getByLabelText('求人フィルタ') as HTMLSelectElement;
+    expect(filter.options.length).toBe(jobsApi.rows.length + 1);
+    // ブロックの配置: 推移は横幅いっぱい（grid-2 の外）、円 2 つ（誰が求人を見ているか / 掲載した求人の条件）が同じ grid-2、求人の表は横幅いっぱい
+    expect(screen.getByRole('region', { name: '閲覧と応募の推移' }).parentElement?.classList.contains('stack')).toBe(true);
+    expect(screen.getByTestId('pie-views').parentElement).toBe(screen.getByTestId('job-conditions').parentElement);
+    expect(screen.getByTestId('pie-views').parentElement?.classList.contains('grid-2')).toBe(true);
+    expect(screen.getByTestId('jobs-table').parentElement?.classList.contains('stack')).toBe(true);
+    // テキスト検索（予測絞り込み）: 入力のたびに表の行とプルダウンが絞られ、空にすると戻る
+    const search = screen.getByLabelText('求人タイトルで検索') as HTMLInputElement;
+    const word = '経理';
+    const matched = jobsApi.rows.filter((r) => r.title.includes(word));
+    expect(matched.length).toBeGreaterThan(0);
+    expect(matched.length).toBeLessThan(jobsApi.rows.length);
+    fireEvent.change(search, { target: { value: word } });
+    expect(screen.getByRole('table', { name: '求人ごとの実績の表' }).querySelectorAll('tbody tr').length).toBe(matched.length);
+    expect(filter.options.length).toBe(matched.length + 1);
+    expect(screen.getByTestId('jobs-table').querySelector('.lead')?.textContent).toContain(`${jobsApi.rows.length} 件中 ${matched.length} 件`);
+    fireEvent.change(search, { target: { value: 'zzzz存在しない' } });
+    expect(screen.queryByRole('table', { name: '求人ごとの実績の表' })).toBeNull();
+    expect(screen.getByTestId('jobs-table').textContent).toContain('一致する求人はありません');
+    fireEvent.change(search, { target: { value: '' } });
+    expect(screen.getByRole('table', { name: '求人ごとの実績の表' }).querySelectorAll('tbody tr').length).toBe(jobsApi.rows.length);
     expect(filter.options.length).toBe(jobsApi.rows.length + 1);
     // 掲載した求人の条件（表の右）: タブ 5 つ、円の合計 = 直接応募以外の求人数、年収幅は帯の順
     const cond = screen.getByTestId('job-conditions');
@@ -206,7 +227,7 @@ describe('企業詳細', () => {
     expect(cond.textContent).not.toContain(' - ');
     // 行を選ぶ → URL に job=、掲載求人数 1、閲覧件数 = その求人、推移はその求人の月次、属性 API に job=
     const pick = jobsApi.rows.find((r) => !r.direct && r.views > 0)!;
-    const pickTr = trs[jobsApi.rows.indexOf(pick)] as HTMLElement;
+    const pickTr = screen.getByRole('table', { name: '求人ごとの実績の表' }).querySelectorAll('tbody tr')[jobsApi.rows.indexOf(pick)] as HTMLElement;
     fireEvent.click(pickTr);
     await waitFor(() => expect(window.location.search).toContain(`job=${pick.key}`));
     await waitFor(() => expect(num(jobs, 'views')).toBe(pick.views));

@@ -33,7 +33,7 @@ export function JobConditionsPanel({ jobs, state, errorCode, range, jobSelected 
   const rows = jobConditionRows(jobs, type);
   const n = (jobs?.rows ?? []).filter((r) => r.cond).length;
   return (
-    <section className="card job-cond" aria-label="掲載した求人の条件" data-testid="job-conditions">
+    <section className="card" aria-label="掲載した求人の条件" data-testid="job-conditions">
       <div className="card-head">
         <h2>
           掲載した求人の条件 <Help text="選択期間に閲覧か応募があった求人（日英のセットは 1 件）の条件の内訳。求人 1 件 = 1。日本語 / 英語レベルは求人に設定された必要レベル、勤務地は 国が日本なら都道府県・それ以外は国名、職種は大分類、年収幅は求人の最低年収（日本円。「経験と能力に基づく」= 応相談、円以外の通貨 = 円以外）。円は同じ大きさで、8% 以上のスライスに構成比を表示。上位 7 件以外は「その他」" />
