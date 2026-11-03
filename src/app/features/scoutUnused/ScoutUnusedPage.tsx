@@ -13,7 +13,6 @@ import { Chip } from '../../components/ui/Chip';
 import { Button } from '../../components/ui/Button';
 import { Icon } from '../../components/ui/Icon';
 import { Badge } from '../../components/ui/Badge';
-import { Help } from '../../components/ui/Help';
 import { BoardResponseSchema, type BoardCompany } from '../../../shared/schema/board';
 import { ScoutUnusedMonthResponseSchema, ScoutUnusedSaveResponseSchema, ScoutUnusedSyncResponseSchema, type ScoutUnusedEntry, type ScoutUnusedSheetRow } from '../../../shared/schema/scoutUnused';
 import { COMPANY_TYPES, COMPANY_TYPE_SHORT, CONTRACT_KIND_LABEL, SCOUT_UNUSED_REASONS, surname } from '../../../shared/labels';
@@ -234,7 +233,7 @@ export default function ScoutUnusedPage(_props: PageProps) {
         <input type="search" className="ctl" placeholder="企業名・担当で検索" aria-label="企業名・担当で検索" value={url.q} onChange={(e) => setUrl({ q: e.target.value })} />
         <span className="spacer" />
         <span className="muted small">
-          <span className="ad-mark">広告掲載</span> の企業は企業名を黄色で表示。理由はプルダウン、補足は自由記述（500 文字まで）。BQ に既にある記録（シート取込）は入力欄にそのまま出る。登録すると企業ページの「スカウト未利用状況」に即時反映、BigQuery（scout_unused_companies_monthly）にも書き込む <Help text="登録先は D1（アプリの DB）が正。BigQuery にはシート取込と同じ表に match_method = 'app' の行として書き、失敗しても登録は残り「BQ に再同期」で再試行できる。同じ企業・月にシートの記録がある場合もアプリの登録が優先され、重複して数えない。対象は前月に 1 日でも求人を掲載し、前月のスカウト送信が 0 件で、今日時点で契約中の企業（DA / RPO / NW 以外）。枠数では絞らない。前月分だけを扱う" />
+          <span className="ad-mark">広告掲載</span> の企業は企業名を黄色で表示。理由はプルダウン、補足は自由記述（500 文字まで）
         </span>
       </div>
       {!rows || !bm ? (
