@@ -236,25 +236,20 @@ BEGIN
       WHERE REGEXP_CONTAINS(LOWER(NORMALIZE(IFNULL(p.company_name, '') || IFNULL(p.profile_name, ''), NFKC)), r'daijob\s*agent')
       GROUP BY 1
     ),
-    -- プラン（plan_name）の候補: 今の Daijob 契約期間に重なる SF 契約・成立商談だけ（2026-11-04）
+    -- プラン（plan_name）の候補: 今の Daijob 契約期間に重なる SF 契約だけ（2026-11-04）
+    --   プランは Daijob 側（下の plan_daijob）を正とし、SF 契約はそれと合うときに表記（例 DJ_ネットワーク）を借りるだけ
     --   代表契約（sf_contract_pick）は期間内の契約が無いと何年も前に終わった契約を選ぶため、プランには使わない
+    --   SF の成立商談からは推測しない（DA 契約・RPO 成果報酬は SF に商談を作らない運用のため、商談の有無・内容で契約を判断できない）
     --   採用決定ごとの請求（ServiceName__c に「採用成功」）は契約のプランではないので除く
     --   契約: 開始日があり、開始日 ≤ Daijob の終了日 かつ 終了日 ≥ Daijob の開始の 30 日前（更新で間が空く分の猶予）
-    --   成立商談: CloseDate が Daijob の開始の 90 日前 〜 終了日
     plan_cands AS (
       SELECT c.company_id, 'sf_contract' AS src, k.ServiceName__c AS service, k.StartDate AS d
       FROM companies_now c JOIN sf_contracts_latest k USING (company_id)
       WHERE k.ServiceName__c IS NOT NULL AND NOT CONTAINS_SUBSTR(k.ServiceName__c, '採用成功')
         AND k.StartDate IS NOT NULL AND k.StartDate <= COALESCE(c.active_to, DATE '9999-12-31')
         AND (k.end_date IS NULL OR k.end_date >= DATE_SUB(c.active_from, INTERVAL 30 DAY))
-      UNION ALL
-      SELECT c.company_id, 'sf_opportunity', o.ServiceName__c, o.CloseDate
-      FROM companies_now c JOIN sf_accounts_of_company a USING (company_id), UNNEST(a.account_ids) AS acc
-      JOIN sf_opps o ON o.AccountId = acc
-      WHERE o.ServiceName__c IS NOT NULL AND NOT CONTAINS_SUBSTR(o.ServiceName__c, '採用成功')
-        AND o.CloseDate BETWEEN DATE_SUB(c.active_from, INTERVAL 90 DAY) AND COALESCE(c.active_to, DATE '9999-12-31')
     ),
-    -- Daijob 側から見たサービスと課金（2026-11-04）。SF の候補はこれと合うものだけを使う
+    -- Daijob 側から見たサービスと課金（2026-11-04。プランの正）。SF 契約はこれと合うものだけを使う
     --   サービス: DA（企業名・プロファイル名）→ RPO（rpo_contract）→ 掲載サイトに WA → DJ英/DJ日
     --   課金: company_profiles.contract_type（採用成功報酬型 = 成果報酬 / 広告掲載型 = 前金 / 無し = 問わない）
     plan_daijob AS (
@@ -349,7 +344,7 @@ BEGIN
            a.Name AS sf_account_name,
            sc.Id AS sf_contract_id, sc.Status AS sf_contract_status, sc.ContractKind__c AS sf_contract_kind,
            sc.StartDate AS sf_contract_start, sc.end_date AS sf_contract_end, sc.ContractTerm AS sf_contract_term_months,
-           -- プラン: 今の契約期間の SF 契約・成立商談で Daijob 側と合うもの → 無ければ Daijob 側から同じ表記で作る → dj_contract_type（2026-11-04）
+           -- プラン: Daijob 側（種別・掲載サイト・契約種別）が正。今の契約期間の SF 契約で Daijob 側と合うものがあればその表記、無ければ Daijob 側から同じ表記で作る → dj_contract_type（2026-11-04）
            COALESCE(pp.service,
                     CASE pp.family
                       WHEN 'DA'  THEN '人材紹介'
