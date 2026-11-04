@@ -30,7 +30,7 @@ status: active
 | industry / industry_source / dj_industry / sf_industry_raw / sf_industry_norm | STRING | 業種。company_profiles.industry（主プロファイル、(未選択) は無視）→ SF industry0413__c（cms_dim_industry_alias で正規化）→ (未設定) |
 | sf_link_status / sf_account_id / sf_account_name | STRING | sf_contracts.DJ_company_id__c で結合できたか、代表契約の取引先 |
 | sf_contract_id / sf_contract_status / sf_contract_kind / sf_contract_start / sf_contract_end / sf_contract_term_months | — | 代表契約（有効かつ期間内 → 有効 → 開始日が新しい）。終了日は GREATEST(EndDate, EndDate2__c) |
-| plan_name / plan_source | STRING | ServiceName__c（契約）→ 成立商談の ServiceName__c → dj_contract_type |
+| plan_name / plan_source | STRING | プラン（SF の `ServiceName__c` の表記。例 `DJ_成果報酬`・`RPO_成果報酬`・`WA`・`人材紹介`）。2026-11-04〜: **今の Daijob 契約期間に重なる** SF 契約（開始日 ≤ `active_to` かつ終了日 ≥ `active_from` − 30 日）と成立商談（CloseDate が `active_from` − 90 日〜 `active_to`）のうち、「採用成功」を含まず、Daijob 側のサービス（DA → RPO（`rpo_contract`）→ 掲載サイトに WA → DJ）と課金（`dj_contract_type`）に合う最新のもの（`plan_source` = `sf_contract` / `sf_opportunity`）。無ければ Daijob 側から同じ表記で作る（`daijob`。DA = `人材紹介`、他は `RPO`／`WA`／`DJ` + 採用成功報酬型なら `_成果報酬`）。それも無ければ `dj_contract_type`（`company_profiles`）。代表契約（`sf_contract_*`）は従来どおりで、プランには使わない（期間内の契約が無いと何年も前の契約を選ぶため） |
 | sf_active_contract / sf_live_won_opp / sf_last_won_close_date / da_active_profile / contracted_signal_count | BOOL / DATE / INT64 | 用語集の 3 シグナル（有効契約 / 成立商談 + 契約月数 / DA プロファイル掲載中）と、Daijob 契約中を含めた成立数 |
 | sf_notice_check | BOOL | sf_accounts.notice_check_company__c（接触中） |
 | sf_account_owner_* / sf_contract_owner_* | STRING / BOOL | 取引先 / 契約の所有者（sf_users: 名前・メール・Position__c・IsActive） |

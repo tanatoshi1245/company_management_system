@@ -111,4 +111,4 @@ export const OWNER_SOURCE_LABEL: Record<string, string> = {
 };
 
 export const INDUSTRY_SOURCE_LABEL: Record<string, string> = { company_profiles: 'Daijob 企業プロファイル', sf_accounts: 'Salesforce 取引先', none: '未設定' };
-export const PLAN_SOURCE_LABEL: Record<string, string> = { sf_contract: 'SF 契約', sf_opportunity: 'SF 成立商談', company_profiles: 'Daijob 契約種別', none: '未設定' };
+export const PLAN_SOURCE_LABEL: Record<string, string> = { sf_contract: 'SF 契約', sf_opportunity: 'SF 成立商談', daijob: 'Daijob の契約（種別・掲載サイト・契約種別）', company_profiles: 'Daijob 契約種別', none: '未設定' };
