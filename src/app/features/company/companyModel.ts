@@ -161,10 +161,9 @@ export function useCompanyModel(d: CompanyDetailResponse | null, sel: PeriodSele
     const ctx = makeContext(benchForMonth, d.meta.benchMinN, d.meta.bizDays.rate, d.meta.bizDays.elapsed, d.meta.isCurrentMonth);
     const scored = scoreCompany(d.company, ctx);
     const months = d.monthly.map((m) => m.month);
-    // 契約期間に入る月だけ（開始月以降、終了月まで）。そのうち選択期間 from〜to
+    // 選択期間 from〜to の月をそのまま使う（契約期間で切らない。既定の開始は契約開始月だが、前に広げれば前回の契約期間の実績も見られる。2026-11-04〜）
     const startMonth = monthOf(d.company.contract.from);
-    const endMonth = d.company.contract.to ? monthOf(d.company.contract.to) : null;
-    const period = months.filter((m) => m >= startMonth && (endMonth === null || m <= endMonth) && m >= sel.from && m <= sel.to);
+    const period = months.filter((m) => m >= sel.from && m <= sel.to);
     const truncated = startMonth < months[0] && sel.from === months[0];
     const partialLast = d.meta.isCurrentMonth && period[period.length - 1] === month;
     const base = { months: period, fromMonth: period[0] ?? sel.from, truncated, partialLast };

@@ -118,7 +118,7 @@ describe('企業詳細', () => {
     expect(Array.from(jobs.querySelectorAll('.stat .t')).map((e) => e.textContent)).toEqual(['掲載求人数', '閲覧件数', '応募件数', '採用（応募経由）']);
     expect(jobs.textContent).not.toMatch(/閲覧人数|応募人数|重複排除/);
     const num = (el: Element, key: string) => Number(el.querySelector(`[data-stat=${key}] .v`)?.textContent?.replace(/[^\d]/g, ''));
-    const inWindow = detail.monthly.filter((m) => m.month >= fromSel.value && (!detail.company.contract.to || m.month <= detail.company.contract.to.slice(0, 7)));
+    const inWindow = detail.monthly.filter((m) => m.month >= fromSel.value && m.month <= toSel.value);
     expect(num(jobs, 'views')).toBe(inWindow.reduce((a, m) => a + m.views, 0));
     expect(num(jobs, 'apps')).toBe(inWindow.reduce((a, m) => a + m.apps, 0));
     expect(num(jobs, 'jobs')).toBe(countJobs(detail.jobs, fromSel.value, f.month, '', detail.meta.asOf));
@@ -292,7 +292,7 @@ describe('企業詳細', () => {
     expect(Array.from(scout.querySelectorAll('.stat .t')).map((e) => e.textContent)).toEqual(['スカウト送信件数', '興味あり返信', '選考中（現在）', '採用（スカウト経由）']);
     const num = (el: Element, key: string) => Number(el.querySelector(`[data-stat=${key}] .v`)?.textContent?.replace(/[^\d]/g, ''));
     const fromSel = screen.getByLabelText('開始月') as HTMLSelectElement;
-    const inWindow = detail.monthly.filter((m) => m.month >= fromSel.value && (!detail.company.contract.to || m.month <= detail.company.contract.to.slice(0, 7)));
+    const inWindow = detail.monthly.filter((m) => m.month >= fromSel.value && m.month <= f.month);
     expect(num(scout, 'sent')).toBe(inWindow.reduce((a, m) => a + m.sent, 0));
     expect(num(scout, 'intReply')).toBe(inWindow.reduce((a, m) => a + m.intReply, 0));
     expect(num(scout, 'inSel')).toBe(detail.company.m.inSel);
@@ -388,6 +388,41 @@ describe('企業詳細', () => {
     await waitFor(() => expect(screen.getByTestId('summary-selection').querySelector('.lead')?.textContent).toContain('応募経由のみ'));
     const jobMonthly = await loadJobs(f.client, c.id, fromSel.value, f.month, null, pick.key);
     await waitFor(() => expect(Number(screen.getByTestId('summary-selection').querySelector('[data-stat=st06_interview_adjusting] .v')?.textContent?.replace(/[^\d]/g, ''))).toBe(jobMonthly.monthly.reduce((a, m) => a + (m.st.st06_interview_adjusting ?? 0), 0)));
+  });
+
+  it('期間の開始月を契約開始より前に動かすと、カード・推移・選考状況がその月から合算される（契約期間で切らない。前回の契約期間の実績も見える）', async () => {
+    installFetch(f, calls);
+    // モックは 3 社に 1 社が「前回の契約」の実績を持つ。契約開始が窓の先頭より後の企業を選ぶ
+    const first = f.board.meta.months[0];
+    const c = f.board.companies.find((x) => (x.state === 'active' || x.state === 'ending_30d') && Number(x.id) % 3 === 0 && x.contract.from.slice(0, 7) > first)!;
+    expect(c).toBeTruthy();
+    const detail = (await f.detail(c.id))!;
+    const startMonth = c.contract.from.slice(0, 7);
+    const before = detail.monthly.filter((m) => m.month < startMonth);
+    expect(before.reduce((a, m) => a + m.views + m.sent, 0)).toBeGreaterThan(0);
+    window.history.replaceState(null, '', `/companies/${c.id}`);
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: c.name })).toBeTruthy());
+    const fromSel = screen.getByLabelText('開始月') as HTMLSelectElement;
+    expect(fromSel.value).toBe(startMonth);
+    const num = (id: string, key: string) => Number(screen.getByTestId(id).querySelector(`[data-stat=${key}] .v`)?.textContent?.replace(/[^\d]/g, ''));
+    const sumFrom = (from: string, k: 'views' | 'apps' | 'sent') => detail.monthly.filter((m) => m.month >= from && m.month <= f.month).reduce((a, m) => a + m[k], 0);
+    expect(num('summary-jobs', 'views')).toBe(sumFrom(startMonth, 'views'));
+    const pointsBefore = (document.querySelector('.chart.dual svg g[data-series=views] > path')!.getAttribute('d') ?? '').split(/[ML]/).filter(Boolean).length;
+    // 開始月を窓の先頭に
+    fireEvent.change(fromSel, { target: { value: first } });
+    await waitFor(() => expect(window.location.search).toContain(`from=${first}`));
+    await waitFor(() => expect(num('summary-jobs', 'views')).toBe(sumFrom(first, 'views')));
+    expect(sumFrom(first, 'views')).toBeGreaterThan(sumFrom(startMonth, 'views'));
+    expect(num('summary-jobs', 'apps')).toBe(sumFrom(first, 'apps'));
+    const pointsAfter = (document.querySelector('.chart.dual svg g[data-series=views] > path')!.getAttribute('d') ?? '').split(/[ML]/).filter(Boolean).length;
+    expect(pointsAfter).toBeGreaterThan(pointsBefore);
+    expect(pointsAfter).toBe(detail.monthly.filter((m) => m.month >= first && m.month <= f.month).length);
+    // スカウトタブも同じ期間で合算
+    fireEvent.click(screen.getByRole('tab', { name: 'スカウトの実績' }));
+    await waitFor(() => expect(screen.getByTestId('summary-scout')).toBeTruthy());
+    expect(num('summary-scout', 'sent')).toBe(sumFrom(first, 'sent'));
+    expect(sumFrom(first, 'sent')).toBeGreaterThan(sumFrom(startMonth, 'sent'));
   });
 
   it('複数アカウント（直接 + 紹介）の企業: ヘッダに切替が出て、種別を選ぶと実績・推移・属性がその種別の分になり、URL に account= が入る', async () => {

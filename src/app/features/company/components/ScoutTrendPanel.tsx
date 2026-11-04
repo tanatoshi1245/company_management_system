@@ -6,7 +6,7 @@ import { Help } from '../../../components/ui/Help';
 import { fmtMonthShort } from '../../../../shared/calendar/periods';
 import { fmtInt } from '../../../lib/format';
 
-/** スカウト送信件数と興味あり返信件数（返信月基準）の月次推移。選択期間（契約期間中・マートの窓内）・選択アカウント */
+/** スカウト送信件数と興味あり返信件数（返信月基準）の月次推移。選択期間（マートの窓内。契約期間で切らない。マートの窓内）・選択アカウント */
 export function ScoutTrendPanel({ m }: { m: CompanyModel }) {
   const [table, setTable] = useState(false);
   const t = m.scoutTrend;

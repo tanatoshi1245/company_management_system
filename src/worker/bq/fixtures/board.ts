@@ -153,6 +153,8 @@ export function mockCompanyMonthly(today = todayJst()): Row[] {
     for (const ym of months) {
       const isCur = ym === cur;
       const contracted = c.from <= `${ym}-31` && (c.to === null || c.to >= `${ym}-01`);
+      // 3 社に 1 社は「前回の契約」の実績を持つ（現契約の開始より前の 2〜8 か月前に活動がある。期間を契約開始より前に広げたときの表示確認用）
+      const prevActive = !contracted && Number(c.id) % 3 === 0 && ym < monthOf(c.from) && ym >= monthOf(addMonths(monthOf(c.from), -8)) && ym < monthOf(addMonths(monthOf(c.from), -1));
       const frac = isCur ? Math.max(0.05, (dayOfMonth - 1) / 30) : 1;
       const limit = c.scoutLimit ?? 120;
       // 毎月 4 社に 1 社（企業 ID + 月でずらす）はスカウトを送らない（スカウト未利用の登録ページ・フィルタのサンプル。どの月でも同じ割合になるようにする）
@@ -160,13 +162,14 @@ export function mockCompanyMonthly(today = todayJst()): Row[] {
       const skipMonth = mix % 4 === 0;
       // 送らない月のうち半分は求人の掲載も無い（登録ページの対象外になるサンプル）
       const noJobs = skipMonth && mix % 8 === 0;
-      const sent = contracted && !skipMonth ? Math.round(limit * c.activity * frac * (0.75 + rand() * 0.5)) : 0;
+      const active = contracted || prevActive;
+      const sent = active && !skipMonth ? Math.round(limit * c.activity * frac * (0.75 + rand() * 0.5)) : 0;
       const manual = Math.round(sent * (0.5 + rand() * 0.4));
       const interested = Math.round(sent * (0.06 + rand() * 0.14));
-      const jobs = contracted && c.jobLimit !== 0 && !noJobs ? Math.min(c.jobLimit ?? 12, Math.max(1, Math.round((c.jobLimit ?? 12) * c.activity * (0.8 + rand() * 0.3)))) : 0;
-      const apps = contracted ? Math.round(jobs * (0.3 + rand() * 1.2) * frac) : 0;
-      const views = contracted ? Math.round(jobs * (15 + rand() * 40) * frac) : 0;
-      const hires = contracted && rand() < 0.12 * c.activity ? 1 : 0;
+      const jobs = active && c.jobLimit !== 0 && !noJobs ? Math.min(c.jobLimit ?? 12, Math.max(1, Math.round((c.jobLimit ?? 12) * c.activity * (0.8 + rand() * 0.3)))) : 0;
+      const apps = active ? Math.round(jobs * (0.3 + rand() * 1.2) * frac) : 0;
+      const views = active ? Math.round(jobs * (15 + rand() * 40) * frac) : 0;
+      const hires = active && rand() < 0.12 * c.activity ? 1 : 0;
       const inSel = Math.round((apps + interested) * 0.2 * rand());
       rows.push({
         company_id: String(c.id),
@@ -179,8 +182,8 @@ export function mockCompanyMonthly(today = todayJst()): Row[] {
         job_posting_limit: c.jobLimit,
         active_jobs_eom: jobs,
         // 月内掲載 = 月末時点の掲載 + 月の途中で終わった分（0〜2 件）。送信 0 の月（skipMonth）も掲載はある
-        jobs_in_month: jobs + (contracted && c.jobLimit !== 0 && !noJobs ? between(rand, 0, 2) : 0),
-        new_jobs: contracted ? between(rand, 0, 3) : 0,
+        jobs_in_month: jobs + (active && c.jobLimit !== 0 && !noJobs ? between(rand, 0, 2) : 0),
+        new_jobs: active ? between(rand, 0, 3) : 0,
         scout_sent: sent,
         scout_sent_manual: manual,
         scout_sent_auto: sent - manual,

@@ -90,7 +90,7 @@ export default function CompanyPage({ params }: PageProps) {
         <div key="jobs" className="stack" role="tabpanel" id="co-panel-jobs" aria-labelledby="co-tab-jobs">
           <SummaryPanel
             title="求人の実績"
-            help="掲載求人数 = 選択期間に掲載期間が重なった求人の数（日英の重複は set_id で排除）。閲覧件数 = 求人の閲覧数、応募件数 = 応募数、採用 = 応募経由の採用。すべて選択期間のうち契約期間中の月の合計。アカウント種別や求人を選ぶとその分だけ"
+            help="掲載求人数 = 選択期間に掲載期間が重なった求人の数（日英の重複は set_id で排除）。閲覧件数 = 求人の閲覧数、応募件数 = 応募数、採用 = 応募経由の採用。すべて選択期間の月の合計（契約期間で切らない。開始月を契約開始より前にすると前回の契約期間の実績も入る）。アカウント種別や求人を選ぶとその分だけ"
             lead={`${leadBase}${jobLabel ? `・求人: ${jobLabel}` : ''}`}
             testId="summary-jobs"
             stats={[
