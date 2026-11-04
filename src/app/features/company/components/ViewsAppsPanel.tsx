@@ -6,7 +6,7 @@ import { Help } from '../../../components/ui/Help';
 import { fmtMonthShort } from '../../../../shared/calendar/periods';
 import { fmtInt } from '../../../lib/format';
 
-/** 閲覧件数と応募件数の月次推移（単月の実績）。選択期間（契約期間中・マートの窓内）・選択アカウント。求人選択時はその求人 */
+/** 閲覧件数と応募件数の月次推移（単月の実績）。選択期間（マートの窓内。契約期間で切らない）・選択アカウント。求人選択時はその求人 */
 export function ViewsAppsPanel({ m, jobLabel }: { m: CompanyModel; jobLabel?: string | null }) {
   const [table, setTable] = useState(false);
   const v = m.viewsApps;
