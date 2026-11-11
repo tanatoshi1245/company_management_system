@@ -13,17 +13,16 @@ export function jobLabelOf(r: JobRow | null | undefined, key: string): string {
 }
 
 /**
- * Hot Job 期間の表示。開始〜期限（開始は観測の前日。記録開始 2026-11-11 より前からの設定は開始日不明）。
- * 最後に観測した日が期限より前で止まっていれば「途中終了」（期限前に外れた / 求人が非アクティブ化）
+ * Hot Job 期間の表示。開始日が分かれば「MM/DD ~ MM/DD」、分からなければ（記録開始 2026-11-11 より前からの設定）「~MM/DD」。
+ * 最後に観測した日が期限より前で止まっていれば終了はその日（期限前に外れた / 求人が非アクティブ化。詳細は title）
  */
-export function hotJobLabel(h: JobHot | null, dataDate: string): { text: string; note: string | null; title: string } | null {
+export function hotJobLabel(h: JobHot | null, dataDate: string): { text: string; title: string } | null {
   if (!h) return null;
   const endedEarly = h.lastSeen < h.to && h.lastSeen < dataDate;
   const end = endedEarly ? h.lastSeen : h.to;
-  const text = `${h.from ? fmtMd(h.from) : ''}〜${fmtMd(end)}`;
-  const note = endedEarly ? '途中終了' : h.startUnknown ? '開始日不明' : null;
+  const text = h.from ? `${fmtMd(h.from)} ~ ${fmtMd(end)}` : `~${fmtMd(end)}`;
   const title = [h.startUnknown ? `${HOTJOB_RECORD_START} の記録開始時点で設定済み（開始日は不明）` : `開始 ${h.from}（観測の前日）`, `期限 ${h.to}`, endedEarly ? `${h.lastSeen} を最後に観測されず（期限前に外れた / 求人が非アクティブ化）` : null].filter(Boolean).join('。');
-  return { text, note, title };
+  return { text, title };
 }
 
 /** 求人タイトルの部分一致（NFKC・小文字・空白除去）。空の検索は全件 */
@@ -47,7 +46,7 @@ export function JobsTablePanel({ jobs, state, errorCode, selected, onSelect, ran
     <section className="card" aria-label="求人ごとの実績" data-testid="jobs-table">
       <div className="card-head">
         <h2>
-          求人ごとの実績 <Help text="選択期間に閲覧か応募があった求人（日英のセットは 1 件。「企業への直接応募」は求人を指定しない応募）。閲覧件数の多い順。行を選ぶと、このタブのカード・推移・円グラフと選考状況がその求人の分になる（スカウトは求人に紐付かないので変わらない）。Hot Job 期間 = ホットジョブ（上位表示）の設定期間のうち直近 13 か月に掛かる最新の 1 つ（開始〜期限。開始日は毎朝の観測の前日で、記録開始 2026-11-11 より前からの設定は開始日不明。期限より前に外れていれば最後に観測した日まで = 途中終了。延長は新しい期限で 1 つにまとめる）" />
+          求人ごとの実績 <Help text="選択期間に閲覧か応募があった求人（日英のセットは 1 件。「企業への直接応募」は求人を指定しない応募）。閲覧件数の多い順。行を選ぶと、このタブのカード・推移・円グラフと選考状況がその求人の分になる（スカウトは求人に紐付かないので変わらない）。Hot Job 期間 = ホットジョブ（上位表示）の設定期間のうち直近 13 か月に掛かる最新の 1 つ（「開始 ~ 期限」。開始日は毎朝の観測の前日で、記録開始 2026-11-11 より前からの設定は開始日が分からないので「~期限」だけ。期限より前に外れていれば最後に観測した日まで。延長は新しい期限で 1 つにまとめる。マウスオーバーで詳細）" />
         </h2>
         <span className="lead">
           {range} の分{rows.length ? `・${searching ? `${fmtInt(rows.length)} 件中 ${fmtInt(shown.length)} 件` : `${fmtInt(rows.length)} 件`}` : ''}
@@ -99,10 +98,7 @@ export function JobsTablePanel({ jobs, state, errorCode, selected, onSelect, ran
                     {(() => {
                       const h = hotJobLabel(r.hot, dataDate);
                       return h ? (
-                        <span title={h.title}>
-                          {h.text}
-                          {h.note ? <span className="muted small"> {h.note}</span> : null}
-                        </span>
+                        <span title={h.title}>{h.text}</span>
                       ) : (
                         <span className="muted">–</span>
                       );

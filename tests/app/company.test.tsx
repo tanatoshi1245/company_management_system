@@ -179,15 +179,16 @@ describe('企業詳細', () => {
     expect(Array.from(table.querySelectorAll('thead th')).map((h) => h.textContent)).toEqual(['求人タイトル', '掲載期間', '閲覧件数', '応募件数', 'Hot Job 期間']);
     const trs = Array.from(table.querySelectorAll('tbody tr'));
     expect(trs.length).toBe(jobsApi.rows.length);
-    // Hot Job 期間: 設定のある求人は MM/DD〜MM/DD（開始日不明は 〜MM/DD + 注記）、無い求人と直接応募は –
+    // Hot Job 期間: 開始日が分かる求人は「MM/DD ~ MM/DD」、開始日不明は「~MM/DD」だけ、無い求人と直接応募は –
     trs.forEach((tr, k) => {
       const r = jobsApi.rows[k];
       const cell = tr.querySelectorAll('td')[4];
       if (!r.hot) expect(cell.textContent).toBe('–');
       else if (r.hot.startUnknown) {
-        expect(cell.textContent).toMatch(/^〜\d{1,2}\/\d{1,2} 開始日不明$/);
+        expect(cell.textContent).toMatch(/^~\d{1,2}\/\d{1,2}$/);
+        expect(cell.querySelector('span')?.getAttribute('title')).toContain('開始日は不明');
       } else {
-        expect(cell.textContent).toMatch(/^\d{1,2}\/\d{1,2}〜\d{1,2}\/\d{1,2}( 途中終了)?$/);
+        expect(cell.textContent).toMatch(/^\d{1,2}\/\d{1,2} ~ \d{1,2}\/\d{1,2}$/);
         expect(cell.querySelector('span')?.getAttribute('title')).toContain('期限');
       }
     });
