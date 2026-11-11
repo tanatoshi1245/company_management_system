@@ -105,7 +105,7 @@ export default function CompanyPage({ params }: PageProps) {
             <AttributePiePanel title="誰が求人を見ているか" help={attrHelp('求人を閲覧 / 応募した')} breakdown={breakdownJobs} range={range} modes={['viewed', 'applied']} state={stateOf(attrsJobs)} testId="pie-views" />
             <JobConditionsPanel jobs={jobs.data} state={stateOf(jobs)} errorCode={jobs.error instanceof ApiError ? jobs.error.code : jobs.error ? 'error' : null} range={range} selected={sel.job} />
           </div>
-          <JobsTablePanel jobs={jobs.data} state={stateOf(jobs)} errorCode={jobs.error instanceof ApiError ? jobs.error.code : jobs.error ? 'error' : null} selected={sel.job} onSelect={setJob} range={range} />
+          <JobsTablePanel jobs={jobs.data} state={stateOf(jobs)} errorCode={jobs.error instanceof ApiError ? jobs.error.code : jobs.error ? 'error' : null} selected={sel.job} onSelect={setJob} range={range} dataDate={d.meta.dataDate} />
         </div>
       ) : tab === 'scout' ? (
         <div key="scout" className="stack" role="tabpanel" id="co-panel-scout" aria-labelledby="co-tab-scout">

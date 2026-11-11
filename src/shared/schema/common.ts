@@ -9,7 +9,7 @@ import { isYmd } from '../calendar/periods';
  *   3: companies.publishing_sites に WAWW を含む企業をマートから除外（2026-10-23）
  *   22: CT ログインから社内メンバー（company_users.email が @daijob.com）のログインを除外。対象は直接・紹介・派遣の企業のみ（DA / RPO は数える。最終ログイン・ログイン日数が変わる。2026-10-31）
  */
-export const DATA_VERSION = 23;
+export const DATA_VERSION = 24;
 
 export const MonthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'YYYY-MM で指定してください');
 export const YmdSchema = z.string().refine((s) => isYmd(s), 'YYYY-MM-DD で指定してください');

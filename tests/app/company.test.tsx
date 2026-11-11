@@ -95,7 +95,7 @@ describe('企業詳細', () => {
     expect(head.querySelector('[data-stat=contractPeriod]')?.textContent).toContain('〜');
     expect(head.textContent).not.toMatch(/担当 CS|SF 取引先|Salesforce|契約中の根拠|マート更新|未紐付け/);
     expect(head.querySelector('.timeline')).toBeNull();
-    expect(head.querySelector('[data-stat=lastLogin]')?.textContent).toMatch(/記録なし|\d{4}\/\d{2}\/\d{2}/);
+    expect(head.querySelector('[data-stat=lastLogin]')?.textContent).toMatch(/記録なし|\d{4}\/\d{1,2}\/\d{1,2}/);
     // 期間: 開始月〜終了月の 2 つのセレクタ（既定 = 契約開始月（窓より前なら窓の先頭）〜当月）。月の単独セレクタは無い
     const fromSel = screen.getByLabelText('開始月') as HTMLSelectElement;
     const toSel = screen.getByLabelText('終了月') as HTMLSelectElement;
@@ -176,9 +176,22 @@ describe('企業詳細', () => {
     const jobsApi = await loadJobs(f.client, c.id, fromSel.value, f.month, null, null);
     expect(jobsApi.rows.length).toBeGreaterThan(1);
     const table = await screen.findByRole('table', { name: '求人ごとの実績の表' });
-    expect(Array.from(table.querySelectorAll('thead th')).map((h) => h.textContent)).toEqual(['求人タイトル', '掲載期間', '閲覧件数', '応募件数']);
+    expect(Array.from(table.querySelectorAll('thead th')).map((h) => h.textContent)).toEqual(['求人タイトル', '掲載期間', '閲覧件数', '応募件数', 'Hot Job 期間']);
     const trs = Array.from(table.querySelectorAll('tbody tr'));
     expect(trs.length).toBe(jobsApi.rows.length);
+    // Hot Job 期間: 設定のある求人は MM/DD〜MM/DD（開始日不明は 〜MM/DD + 注記）、無い求人と直接応募は –
+    trs.forEach((tr, k) => {
+      const r = jobsApi.rows[k];
+      const cell = tr.querySelectorAll('td')[4];
+      if (!r.hot) expect(cell.textContent).toBe('–');
+      else if (r.hot.startUnknown) {
+        expect(cell.textContent).toMatch(/^〜\d{1,2}\/\d{1,2} 開始日不明$/);
+      } else {
+        expect(cell.textContent).toMatch(/^\d{1,2}\/\d{1,2}〜\d{1,2}\/\d{1,2}( 途中終了)?$/);
+        expect(cell.querySelector('span')?.getAttribute('title')).toContain('期限');
+      }
+    });
+    expect(jobsApi.rows.some((r) => r.hot && !r.hot.startUnknown)).toBe(true);
     const shownViews = trs.map((tr) => Number(tr.querySelectorAll('td')[2].textContent?.replace(/[^\d]/g, '') || 0));
     for (let k = 1; k < shownViews.length; k++) expect(shownViews[k - 1]).toBeGreaterThanOrEqual(shownViews[k]);
     expect(jobsApi.rows.reduce((a, r) => a + r.views, 0)).toBe(num(jobs, 'views'));
