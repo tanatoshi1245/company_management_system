@@ -125,7 +125,7 @@ describe('企業詳細', () => {
     expect(document.querySelectorAll('.bullet').length).toBe(0);
     expect(screen.queryByRole('table', { name: '目標と実績' })).toBeNull();
     expect(screen.queryByText('この画面の注意点')).toBeNull();
-    // 推移: 閲覧・応募（左右 2 軸、目盛の文字は系列の色）。系列名は 閲覧件数 / 応募件数
+    // 推移: 閲覧・応募を同じ目盛（1 軸）で描く。右軸は無く、線の上に数値のラベルも無い（数値はホバーのツールチップだけ）。系列名は 閲覧件数 / 応募件数
     expect(screen.getByRole('region', { name: '閲覧と応募の推移' })).toBeTruthy();
     const dual = document.querySelectorAll('.chart.dual');
     expect(dual.length).toBe(1);
@@ -133,14 +133,12 @@ describe('企業詳細', () => {
     expect(ch.querySelectorAll('.legend > span').length).toBe(2);
     expect(ch.querySelectorAll('svg g[data-series] > path').length).toBe(2);
     expect(ch.querySelectorAll('svg text.tick.left').length).toBe(5);
-    expect(ch.querySelectorAll('svg text.tick.right').length).toBe(5);
-    expect(ch.querySelector('svg text.tick.right')?.getAttribute('fill')).toBe('var(--cat-2)');
+    expect(ch.querySelectorAll('svg text.tick.right').length).toBe(0);
+    expect(ch.querySelectorAll('svg text.value').length).toBe(0);
+    expect(ch.textContent).not.toContain('右軸');
     expect(ch.textContent).toContain('閲覧件数');
     expect(ch.textContent).toContain('応募件数');
-    // 右軸の最大値 = 左軸の最大値 × 比率（10% 以上）。応募の線は常に閲覧の線より下（SVG の y は下ほど大きい）
-    const ratio = Number(ch.getAttribute('data-right-ratio'));
-    expect(ratio).toBeGreaterThanOrEqual(0.1);
-    expect(ch.textContent).toContain(`右軸。最大値は左軸の ${Math.round(ratio * 100)}%`);
+    // 同じ軸なので、線の縦の差 = 件数の差（応募 ≤ 閲覧 なら応募の点が下）。SVG の y は下ほど大きい
     const pts = (key: string) => (ch.querySelector(`svg g[data-series=${key}] > path`)!.getAttribute('d') ?? '').split(/[ML]/).filter(Boolean).map((p) => p.split(',').map(Number));
     const pv = pts('views');
     const pa = pts('apps');
@@ -149,6 +147,16 @@ describe('企業詳細', () => {
       expect(pa[k][0]).toBeCloseTo(xv, 1);
       expect(pa[k][1]).toBeGreaterThanOrEqual(yv - 0.05);
     });
+    // 同じ軸なので、線の縦の差（px）は件数の差に比例する: 差が大きい月ほど線の間隔が広い
+    const gaps = inWindow.map((m, k) => ({ diff: m.views - m.apps, px: pa[k][1] - pv[k][1] }));
+    const wide = gaps.reduce((a, b) => (b.diff > a.diff ? b : a));
+    const narrow = gaps.reduce((a, b) => (b.diff < a.diff ? b : a));
+    expect(wide.diff).toBeGreaterThan(narrow.diff);
+    expect(wide.px).toBeGreaterThan(narrow.px);
+    if (narrow.diff > 0) expect(wide.px / narrow.px).toBeCloseTo(wide.diff / narrow.diff, 1);
+    // ホバーでツールチップに各月の数値が出る
+    fireEvent.mouseMove(ch.querySelector('svg')!, { clientX: 300, clientY: 50 });
+    expect(ch.querySelector('.chart-tooltip')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '表で見る' }));
     const va = screen.getByRole('table', { name: '閲覧と応募の推移の表' });
     const lastRow = va.querySelector('tbody tr:last-child')!;

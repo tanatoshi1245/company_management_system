@@ -15,7 +15,7 @@ export function ViewsAppsPanel({ m, jobLabel }: { m: CompanyModel; jobLabel?: st
     <section className="card" aria-label="閲覧と応募の推移">
       <div className="card-head">
         <h2>
-          閲覧と応募の推移 <Help text="月ごとの実績（累積ではない）。閲覧 = 求人の閲覧件数、応募 = 応募件数。ボードの「閲覧」「応募」と同じ値。求人を選ぶとその求人の分。桁が違うため左軸 = 閲覧件数、右軸 = 応募件数（目盛の数字は線の色）。右軸の最大値は左軸の最大値 × 最大応募率（応募 ÷ 閲覧。10% 以上に切り上げ）に固定するので、応募の線は常に閲覧の線より下に描かれる" />
+          閲覧と応募の推移 <Help text="月ごとの実績（累積ではない）。閲覧 = 求人の閲覧件数、応募 = 応募件数。ボードの「閲覧」「応募」と同じ値。求人を選ぶとその求人の分。2 本の線は同じ目盛（1 軸）で描くので、線の縦の差がそのまま件数の差。各月の数値はカーソルを合わせると出る" />
         </h2>
         <span className="lead">{lead}</span>
         <button type="button" className="btn ghost sm" onClick={() => setTable((t) => !t)}>
@@ -25,7 +25,7 @@ export function ViewsAppsPanel({ m, jobLabel }: { m: CompanyModel; jobLabel?: st
       {table ? (
         <SeriesTable months={v.months} cols={[{ label: '閲覧', values: v.views }, { label: '応募', values: v.apps }]} ariaLabel="閲覧と応募の推移の表" />
       ) : (
-        <DualLineChart months={v.months} series={[{ key: 'views', label: '閲覧件数', values: v.views, color: '--cat-1' }, { key: 'apps', label: '応募件数', values: v.apps, color: '--cat-2' }]} format={fmtInt} ariaLabel="閲覧件数と応募件数の月次推移（左軸 = 閲覧、右軸 = 応募）" partialLast={v.partialLast} dualAxis />
+        <DualLineChart months={v.months} series={[{ key: 'views', label: '閲覧件数', values: v.views, color: '--cat-1' }, { key: 'apps', label: '応募件数', values: v.apps, color: '--cat-2' }]} format={fmtInt} ariaLabel="閲覧件数と応募件数の月次推移" partialLast={v.partialLast} />
       )}
     </section>
   );

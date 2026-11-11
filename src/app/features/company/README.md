@@ -22,7 +22,7 @@ status: active
 | スカウトの実績（スカウトタブ）: 送信件数 / 興味あり返信 / 選考中（現在）/ 採用（スカウト経由） | 同上 | Σ `cms_company_monthly.scout_sent / interested_by_reply_month / hires_from_scout`、終了月の `in_selection` | scouts, scout_histories, member_applications.status |
 | 求人の表の Hot Job 期間（ホットジョブの最新の設定期間） | 同上（`rows[].hot`） | `cms_company_job_monthly.hotjob_from / hotjob_to / hotjob_last_seen / hotjob_start_unknown` | active_jobs_hotjob_history |
 | 掲載した求人の条件（日本語レベル / 英語レベル / 勤務地 / 職種 / 年収幅 の円グラフ。求人の表の右。試作） | 同上（`rows[].cond`） | `cms_company_job_monthly.job_japanese_level / job_english_level / job_location / job_occupation / job_salary_band`（求人 1 件 = 1。直接応募は除く） | jobs_all |
-| 閲覧と応募の推移（2 軸。右軸の最大値 = 左軸 × 最大応募率）・スカウト送信と興味あり返信の推移（2 軸） | 同上 | `cms_company_monthly`（選択期間・契約期間中。種別は `accountMonthly`） | 同上 |
+| 閲覧と応募の推移・スカウト送信と興味あり返信の推移（どちらも同じ目盛の 1 軸。各月の数値はホバーのみ） | 同上 | `cms_company_monthly`（選択期間・契約期間中。種別は `accountMonthly`） | 同上 |
 | 誰が求人を見ているか（閲覧 / 応募。求人選択時はその求人）/ 誰にスカウトを送っているか（送信 / 興味あり）（属性タブ 8 種の円グラフ） | `GET /api/companies/:id/attributes?from&to&account&job` | `cms_scout_member_attributes_monthly`（`kind` = view / application / scout を期間・アカウント種別で SUM。語学レベルは番号の降順） | member_job_detail_views / member_applications / scouts × member_details × member_profile_latest |
 | スカウト未利用状況（対象月・理由・補足・出所。「理由を登録する」→ `/scout-unused`） | 同上 + D1 `scout_unused_entries`（API が重ねる） | `cms_company_master.scout_unused_json` | scout_unused_companies_monthly |
 
