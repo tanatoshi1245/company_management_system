@@ -61,7 +61,7 @@ CS（カスタマーサクセス）向けの社内 Web アプリ。契約中企�
     └─ D1 CMS_DB（company_targets / company_settings / audit_log / app_meta / plan_target_defaults。キャッシュしない）
 [BigQuery bq-hgt.dwh] cms_* 13 表 ← スケジュールドスクリプト bq/marts/scheduled_query.sql（毎日 22:45 UTC = 07:45 JST、約 1 GB/日）
                        ← companies / company_profiles / active_companies / scouts / scout_histories / member_applications / member_details /
-                          member_profile_latest / member_job_detail_views / job_publish_history / jobs_all / sf_* / GA4（企業ログイン）
+                          member_profile_latest / member_job_detail_views / job_publish_history / jobs_all / active_jobs_hotjob_history / sf_* / GA4（企業ログイン）
 ```
 
 - **マート**: `bq/README.md`（一覧・スケジュール・初回構築と突合の記録）と `bq/marts/<table>/README.md`（列定義・元テーブル）。Worker はリクエスト時に生テーブルを読まない（各クエリ < 10 MB、`npm run dryrun` で確認）
@@ -95,7 +95,7 @@ tests/                vitest（worker / shared / app / repo）。helpers/fakeD1.
 | GET /api/board?month= | session | 企業 × 当月の実績・契約・担当・ベンチマーク（マート部分はキャッシュ、D1 はリクエストごと） |
 | GET /api/companies/:id?month= | session | 1 社の詳細（14 か月・アカウント種別ごとの 14 か月・窓に掛かる求人の一覧・日次累積・コホート・ベンチマーク系列・設定・目標） |
 | GET /api/companies/:id/attributes?from=&to=&account=&job= | session | 会員属性の内訳（期間 from〜to の月、アカウント種別・求人で BQ 側に集約。kind = scout / view / application。job 指定時は閲覧 / 応募だけ） |
-| GET /api/companies/:id/jobs?from=&to=&account=&job= | session | 求人ごとの期間集計（タイトル・条件（`cond`: 日本語 / 英語レベル・勤務地・職種・年収帯）・閲覧件数・応募件数・採用・応募側の選考ステータス。閲覧の多い順）。job 指定でその求人の月次も。表 `cms_company_job_monthly`（SA の dataViewer 付与が要る） |
+| GET /api/companies/:id/jobs?from=&to=&account=&job= | session | 求人ごとの期間集計（タイトル・条件（`cond`: 日本語 / 英語レベル・勤務地・職種・年収帯）・Hot Job 期間（`hot`）・閲覧件数・応募件数・採用・応募側の選考ステータス。閲覧の多い順）。job 指定でその求人の月次も。表 `cms_company_job_monthly`（SA の dataViewer 付与が要る） |
 | GET /api/targets?month=、GET /api/companies/:id/targets、GET …/targets/history | session | 目標（D1）、監査ログ |
 | PUT / DELETE /api/companies/:id/targets/:month、POST …/targets/copy、POST /api/targets/bulk-defaults | verified + 同一オリジン | 目標の登録・削除・コピー・一括既定値（更新 + 監査ログを 1 batch） |
 | GET / PUT /api/companies/:id/settings、GET /api/settings/overrides | session / verified | 企業設定（担当上書き・枠） |

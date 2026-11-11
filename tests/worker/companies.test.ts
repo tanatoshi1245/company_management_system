@@ -115,6 +115,19 @@ describe('/api/companies/:id（モック）', () => {
     expect(direct?.key).toBe('direct');
     expect(direct?.title).toBe('企業への直接応募');
     for (const r of body.rows) for (const k of SELECTION_CARD_KEYS) expect(typeof r.st[k]).toBe('number');
+    // Hot Job 期間: 直接応募は null。ある求人は to が YYYY-MM-DD、開始日不明なら from が null、lastSeen <= to
+    expect(direct?.hot).toBeNull();
+    const hots = body.rows.filter((r) => r.hot);
+    expect(hots.length).toBeGreaterThan(0);
+    expect(hots.length).toBeLessThan(body.rows.length);
+    for (const r of hots) {
+      expect(r.hot!.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(r.hot!.lastSeen <= r.hot!.to).toBe(true);
+      if (r.hot!.startUnknown) expect(r.hot!.from).toBeNull();
+      else expect(r.hot!.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+    expect(hots.some((r) => r.hot!.startUnknown)).toBe(true);
+    expect(hots.some((r) => r.hot!.lastSeen < r.hot!.to)).toBe(true);
     // 求人の条件: 直接応募は null、求人は 5 項目（職種は大分類で「 - 」を含まない、年収帯は許可リスト）
     expect(direct?.cond).toBeNull();
     const BANDS = ['〜400万円', '400〜600万円', '600〜800万円', '800〜1000万円', '1000万円〜', '応相談', '円以外', '未設定'];

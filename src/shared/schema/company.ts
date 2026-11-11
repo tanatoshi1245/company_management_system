@@ -71,7 +71,10 @@ export const JobKeySchema = z.string().regex(/^(\d{1,12}|direct)$/);
 /** 求人の条件（掲載した求人の条件の円グラフ用。(direct) は null。occupation は大分類（「営業 - 法人営業」の「営業」）） */
 export const JobCondSchema = z.object({ japanese: z.string(), english: z.string(), occupation: z.string(), location: z.string(), salary: z.string() });
 export type JobCond = z.infer<typeof JobCondSchema>;
-export const JobRowSchema = z.object({ key: z.string(), title: z.string(), account: z.string(), direct: z.boolean(), publishFrom: z.string().nullable(), publishTo: z.string().nullable(), views: z.number(), apps: z.number(), hiresApp: z.number(), st: z.record(z.string(), z.number()), cond: JobCondSchema.nullable() });
+/** ホットジョブ（上位表示）の最新の設定期間。from = 観測の前日（記録開始 2026-11-11 より前の設定は null = 開始日不明）、to = 期限、lastSeen = 最後に観測した日（期限より前に止まっていれば途中終了） */
+export const JobHotSchema = z.object({ from: z.string().nullable(), to: z.string(), lastSeen: z.string(), startUnknown: z.boolean() });
+export type JobHot = z.infer<typeof JobHotSchema>;
+export const JobRowSchema = z.object({ key: z.string(), title: z.string(), account: z.string(), direct: z.boolean(), publishFrom: z.string().nullable(), publishTo: z.string().nullable(), views: z.number(), apps: z.number(), hiresApp: z.number(), st: z.record(z.string(), z.number()), cond: JobCondSchema.nullable(), hot: JobHotSchema.nullable() });
 export type JobRow = z.infer<typeof JobRowSchema>;
 export const JobMonthlyRowSchema = z.object({ month: z.string(), views: z.number(), apps: z.number(), hiresApp: z.number(), st: z.record(z.string(), z.number()) });
 export type JobMonthlyRow = z.infer<typeof JobMonthlyRowSchema>;

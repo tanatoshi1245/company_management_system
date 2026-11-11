@@ -99,6 +99,8 @@ export type JobConditionType = (typeof JOB_CONDITION_TYPES)[number];
 export const JOB_CONDITION_LABEL: Record<JobConditionType, string> = { japanese: '日本語レベル', english: '英語レベル', location: '勤務地', occupation: '職種', salary: '年収幅' };
 /** 語学レベルの段階（求人の条件。高い順に並べる） */
 export const JOB_LEVEL_ORDER = ['ネイティヴ', '流暢', 'ビジネス会話', '日常会話', '最低限のコミュニケーション', 'なし', '未設定'] as const;
+/** ホットジョブ履歴（active_jobs_hotjob_history）の記録開始日。これより前からの設定は開始日が分からない */
+export const HOTJOB_RECORD_START = '2026-11-11';
 /** 年収帯（求人の最低年収、日本円）。この順に並べる */
 export const SALARY_BANDS = ['〜400万円', '400〜600万円', '600〜800万円', '800〜1000万円', '1000万円〜', '応相談', '円以外', '未設定'] as const;
 

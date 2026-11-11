@@ -26,6 +26,7 @@ status: active
 | job_occupation | STRING | 職種（`jobs_all.occupation`。「大分類 - 小分類」のまま。画面は大分類で数える） |
 | job_location | STRING | 勤務地（国が 日本 なら `work_location1_city` = 都道府県、無ければエリア → 日本。日本以外は国名。無ければ 未設定） |
 | job_salary_band | STRING | 年収帯（最低年収 `annual_income_min`（円）で 〜400万円 / 400〜600万円 / 600〜800万円 / 800〜1000万円 / 1000万円〜。「経験と能力に基づく」= 応相談、日本・円 以外 = 円以外、未入力 = 未設定） |
+| hotjob_from / hotjob_to / hotjob_last_seen / hotjob_start_unknown | DATE / DATE / DATE / BOOL | ホットジョブ（上位表示）の最新の設定期間（`active_jobs_hotjob_history`。窓に掛かる行のうち求人キーごとに期限が最新の 1 行。2026-11-11〜）。`hotjob_from` = `first_seen_on` の前日（記録開始 2026-11-11 時点で設定済み = `start_unknown` なら NULL）、`hotjob_to` = `DATE(hotjob_to_date)`（期限）、`hotjob_last_seen` = 最後に観測した日（期限より前に止まっていれば途中で外れた / 非アクティブ化）。設定の無い求人と `'(direct)'` は NULL |
 | job_views | INT64 | 閲覧数（`member_job_detail_views` の `COUNT(DISTINCT view_id)`） |
 | applications | INT64 | 応募数（`member_applications`） |
 | hires_from_application | INT64 | `status = '11.採用'` の応募数 |
@@ -35,6 +36,7 @@ status: active
 
 ## 元テーブルと整合
 
+- `active_jobs_hotjob_history`（`job_id` / `hotjob_to_date` / `first_seen_on` / `last_seen_on` / `start_unknown`。`migrate-active-jobs-extra` が毎朝 05:35 JST に観測。2026-11-11 記録開始）→ `hotjob_*`（ステップ 08b2 `job_hot`）
 - `member_job_detail_views`（`job_id`）、`member_applications`（`job_id`。NULL は直接応募）、`jobs_all`（`set_id` / `position_name` / `profile_id`）、`job_publish_history`、`company_profiles_full`（`profile_id → company_id / company_type / language`）。
 - 企業 × 種別 × 月の `SUM(job_views)` / `SUM(applications)` は `cms_company_monthly` の種別行の `job_views` / `applications` と一致する（初回実行で差 0 を確認）。
 

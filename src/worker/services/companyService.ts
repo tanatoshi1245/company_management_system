@@ -207,6 +207,7 @@ export async function loadJobs(client: BqClient, companyId: string, from: string
     hiresApp: num(r.hires_from_application),
     st: stOf(r),
     cond: bool(r.is_direct) ? null : { japanese: str(r.job_japanese_level) ?? '未設定', english: str(r.job_english_level) ?? '未設定', occupation: occupationGroup(str(r.job_occupation)), location: str(r.job_location) ?? '未設定', salary: str(r.job_salary_band) ?? '未設定' },
+    hot: str(r.hotjob_to) ? { from: str(r.hotjob_from), to: String(r.hotjob_to), lastSeen: str(r.hotjob_last_seen) ?? String(r.hotjob_to), startUnknown: bool(r.hotjob_start_unknown) } : null,
   }));
   return { from, to, account, job, rows, monthly: (monthly?.rows ?? []).map((r) => ({ month: String(r.month_ym), views: num(r.job_views), apps: num(r.applications), hiresApp: num(r.hires_from_application), st: stOf(r) })) };
 }

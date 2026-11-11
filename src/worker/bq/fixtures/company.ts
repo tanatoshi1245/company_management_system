@@ -31,26 +31,35 @@ const JOB_LEVELS = ['流暢', 'ネイティヴ', 'ビジネス会話', '日常�
 const JOB_LOCATIONS = ['東京都', '東京都', '大阪府', '神奈川県', '東京都', 'ベトナム', '愛知県', 'タイ', '東京都'];
 const JOB_SALARY = ['400〜600万円', '600〜800万円', '1000万円〜', '〜400万円', '800〜1000万円', '応相談', '400〜600万円', '円以外', '未設定'];
 export type MockJobCond = { japanese: string; english: string; occupation: string; location: string; salary: string };
+/** ホットジョブの設定期間のモック（3 件に 1 件。5 件に 1 件は記録開始前からの設定 = 開始日不明、一部は期限前に外れた） */
+export type MockJobHot = { from: string | null; to: string; lastSeen: string; startUnknown: boolean } | null;
+export function mockJobHot(i: number, s: string): MockJobHot {
+  if (i % 3 !== 0) return null;
+  const to = addDays(s, 30 + (i % 4) * 10);
+  const startUnknown = i % 5 === 0;
+  const endedEarly = i % 6 === 0 && !startUnknown;
+  return { from: startUnknown ? null : addDays(to, -30), to, lastSeen: endedEarly ? addDays(to, -12) : to, startUnknown };
+}
 export function mockJobCond(i: number): MockJobCond {
   return { japanese: JOB_LEVELS[i % JOB_LEVELS.length], english: JOB_LEVELS[(i + 3) % JOB_LEVELS.length], occupation: JOB_OCCUPATIONS[i % JOB_OCCUPATIONS.length], location: JOB_LOCATIONS[(i + 1) % JOB_LOCATIONS.length], salary: JOB_SALARY[(i + 2) % JOB_SALARY.length] };
 }
 
 /** jobs_json: 窓に掛かる求人。掲載開始・終了を散らして、期間を変えると件数が変わるようにする。アカウントが 2 つなら 6:4 で分ける */
-export function mockJobs(id: string, today = todayJst()): { a: string; k: number; s: string; e: string | null; title: string; cond: MockJobCond }[] {
+export function mockJobs(id: string, today = todayJst()): { a: string; k: number; s: string; e: string | null; title: string; cond: MockJobCond; hot: MockJobHot }[] {
   const c = mockCompanies(today).find((x) => String(x.id) === id);
   if (!c || c.jobLimit === 0) return [];
   const rand = seeded(Number(id) * 17);
   const months = mockMonths(today);
   const accounts = mockAccountTypes(c);
   const n = (c.jobLimit ?? 12) * 2 + (Number(id) % 5);
-  const out: { a: string; k: number; s: string; e: string | null; title: string; cond: MockJobCond }[] = [];
+  const out: { a: string; k: number; s: string; e: string | null; title: string; cond: MockJobCond; hot: MockJobHot }[] = [];
   for (let i = 0; i < n; i++) {
     const startM = months[between(rand, 0, months.length - 1)];
     const s = `${startM}-${String(between(rand, 1, 28)).padStart(2, '0')}`;
     const open = rand() < 0.5;
     const e = open ? null : addDays(s, between(rand, 20, 120));
     const a = accounts.length > 1 ? (i % 5 < 3 ? accounts[0] : accounts[1]) : (accounts[0] ?? c.type);
-    out.push({ a, k: Number(id) * 1000 + i, s, e: e && e < s ? null : e, title: `${JOB_TITLES[i % JOB_TITLES.length]}（${i + 1}）`, cond: mockJobCond(i) });
+    out.push({ a, k: Number(id) * 1000 + i, s, e: e && e < s ? null : e, title: `${JOB_TITLES[i % JOB_TITLES.length]}（${i + 1}）`, cond: mockJobCond(i), hot: mockJobHot(i, s) });
   }
   return out.sort((x, y) => (x.s < y.s ? 1 : -1));
 }
@@ -86,12 +95,12 @@ export function mockJobMonthlyRows(id: string, today = todayJst()): Row[] {
       leftV -= v;
       leftA -= a;
       if (v === 0 && a === 0) return;
-      const row: Row = { month_ym: ym, account_type: j.a, job_key: String(j.k), job_title: j.title, is_direct: false, publish_from: j.s, publish_to: j.e, job_views: v, applications: a, hires_from_application: a > 3 && rand() < 0.2 ? 1 : 0, job_japanese_level: j.cond.japanese, job_english_level: j.cond.english, job_occupation: j.cond.occupation, job_location: j.cond.location, job_salary_band: j.cond.salary };
+      const row: Row = { month_ym: ym, account_type: j.a, job_key: String(j.k), job_title: j.title, is_direct: false, publish_from: j.s, publish_to: j.e, job_views: v, applications: a, hires_from_application: a > 3 && rand() < 0.2 ? 1 : 0, job_japanese_level: j.cond.japanese, job_english_level: j.cond.english, job_occupation: j.cond.occupation, job_location: j.cond.location, job_salary_band: j.cond.salary, hotjob_from: j.hot?.from ?? null, hotjob_to: j.hot?.to ?? null, hotjob_last_seen: j.hot?.lastSeen ?? null, hotjob_start_unknown: j.hot ? j.hot.startUnknown : null };
       JOB_ST_KEYS.forEach((k, idx) => (row[k] = Math.round(a * [0.15, 0.1, 0.05, 0.02, 0.03, 0.05][idx])));
       out.push(row);
     });
     if (direct > 0) {
-      const row: Row = { month_ym: ym, account_type: jobs[0]?.a ?? c.type, job_key: '(direct)', job_title: '企業への直接応募', is_direct: true, publish_from: null, publish_to: null, job_views: 0, applications: direct, hires_from_application: 0, job_japanese_level: null, job_english_level: null, job_occupation: null, job_location: null, job_salary_band: null };
+      const row: Row = { month_ym: ym, account_type: jobs[0]?.a ?? c.type, job_key: '(direct)', job_title: '企業への直接応募', is_direct: true, publish_from: null, publish_to: null, job_views: 0, applications: direct, hires_from_application: 0, job_japanese_level: null, job_english_level: null, job_occupation: null, job_location: null, job_salary_band: null, hotjob_from: null, hotjob_to: null, hotjob_last_seen: null, hotjob_start_unknown: null };
       JOB_ST_KEYS.forEach((k) => (row[k] = 0));
       out.push(row);
     }
@@ -116,7 +125,7 @@ export function mockCompanyJobs(id: string, fromYmd: string, toYmd: string, acco
   for (const [job_key, rs] of by) {
     const first = rs[0];
     const open = rs.some((r) => r.publish_from !== null && r.publish_to === null);
-    out.push({ job_key, job_title: first.job_title, account_type: first.account_type, is_direct: first.is_direct, publish_from: first.publish_from, publish_to: open ? null : first.publish_to, job_japanese_level: first.job_japanese_level, job_english_level: first.job_english_level, job_occupation: first.job_occupation, job_location: first.job_location, job_salary_band: first.job_salary_band, ...sumRows(rs, ['job_views', 'applications', 'hires_from_application', ...JOB_ST_KEYS]) });
+    out.push({ job_key, job_title: first.job_title, account_type: first.account_type, is_direct: first.is_direct, publish_from: first.publish_from, publish_to: open ? null : first.publish_to, job_japanese_level: first.job_japanese_level, job_english_level: first.job_english_level, job_occupation: first.job_occupation, job_location: first.job_location, job_salary_band: first.job_salary_band, hotjob_from: first.hotjob_from, hotjob_to: first.hotjob_to, hotjob_last_seen: first.hotjob_last_seen, hotjob_start_unknown: first.hotjob_start_unknown, ...sumRows(rs, ['job_views', 'applications', 'hires_from_application', ...JOB_ST_KEYS]) });
   }
   return out.sort((a, b) => Number(b.job_views) - Number(a.job_views) || Number(b.applications) - Number(a.applications));
 }

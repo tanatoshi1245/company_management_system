@@ -6,6 +6,7 @@
 --   スキャン: 約 1.1 GB/日。失敗時は EXCEPTION で cms_refresh_log に error 行を残し、前日のマートがそのまま残る
 --   設計: company_management_system/bq/README.md、列定義: bq/marts/<table>/README.md
 --   2026-10-30: account_type（アカウント種別 = プロファイルの 直接 / 紹介 / 派遣）を cms_company_monthly（'__ALL__' + 種別の行）・属性・master（account_types / accounts_json / jobs_json）に追加
+--   2026-11-11: cms_company_job_monthly にホットジョブの最新の設定期間（hotjob_from / hotjob_to / hotjob_last_seen / hotjob_start_unknown。active_jobs_hotjob_history）
 --   2026-11-02: cms_company_job_monthly に求人の条件（job_japanese_level / job_english_level / job_occupation / job_location / job_salary_band）。企業ページの「掲載した求人の条件」の円グラフ用
 --   2026-10-31: CT ログイン（ステップ 10）から社内メンバー（company_users.email が @daijob.com）のログインを除外（企業の最終ログインが CS の確認操作で更新されないように）。対象は直接・紹介・派遣の企業のみで、DA / RPO は社内メンバーのログインも数える
 --   2026-10-31: cms_company_monthly に jobs_in_month（月内に 1 日でも掲載期間が重なった求人数）。スカウト未利用の登録画面の対象 = 前月に掲載あり・送信 0・現在契約中
@@ -574,6 +575,21 @@ BEGIN
     FROM (SELECT cb.company_id, j.jobs_window_distinct, j.jobs_json FROM company_base cb LEFT JOIN job_json j USING (company_id)) j
     WHERE m.company_id = j.company_id;
 
+    -- 08b2. job_hot: 求人キーごとのホットジョブ（上位表示）の最新の設定期間（2026-11-11）
+    --   元: active_jobs_hotjob_history（migrate-active-jobs-extra が毎朝 05:35 に観測。キー (job_id, hotjob_to_date)。延長・再設定は別行、行は消えない）
+    --   窓に掛かる行（期限が window_start 以降）のうち、求人キー（日英セットは 1 件）ごとに期限が最新の 1 行。
+    --   開始日 = first_seen_on の前日（AWS に開始日の列が無い。前回の観測〜当日 05:35 の間に設定された）。記録開始日 2026-11-11 に既に設定済み（start_unknown）は開始日 NULL
+    CREATE TEMP TABLE job_hot AS
+    SELECT js.job_key,
+           IF(h.start_unknown, NULL, DATE_SUB(h.first_seen_on, INTERVAL 1 DAY)) AS hotjob_from,
+           DATE(h.hotjob_to_date) AS hotjob_to,
+           h.last_seen_on AS hotjob_last_seen,
+           h.start_unknown AS hotjob_start_unknown
+    FROM `bq-hgt.dwh.active_jobs_hotjob_history` h
+    JOIN job_set js USING (job_id)
+    WHERE DATE(h.hotjob_to_date) >= window_start
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY js.job_key ORDER BY DATE(h.hotjob_to_date) DESC, h.first_seen_on DESC, h.last_seen_on DESC) = 1;
+
     -- 08c. cms_company_job_monthly: 企業 × アカウント種別 × 求人 × 月（タイトル・閲覧・応募・応募側の現ステータス）。企業ページの求人単位の表・求人フィルタ用（2026-10-30）
     --   job_key = set_id（日英セット）、無ければ job_id（文字列）。job_id の無い応募（企業への直接応募）は '(direct)'。閲覧か応募が 1 件以上ある月だけ
     CREATE OR REPLACE TABLE `bq-hgt.dwh.cms_company_job_monthly`
@@ -608,12 +624,15 @@ BEGIN
            IF(j.job_key = '(direct)', '企業への直接応募', IFNULL(jt.job_title, CONCAT('求人 ', j.job_key))) AS job_title,
            -- 求人の条件（(direct) は NULL。2026-11-02）
            jt.job_japanese_level, jt.job_english_level, jt.job_occupation, jt.job_location, jt.job_salary_band,
+           -- ホットジョブの最新の設定期間（(direct) と設定の無い求人は NULL。2026-11-11）
+           jh.hotjob_from, jh.hotjob_to, jh.hotjob_last_seen, jh.hotjob_start_unknown,
            j.job_views, j.applications, j.hires_from_application,
            j.st06_interview_adjusting, j.st07_interview_1st, j.st08_interview_2nd, j.st09_interview_3rd, j.st10_interview_final, j.st11_hired,
            pub.publish_from, pub.publish_to,
            CURRENT_TIMESTAMP() AS refreshed_at
     FROM joined j
     LEFT JOIN job_attr jt ON jt.job_key = SAFE_CAST(j.job_key AS INT64)
+    LEFT JOIN job_hot jh ON jh.job_key = SAFE_CAST(j.job_key AS INT64)
     LEFT JOIN pub ON pub.company_id = j.company_id AND pub.account_type = j.account_type AND pub.job_key = j.job_key;
 
     -- 09. hire_fact: 11.採用 を会員 × 企業で重複排除（応募経路・スカウト経路） ----------------------------------

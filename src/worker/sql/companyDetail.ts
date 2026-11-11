@@ -120,6 +120,8 @@ export function companyJobsQuery(companyId: string, fromMonthFirstDay: string, t
 SELECT job_key, ANY_VALUE(job_title) AS job_title, ANY_VALUE(account_type) AS account_type, LOGICAL_OR(is_direct) AS is_direct,
        ANY_VALUE(job_japanese_level) AS job_japanese_level, ANY_VALUE(job_english_level) AS job_english_level, ANY_VALUE(job_occupation) AS job_occupation,
        ANY_VALUE(job_location) AS job_location, ANY_VALUE(job_salary_band) AS job_salary_band,
+       CAST(ANY_VALUE(hotjob_from) AS STRING) AS hotjob_from, CAST(ANY_VALUE(hotjob_to) AS STRING) AS hotjob_to,
+       CAST(ANY_VALUE(hotjob_last_seen) AS STRING) AS hotjob_last_seen, ANY_VALUE(hotjob_start_unknown) AS hotjob_start_unknown,
        CAST(MIN(publish_from) AS STRING) AS publish_from,
        CAST(IF(LOGICAL_OR(publish_from IS NOT NULL AND publish_to IS NULL), NULL, MAX(publish_to)) AS STRING) AS publish_to,
        SUM(job_views) AS job_views, SUM(applications) AS applications, SUM(hires_from_application) AS hires_from_application,
