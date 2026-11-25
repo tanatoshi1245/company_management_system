@@ -1,0 +1,132 @@
+/* AI 機能（/ai/report・/ai/scout・/ai/job）の共通部品と、②③ の画面。色は tokens.css のトークンだけを使う（新しい色を足さない） */
+
+/* ---- 画面の割り付け: 左 = 入力と履歴、右 = 結果（狭い画面では縦） ---- */
+.ai-layout { display: grid; grid-template-columns: minmax(340px, 460px) minmax(0, 1fr); gap: var(--s4); align-items: start; }
+.ai-col-form, .ai-col-result { min-width: 0; }
+@media (max-width: 1080px) { .ai-layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- 入力欄 ---- */
+.ai-form { display: flex; flex-direction: column; gap: var(--s4); }
+.ai-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3) var(--s4); }
+.ai-fields + .ai-fields { margin-top: var(--s3); }
+.ai-fields > .wide { grid-column: 1 / -1; }
+@media (max-width: 520px) { .ai-fields { grid-template-columns: minmax(0, 1fr); } }
+.ai-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ai-field > .lbl { display: flex; align-items: center; gap: 6px; }
+.ai-field > .lbl > label { font-size: var(--fs-11); font-weight: 700; color: var(--muted); letter-spacing: 0.04em; }
+.ai-field .req { font-size: 10px; font-weight: 700; color: var(--bad); background: var(--bad-bg); padding: 0 5px; border-radius: 999px; letter-spacing: 0; }
+.ai-field input.ctl, .ai-field textarea.ctl, .ai-field select.ctl { width: 100%; min-width: 0; font-size: var(--fs-13); }
+.ai-field textarea.ctl { resize: vertical; line-height: var(--lh-body); }
+.ai-field .hint { font-size: var(--fs-11); color: var(--muted); }
+.ai-field .err, .ai-draft-part .err { font-size: var(--fs-12); color: var(--bad); font-weight: 600; }
+.ai-field.has-error input.ctl, .ai-field.has-error textarea.ctl, .ai-field [aria-invalid='true'] { border-color: var(--bad); }
+.ai-field .over, .ai-draft-part .over { color: var(--bad); font-weight: 700; }
+.ai-group { border: 0; border-top: 1px solid var(--rule); margin: 0; padding: var(--s3) 0 0; min-width: 0; }
+.ai-group > legend { padding: 0 var(--s2) 0 0; font-size: var(--fs-13); font-weight: 700; color: var(--heading); }
+.ai-rule { font-size: var(--fs-12); color: var(--warn); background: var(--warn-bg); border-left: 3px solid var(--dj-gold); padding: 6px 10px; margin: var(--s2) 0 var(--s3); }
+.ai-fields > .ai-rule { margin: 0; }
+.ai-run { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s3); }
+.ai-run .btn.primary { padding: 8px 24px; font-size: var(--fs-13); }
+.ai-pii:empty { display: none; }
+.ai-pii .notice { align-items: flex-start; }
+.ai-pii .notice:last-child { margin-bottom: 0; }
+.ai-pii ul { margin: 2px 0 0; padding-left: 18px; }
+
+/* ---- テキストの予測変換 + プルダウン ---- */
+.ai-combo { position: relative; display: flex; min-width: 0; }
+.ai-combo input.ai-combo-input { flex: 1; width: 100%; min-width: 0; padding-right: 30px; font-size: var(--fs-13); }
+.ai-combo.invalid input.ai-combo-input { border-color: var(--bad); }
+.ai-combo-toggle { position: absolute; right: 1px; top: 1px; bottom: 1px; width: 28px; border: 0; border-left: 1px solid var(--rule); background: var(--surface-low); color: var(--muted); font-size: 9px; border-radius: 0 var(--radius) var(--radius) 0; }
+.ai-combo-toggle:hover { background: var(--accent-soft); color: var(--heading); }
+.ai-combo-toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+.ai-combo-list { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 2px); margin: 0; padding: 4px 0; list-style: none; background: var(--surface); border: 1px solid var(--rule-strong); border-radius: var(--radius); box-shadow: var(--shadow-pop); max-height: 280px; overflow-y: auto; }
+.ai-combo-list[hidden] { display: none; }
+.ai-combo-list li[role='option'] { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); padding: 6px 10px; font-size: var(--fs-13); cursor: pointer; }
+.ai-combo-list li[role='option'].active { background: var(--accent-soft); color: var(--heading); }
+.ai-combo-list li .lbl { min-width: 0; overflow-wrap: anywhere; }
+.ai-combo-list li .hint { flex: none; font-size: var(--fs-11); color: var(--muted); white-space: nowrap; max-width: 50%; overflow: hidden; text-overflow: ellipsis; }
+.ai-combo-list li.note { padding: 6px 10px; font-size: var(--fs-11); color: var(--muted); border-top: 1px solid var(--rule); }
+.ai-combo-list li.note:first-child { border-top: 0; }
+
+/* 複数（チップ） */
+.ai-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.ai-tags > .ai-combo { flex: 1 1 200px; }
+.ai-tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ai-tag { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; background: var(--accent-soft); color: var(--heading); font-size: var(--fs-12); font-weight: 600; padding: 2px 2px 2px 9px; border-radius: 999px; }
+.ai-tag > span { overflow-wrap: anywhere; }
+.ai-tag button { border: 0; background: transparent; color: var(--heading); width: 20px; height: 20px; line-height: 1; border-radius: 50%; font-size: 14px; }
+.ai-tag button:hover { background: var(--surface); }
+
+/* 選んだ企業・求人 */
+.ai-company-picked { display: flex; align-items: center; gap: var(--s2); min-width: 0; padding: 4px 4px 4px 10px; border: 1px solid var(--dj-navy); background: var(--accent-soft); border-radius: var(--radius); }
+.ai-company-picked .nm { font-weight: 700; color: var(--heading); font-size: var(--fs-13); min-width: 0; overflow-wrap: anywhere; }
+.ai-company-picked .hint { flex: 1; font-size: var(--fs-11); color: var(--ink-soft); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-company-picked .nm:last-of-type { flex: 1; }
+.ai-company-picked button { margin-left: auto; flex: none; border: 0; background: transparent; color: var(--heading); width: 24px; height: 24px; border-radius: var(--radius); font-size: 16px; line-height: 1; }
+.ai-company-picked button:hover { background: var(--surface); }
+.ai-company-picked.disabled { opacity: 0.6; }
+
+/* ---- 状態（作成中 / 未起動 / 失敗 / 完了） ---- */
+.ai-status { display: flex; align-items: center; gap: var(--s3); padding: 10px 12px; font-size: var(--fs-12); border-left: 3px solid var(--accent); background: var(--accent-soft); }
+.ai-status .msg { flex: 1; min-width: 0; }
+.ai-status .msg b { display: block; font-weight: 600; }
+.ai-status .acts { display: flex; flex-wrap: wrap; gap: 6px; flex: none; }
+.ai-status .acts:empty { display: none; }
+.ai-status.queued { border-left-color: var(--warn); background: var(--warn-bg); color: var(--warn); }
+.ai-status.failed { border-left-color: var(--bad); background: var(--bad-bg); color: var(--bad); }
+.ai-status.done { border-left: 0; background: transparent; padding: 0; }
+.ai-status.done .msg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ai-status-card .card-head h2 { overflow-wrap: anywhere; }
+.ai-spinner { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--rule-strong); border-top-color: var(--accent); }
+.ai-spinner.on { animation: ai-spin 0.9s linear infinite; }
+@keyframes ai-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ai-spinner.on { animation: none; } }
+
+/* ---- 履歴 ---- */
+.ai-history { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); max-height: 360px; overflow-y: auto; }
+.ai-history li { display: flex; align-items: center; gap: var(--s2); border-bottom: 1px solid var(--rule); }
+.ai-history li.active { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--dj-navy); }
+.ai-history .row { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; text-align: left; border: 0; background: transparent; padding: 8px 10px; }
+.ai-history .row:hover { background: var(--surface-low); }
+.ai-history li.active .row:hover { background: transparent; }
+.ai-history .ttl { font-size: var(--fs-13); font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-history .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-11); color: var(--muted); }
+.ai-history .del { flex: none; display: inline-flex; gap: 4px; padding-right: 6px; }
+
+/* ---- 結果 ---- */
+.ai-section .lead { margin-bottom: var(--s3); }
+.ai-summary { font-size: var(--fs-14); line-height: 1.7; }
+.ai-basis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s2); margin: 0; }
+@media (max-width: 640px) { .ai-basis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ai-basis > div { background: var(--surface-low); border: 1px solid var(--rule); padding: 8px 10px; }
+.ai-basis dt { font-size: var(--fs-11); font-weight: 700; color: var(--muted); }
+.ai-basis dd { margin: 2px 0 0; font-size: var(--fs-20); font-weight: 700; color: var(--ink); line-height: var(--lh-tight); }
+.ai-basis dd.strong { color: var(--heading); }
+.ai-basis dd small { font-size: var(--fs-12); font-weight: 500; color: var(--muted); }
+.ai-caveat { margin-top: var(--s3); font-size: var(--fs-12); color: var(--warn); background: var(--warn-bg); padding: 6px 10px; border-left: 3px solid var(--dj-gold); }
+.ai-traits { margin: 0; padding: 0; list-style: none; counter-reset: trait; display: grid; gap: var(--s2); }
+.ai-traits li { counter-increment: trait; display: grid; grid-template-columns: 24px minmax(0, 1fr); column-gap: var(--s2); font-size: var(--fs-13); }
+.ai-traits li::before { content: counter(trait); grid-row: 1 / span 2; width: 22px; height: 22px; border-radius: 50%; background: var(--dj-navy); color: var(--surface); font-family: var(--font-body); font-size: var(--fs-11); font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+.ai-traits li b { color: var(--heading); }
+.ai-traits li span { color: var(--ink-soft); }
+.ai-review { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s2); }
+.ai-review li { border: 1px solid var(--rule); border-left: 3px solid var(--rule-strong); padding: 8px 12px; font-size: var(--fs-13); }
+.ai-review li.sev-high { border-left-color: var(--bad); }
+.ai-review li.sev-mid { border-left-color: var(--warn); }
+.ai-review .head { display: flex; align-items: center; gap: var(--s2); margin-bottom: 4px; }
+.ai-review .part { font-weight: 700; color: var(--heading); }
+.ai-review .issue { color: var(--ink); }
+.ai-review .suggestion { margin-top: 4px; color: var(--ink-soft); }
+.ai-review .tag, .ai-rationale .tag { display: inline-block; margin-right: 6px; font-size: var(--fs-11); font-weight: 700; color: var(--dj-gold-deep); background: var(--dj-gold-pale); padding: 0 6px; border-radius: var(--radius); }
+.ai-edited { display: inline-flex; align-items: center; gap: 6px; }
+
+/* 案（文面・求人票） */
+.ai-draft { margin-top: var(--s3); display: grid; gap: var(--s3); }
+.ai-draft-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.ai-draft-part .head { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); margin-bottom: 4px; }
+.ai-draft-part .head h3 { margin: 0; }
+.ai-draft-part .text { background: var(--surface-low); border: 1px solid var(--rule); padding: 10px 12px; font-size: var(--fs-13); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-draft-part:not(.multi) .text { font-weight: 600; }
+.ai-draft-part input.ctl, .ai-draft-part textarea.ctl { width: 100%; min-width: 0; font-size: var(--fs-13); line-height: 1.7; border-color: var(--dj-gold); }
+.ai-draft-part textarea.ctl { resize: vertical; }
+.ai-rationale { font-size: var(--fs-12); color: var(--ink-soft); }

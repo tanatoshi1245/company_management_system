@@ -1,6 +1,6 @@
 import type { MeResponse, MetaResponse } from '../../../shared/schema/me';
 import { isoToJstDisplay } from '../../../shared/calendar/periods';
-import { Link, type RouteKey } from '../../router';
+import { Link, useLocation, type RouteKey } from '../../router';
 import { Icon, type IconName } from './Icon';
 import { fmtYmd } from '../../lib/format';
 
@@ -10,8 +10,29 @@ const NAV: { key: RouteKey[]; to: string; label: string; icon: IconName }[] = [
   { key: ['scoutUnused'], to: '/scout-unused', label: 'スカウト未利用', icon: 'edit' },
 ];
 
-/** 左の固定レール: ブランド・ナビ・データの鮮度・ログイン者 */
+/** AI メニュー（docs/AI機能.md。2026-11-25 ユーザー指示: 左のレールにサブメニューを設ける） */
+const AI_NAV: { key: RouteKey; to: string; label: string; icon: IconName }[] = [
+  { key: 'aiReport', to: '/ai/report', label: 'AI 分析とレポート生成', icon: 'slides' },
+  { key: 'aiScout', to: '/ai/scout', label: 'スカウト文面の AI 添削', icon: 'mail' },
+  { key: 'aiJob', to: '/ai/job', label: '求人の AI 添削', icon: 'doc' },
+];
+
+/**
+ * AI メニューのリンク先。企業ページ（/companies/:id）を開いているときは、その企業を引き継ぐ。
+ * 「AI 分析とレポート生成」には、表示している期間・アカウント種別も引き継ぐ（表示中の内容でレポートを作るため）
+ */
+export function aiNavTarget(to: string, pathname: string, search: string): string {
+  const m = /^\/companies\/(\d{1,12})\/?$/.exec(pathname);
+  if (!m) return to;
+  const cur = new URLSearchParams(search);
+  const q = new URLSearchParams({ company: m[1] });
+  if (to === '/ai/report') for (const k of ['from', 'to', 'account']) if (cur.get(k)) q.set(k, cur.get(k)!);
+  return `${to}?${q.toString()}`;
+}
+
+/** 左の固定レール: ブランド・ナビ・AI メニュー・データの鮮度・ログイン者 */
 export function LeftRail({ me, meta, active }: { me: MeResponse | null; meta: MetaResponse | null; active: RouteKey | null }) {
+  const { pathname, search } = useLocation();
   return (
     <>
       <div className="rail-brand">
@@ -24,6 +45,15 @@ export function LeftRail({ me, meta, active }: { me: MeResponse | null; meta: Me
       <nav className="rail-nav" aria-label="主なページ">
         {NAV.map((n) => (
           <Link key={n.to} to={n.to} aria-current={active && n.key.includes(active) ? 'page' : undefined}>
+            <Icon name={n.icon} />
+            {n.label}
+          </Link>
+        ))}
+      </nav>
+      <nav className="rail-nav rail-sub" aria-label="AI メニュー">
+        <div className="rail-sub-title">AI メニュー</div>
+        {AI_NAV.map((n) => (
+          <Link key={n.to} to={aiNavTarget(n.to, pathname, search)} aria-current={active === n.key ? 'page' : undefined}>
             <Icon name={n.icon} />
             {n.label}
           </Link>

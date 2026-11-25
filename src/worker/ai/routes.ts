@@ -73,7 +73,13 @@ aiRoutes.get('/ai/jobs', async (c) => {
   const q = parseQuery(c, ListQuerySchema);
   const db = dbOf(c);
   const now = new Date();
-  const rows = db ? await new AiJobsRepo(db).listByCompany(q.company, q.kind) : [];
+  // サンプルデータ（PR プレビュー・ローカル）では、表がまだ無い D1 でも画面を確かめられるよう、履歴を空で返す
+  const rows = db
+    ? await new AiJobsRepo(db).listByCompany(q.company, q.kind).catch((e: unknown) => {
+        if (isMock(c.env) && /no such table/i.test(e instanceof Error ? e.message : String(e))) return [];
+        throw e;
+      })
+    : [];
   const body: AiJobListResponse = { jobs: rows.map((r) => toSummary(withExpiry(r, now))) };
   return c.json(body, 200, NO_STORE);
 });

@@ -1,0 +1,40 @@
+/* ① AI 分析とレポート生成（features/ai/report）の画面。共通の部品は ai.css、スライドの中は ai-slide.css */
+.air-top { display: grid; grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr); gap: var(--s4); align-items: start; }
+@media (max-width: 1100px) { .air-top { grid-template-columns: minmax(0, 1fr); } }
+.air-form { display: flex; flex-direction: column; gap: var(--s3); }
+.air-form-row { display: flex; flex-wrap: wrap; gap: var(--s3) var(--s5); align-items: flex-end; }
+.air-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.air-field--company { flex: 1 1 280px; }
+.air-field > label { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: var(--fs-11); font-weight: 700; color: var(--muted); letter-spacing: 0.04em; }
+.air-field textarea.ctl, .air-field input.ctl { width: 100%; }
+.air-field textarea.ctl { resize: vertical; line-height: 1.5; }
+.air-field.has-error .ctl { border-color: var(--bad); }
+.air-period { display: inline-flex; align-items: center; gap: 6px; }
+.air-count { font-weight: 500; letter-spacing: 0; }
+.air-count.over { color: var(--bad); font-weight: 700; }
+.air-hint { font-size: var(--fs-11); color: var(--muted); margin: 0; }
+.air-err { font-size: var(--fs-11); color: var(--bad); }
+.air-run { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.air-summary { margin-top: var(--s3); font-size: var(--fs-13); line-height: 1.7; color: var(--ink-soft); }
+
+.air-viewer .card-title { gap: 8px; }
+.air-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.air-progress { display: block; width: 100%; height: 6px; margin: 0 0 var(--s3); accent-color: var(--dj-navy); }
+.air-grid { display: grid; grid-template-columns: 148px minmax(0, 1fr) 320px; gap: var(--s4); align-items: start; }
+@media (max-width: 1200px) { .air-grid { grid-template-columns: 120px minmax(0, 1fr); } .air-edit { grid-column: 1 / -1; max-height: none; } }
+.air-thumbs { list-style: none; margin: 0; padding: 0 4px 0 0; display: flex; flex-direction: column; gap: 8px; max-height: 720px; overflow-y: auto; }
+.air-thumb { position: relative; display: block; width: 100%; padding: 3px; border: 1px solid var(--rule); background: var(--surface); border-radius: var(--radius); text-align: left; }
+.air-thumb:hover { border-color: var(--rule-strong); }
+.air-thumb.on { border-color: var(--dj-navy); box-shadow: 0 0 0 1px var(--dj-navy); }
+.air-thumb.bad { border-color: var(--bad); }
+.air-thumb .rs-stage { pointer-events: none; }
+.air-thumb-label { display: block; margin-top: 2px; font-size: 10px; color: var(--muted); }
+.air-thumb-label .num { font-weight: 700; color: var(--dj-navy); margin-right: 2px; }
+.air-main { min-width: 0; }
+.air-main-slide { border: 1px solid var(--rule); box-shadow: 0 1px 3px rgba(16, 24, 64, 0.08); }
+.air-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: var(--s2); font-size: var(--fs-12); }
+.air-nav-ops { margin-left: auto; display: inline-flex; gap: 4px; }
+.air-edit { display: flex; flex-direction: column; gap: 10px; max-height: 720px; overflow-y: auto; padding-right: 4px; }
+.air-edit h3 { margin: 0; }
+/* PDF 用に、画面の外で実寸のスライドを描く場所 */
+.air-offscreen { position: fixed; left: -30000px; top: 0; }

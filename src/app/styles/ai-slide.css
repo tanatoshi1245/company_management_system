@@ -1,0 +1,947 @@
+/* ============================================================
+   AI 分析とレポート生成のスライド用スタイル（1920×1080 固定）。
+   複製元: slide_creator の src/app/styles/slide.css（使うクラスだけ）と tokens.css（--dj-* と書体の名前）。
+   このアプリの tokens.css にも --dj-* があるが値が違う（画面用）ので、スライドの色は .dj-slide の中だけで上書きする。
+   枠（左のネイビーの帯・章名・ロゴ・タイトル・イエローのバー・出典の注記・フッター）は
+   features/ai/report/slides/SlideFrame.tsx が出す。layout ごとの部品は .content の中だけを描く。
+   書き足した部分は、末尾の「このアプリで足したもの」にまとめる。
+   ============================================================ */
+
+/* ---- tokens.css（スライド用の --dj-*・書体・影）。画面用のトークンを上書きしないよう .dj-slide に閉じる ---- */
+.dj-slide {
+  --dj-navy: #000066;
+  --dj-navy-deep: #00004a;
+  --dj-navy-soft: #3f43b0;
+  --dj-navy-tint: #eef0fa;
+  --dj-gold: #ffb81c;
+  --dj-gold-bright: #ffb81c;
+  --dj-gold-deep: #9c6500;
+  --dj-gold-pale: #fff3d1;
+  --dj-surface: #ffffff;
+  --dj-surface-low: #f3f5fb;
+  --dj-white: #ffffff;
+  --dj-ink: #15182d;
+  --dj-ink-soft: #454a66;
+  --dj-muted: #767c96;
+  --dj-rule: #e2e5f0;
+  --dj-rule-strong: #c3c8da;
+  --dj-green: #0b8a4d;
+  --dj-red: #d0342c;
+  --font-display: 'Hanken Grotesk', 'Noto Sans JP', system-ui, sans-serif;
+  --font-body: 'Inter', 'Noto Sans JP', system-ui, sans-serif;
+  --font-jp: 'Noto Sans JP', 'Inter', system-ui, sans-serif;
+  --shadow-card: 0 1px 2px rgba(16, 24, 64, 0.05);
+  /* 画面用の tokens.css の --accent（単一系列の色）を引き継がない。カードの上端の色の既定 = ネイビー */
+  --accent: var(--dj-navy);
+}
+
+.dj-slide,
+.dj-slide * {
+  box-sizing: border-box;
+}
+
+.dj-slide {
+  --pad-l: 104px;
+  --pad-r: 88px;
+  --pad-top: 104px;
+  --pad-bottom: 100px;
+  --footer-h: 54px;
+  background: var(--dj-surface);
+  color: var(--dj-ink);
+  font-family: var(--font-jp);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  /*
+   * 文字の基本の設定は、スライド自身が持つ（置かれた画面から引き継がない）。
+   * 引き継ぐと、アプリの画面（.ui = 14px・行間 1.6）と、見本の画像・文字の大きさの検査を作る画面（16px・行間は標準）で
+   * 行間が変わり、同じスライドでも収まり方（= 文字の大きさ）が変わる。値は、検査を通している側（ブラウザの標準）にそろえる。
+   */
+  font-size: 16px;
+  line-height: normal;
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-align: start;
+  text-transform: none;
+  text-indent: 0;
+  white-space: normal;
+}
+.dj-slide[lang='en'] {
+  font-family: var(--font-body);
+}
+/*
+ * 文字のルール（docs/スライドの文字ルール.md）。1920×1080 の 1px = 0.5pt（16:9 の 960×540pt）。
+ *   スライドタイトル 52px = 26pt ／ リード文 38px = 19pt ／ 中見出し 32〜36px = 16〜18pt ／ 本文 28〜32px = 14〜16pt ／ 補足・出典 20〜24px = 10〜12pt
+ * 本文（.content の中）はテンプレートに拡大前の値を書く。スライド上では SlideFrame が上の範囲に収める（下の [data-fx]）。
+ */
+.dj-slide {
+  --fs-title: 52px;
+  --fs-lead: 38px;
+  --fs-note-chrome: 20px;
+  /* 本文エリアの中（拡大前）。13px 以下 = 補足、14〜19px = 本文、20〜27px = 中見出し、28px〜 = 大きな数字 */
+  --fs-heading: 22px;
+  --fs-body: 16px;
+  --fs-note: 13px;
+}
+/* 日本語は文節で改行する（「…に関 / するご提案」のような語の途中の改行を防ぐ。Chrome 119+）。
+   見出し・短いラベルは行の長さをそろえ、文章は最後の行に 1〜2 文字だけ残らないようにする */
+.dj-slide[lang='ja'] {
+  word-break: auto-phrase;
+}
+.dj-slide {
+  text-wrap: pretty;
+  overflow-wrap: break-word;
+}
+.dj-slide :is(h1, h2, h3, h4, th, .slide-lead, .panel-title, .kpi-title, .pillar-title, .agenda-title, .divider-title, .cover-title) {
+  text-wrap: balance;
+}
+
+/* ============================================================
+   枠
+   ============================================================ */
+/* 左端の帯: ネイビーの地に、タイトルの高さでイエローを差す */
+.dj-slide .chrome-accent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  background: var(--dj-navy);
+  pointer-events: none;
+}
+.dj-slide .chrome-accent .gold {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 104px;
+  height: 108px;
+  background: var(--dj-gold);
+}
+.dj-slide .chrome-accent .navy {
+  display: none;
+}
+
+/* 世界地図のドット（白・透過）。表紙と章扉だけに出す */
+.dj-slide .chrome-dotmap {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+}
+
+.dj-slide .topbar {
+  position: absolute;
+  top: 40px;
+  left: var(--pad-l);
+  right: var(--pad-r);
+  height: 32px;
+  display: flex;
+  align-items: center;
+  z-index: 2;
+  font-family: var(--font-body);
+  font-size: var(--fs-note-chrome);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--dj-muted);
+}
+.dj-slide[lang='ja'] .topbar {
+  font-family: var(--font-jp);
+  letter-spacing: 0.08em;
+}
+.dj-slide .topbar .section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.dj-slide .topbar .section::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--dj-gold);
+}
+
+.dj-slide .chrome-logo {
+  position: absolute;
+  right: var(--pad-r);
+  top: 32px;
+  width: 172px;
+  height: auto;
+  user-select: none;
+  z-index: 2;
+}
+
+.dj-slide .chrome-footer {
+  position: absolute;
+  left: var(--pad-l);
+  right: var(--pad-r);
+  bottom: 0;
+  height: var(--footer-h);
+  border-top: 1px solid var(--dj-rule);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--dj-muted);
+  font-family: var(--font-body);
+  font-size: var(--fs-note-chrome);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.dj-slide .chrome-footer .confidential {
+  text-transform: uppercase;
+}
+.dj-slide .chrome-footer .page {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: var(--dj-navy);
+  min-width: 44px;
+  text-align: right;
+  font-feature-settings: 'tnum' 1;
+}
+
+.dj-slide .frame {
+  position: absolute;
+  inset: 0;
+  padding: var(--pad-top) var(--pad-r) var(--pad-bottom) var(--pad-l);
+  display: flex;
+  flex-direction: column;
+  z-index: 1;
+}
+
+/* ============================================================
+   見出し
+   ============================================================ */
+.dj-slide .kicker {
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: var(--dj-gold-deep);
+  letter-spacing: 0.1em;
+  margin: 0 0 12px;
+}
+/* スライドタイトル: 「何のページか」。26pt */
+.dj-slide .slide-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-title);
+  line-height: 1.24;
+  letter-spacing: -0.01em;
+  font-weight: 800;
+  color: var(--dj-navy);
+  margin: 0;
+  max-width: 1560px;
+  text-wrap: balance;
+}
+/* リード文: タイトルの下に 1〜2 行で「このページで一番言いたい結論」。19pt */
+.dj-slide .slide-lead {
+  margin: 14px 0 0;
+  max-width: 1640px;
+  font-size: var(--fs-lead);
+  line-height: 1.4;
+  font-weight: 800;
+  color: var(--dj-ink);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dj-slide .slide-lead .accent {
+  color: var(--dj-gold-deep);
+}
+.dj-slide[lang='ja'] .slide-title {
+  font-family: var(--font-jp);
+  letter-spacing: 0;
+}
+.dj-slide .slide-title .accent,
+.dj-slide .accent {
+  color: var(--dj-gold-deep);
+}
+.dj-slide .title-rule {
+  width: 96px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--dj-gold);
+  margin: 20px 0 28px;
+  flex: none;
+}
+.dj-slide .subtitle {
+  font-size: 26px;
+  line-height: 1.65;
+  color: var(--dj-ink-soft);
+  margin: 0;
+  max-width: 1080px;
+}
+
+/* 本文。.content が表示領域、.content-fit がその中身（内容量に合わせて SlideFrame が拡大・縮小する） */
+.dj-slide .content {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.dj-slide .content-fit {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  transform-origin: top left;
+}
+/* SlideFrame が「語の途中で折り返さずに収まるか」を試す間だけ付ける */
+.dj-slide .content-fit[data-strict],
+.dj-slide .content-fit[data-strict] * {
+  overflow-wrap: normal !important;
+}
+/* grid・flex の子は中身の幅で広がらない（1fr の列が、長い語のある列だけ太くなるのを防ぐ）。テンプレートの minWidth 指定が優先 */
+.dj-slide .content-fit :where(*) {
+  min-width: 0;
+}
+/*
+ * 本文エリアの文字サイズ。SlideFrame が文字を持つ要素に --fsb（テンプレートに書いたサイズ）と data-fx（役割）を付け、
+ * 全体の倍率 --z と本文の下限 --fb を決める。スライド上の大きさ = ここで決まる値 × --z。
+ *   n 補足（13px 以下）   : 下限 --fb × 0.72（通常 20px = 10pt）／上限 24px = 12pt
+ *   b 本文（14〜19px）    : 下限 --fb（通常 28px = 14pt）／上限 32px = 16pt
+ *   h 中見出し（20〜27px）: 下限 --fb × 1.2（通常 34px = 17pt）／上限 36px = 18pt
+ *   d 大きな数字（28px〜）: 下限 --fb × 1.2、上限なし
+ */
+.dj-slide .content-fit [data-fx='n'] {
+  font-size: clamp(calc(var(--fb, 0px) * 0.72 / var(--z, 1)), var(--fsb), calc(24px / var(--z, 1))) !important;
+}
+.dj-slide .content-fit [data-fx='b'] {
+  font-size: clamp(calc(var(--fb, 0px) / var(--z, 1)), var(--fsb), calc(32px / var(--z, 1))) !important;
+}
+.dj-slide .content-fit [data-fx='h'] {
+  font-size: clamp(calc(var(--fb, 0px) * 1.2 / var(--z, 1)), var(--fsb), calc(36px / var(--z, 1))) !important;
+}
+.dj-slide .content-fit [data-fx='d'] {
+  font-size: max(calc(var(--fb, 0px) * 1.2 / var(--z, 1)), var(--fsb)) !important;
+}
+
+/* 本文の下の小さな注記（出典・サンプルの印）。本文の大きさを変えないよう、本文の下の余白（--pad-bottom）に置く。11pt */
+.dj-slide .source {
+  position: absolute;
+  left: var(--pad-l);
+  right: var(--pad-r);
+  bottom: calc(var(--footer-h) + 9px);
+  font-size: 22px;
+  line-height: 1.35;
+  color: var(--dj-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.dj-slide .small {
+  font-size: 14px;
+  color: var(--dj-muted);
+}
+.dj-slide .num {
+  font-family: var(--font-display);
+  font-feature-settings: 'tnum' 1;
+}
+.dj-slide .mute {
+  color: var(--dj-muted);
+}
+
+/* ============================================================
+   表紙・章扉（ネイビーの全面）
+   ============================================================ */
+.dj-slide.slide--cover {
+  background: var(--dj-navy);
+  background-image: linear-gradient(135deg, #000066 0%, #00004a 100%);
+  color: #fff;
+}
+.dj-slide.slide--cover .chrome-accent {
+  left: 0;
+  right: 0;
+  top: auto;
+  bottom: 0;
+  width: auto;
+  height: 14px;
+  background: var(--dj-gold);
+}
+.dj-slide.slide--cover .chrome-accent .gold {
+  display: none;
+}
+.dj-slide.slide--cover .chrome-dotmap {
+  right: -40px;
+  top: 56px;
+  width: 1500px;
+  height: auto;
+  opacity: 0.22;
+}
+.dj-slide.slide--cover .chrome-footer {
+  border-top-color: rgba(255, 255, 255, 0.22);
+  color: rgba(255, 255, 255, 0.62);
+  bottom: 14px;
+}
+.dj-slide.slide--cover .chrome-footer .page {
+  color: #fff;
+}
+.dj-slide.slide--cover .chrome-logo {
+  width: 210px;
+  top: 44px;
+}
+.dj-slide.slide--cover .frame {
+  justify-content: center;
+  padding-top: 120px;
+  padding-bottom: 120px;
+}
+.dj-slide.slide--cover .kicker {
+  color: var(--dj-gold);
+}
+.dj-slide.slide--cover .topbar {
+  display: none;
+}
+
+.dj-slide .cover-title {
+  font-family: var(--font-display);
+  font-size: 76px;
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  font-weight: 800;
+  color: #fff;
+  margin: 0;
+  max-width: 1480px;
+  padding-left: 36px;
+  border-left: 12px solid var(--dj-gold);
+}
+.dj-slide[lang='ja'] .cover-title {
+  font-family: var(--font-jp);
+  letter-spacing: 0;
+}
+.dj-slide .cover-title em {
+  color: var(--dj-gold);
+  font-style: normal;
+}
+.dj-slide .cover-sub {
+  margin-top: 40px;
+  font-size: 42px;
+  line-height: 1.4;
+  font-weight: 800;
+  color: var(--dj-gold);
+}
+.dj-slide .cover-sub .dear {
+  font-size: 28px;
+  font-weight: 600;
+  margin-left: 16px;
+  color: rgba(255, 255, 255, 0.86);
+}
+.dj-slide .cover-meta {
+  margin-top: 60px;
+  padding-top: 28px;
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 40px;
+  font-size: 26px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.78);
+  max-width: 1480px;
+}
+.dj-slide .cover-meta .label {
+  font-size: var(--fs-note-chrome);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dj-gold);
+  margin-bottom: 6px;
+}
+.dj-slide .cover-meta .org {
+  font-size: 32px;
+  font-weight: 800;
+  color: #fff;
+}
+
+/* ============================================================
+   カード・パネル（共通の面: 白地・細い罫線・角丸 16px）
+   ============================================================ */
+.dj-slide :is(.card-soft, .exec-card, .chart-panel, .card-panel, .pillar, .phase, .fourp-cell, .swot-cell, .roadmap, .recommend-list, .next90, .matrix-wrap, .table-wrap) {
+  background: var(--dj-white);
+  border: 1px solid var(--dj-rule);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+}
+.dj-slide .card-soft {
+  padding: 20px 24px;
+}
+
+/* 上端・左端のアクセント（角丸に沿う）。色は --accent で差し替える */
+.dj-slide :is(.phase, .step-box) {
+  box-shadow: inset 0 5px 0 var(--accent, var(--dj-navy));
+}
+
+/* ============================================================
+   KPI
+   ============================================================ */
+.dj-slide .kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.dj-slide .kpi-card {
+  background: var(--dj-surface-low);
+  border-radius: 16px;
+  padding: 18px 22px;
+}
+.dj-slide .kpi-card.accent-gold {
+  background: var(--dj-gold-pale);
+}
+.dj-slide .kpi-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dj-ink-soft);
+  letter-spacing: 0.02em;
+}
+.dj-slide .kpi-big {
+  font-family: var(--font-display);
+  font-size: 60px;
+  line-height: 1.05;
+  font-weight: 800;
+  color: var(--dj-navy);
+  margin: 12px 0 8px;
+  letter-spacing: -0.02em;
+  font-feature-settings: 'tnum' 1;
+}
+.dj-slide .kpi-unit {
+  font-family: var(--font-jp);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dj-navy);
+  margin-left: 6px;
+  letter-spacing: 0;
+}
+/* 英語の資料では、日本語の書体を先頭にしない（docs/スライドの文字ルール.md 7 章）。単位（+・% など）も本文と同じ Inter */
+.dj-slide[lang='en'] .kpi-unit {
+  font-family: var(--font-body);
+}
+
+.dj-slide .kpi-note {
+  font-size: 15px;
+  color: var(--dj-ink-soft);
+  line-height: 1.45;
+  margin-top: 10px;
+}
+
+/* ============================================================
+   表
+   ============================================================ */
+.dj-slide .table-wrap {
+  overflow: hidden;
+}
+.dj-slide table.consult-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 18px;
+}
+.dj-slide .consult-table th {
+  text-align: left;
+  background: var(--dj-navy);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 16px 20px;
+}
+.dj-slide .consult-table td {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--dj-rule);
+  vertical-align: middle;
+}
+.dj-slide .consult-table tbody tr:nth-child(even) td {
+  background: #fafbfe;
+}
+.dj-slide .consult-table tr:last-child td {
+  border-bottom: 0;
+}
+.dj-slide .consult-table .focus,
+.dj-slide .consult-table tbody tr.focus td {
+  color: var(--dj-navy);
+  font-weight: 800;
+  background: var(--dj-gold-pale);
+}
+
+.dj-slide .step-flow {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 14px;
+  align-items: stretch;
+}
+.dj-slide .step-flow .step-box {
+  background: var(--dj-white);
+  border: 1px solid var(--dj-rule);
+  border-radius: 14px;
+  padding: 18px 18px 14px;
+  position: relative;
+}
+.dj-slide .step-flow .step-box.gold {
+  --accent: var(--dj-gold);
+}
+.dj-slide .step-flow .step-box .step-no {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 26px;
+  color: var(--dj-gold-deep);
+}
+.dj-slide .step-flow .step-box .step-title {
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--dj-navy);
+  margin: 4px 0 6px;
+}
+.dj-slide .step-flow .step-box .step-body {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--dj-ink-soft);
+}
+
+/* SVG のグラフ */
+.dj-slide .chart-svg text {
+  font-family: var(--font-body);
+}
+.dj-slide .axis {
+  stroke: var(--dj-rule-strong);
+  stroke-width: 1;
+}
+.dj-slide .grid-line {
+  stroke: var(--dj-rule);
+  stroke-width: 1;
+}
+.dj-slide .bar-muted {
+  fill: #c9cedf;
+}
+.dj-slide .swatch-muted {
+  background: #c9cedf;
+}
+.dj-slide .bar-main {
+  fill: var(--dj-navy);
+}
+.dj-slide .bar-gold {
+  fill: var(--dj-gold);
+}
+.dj-slide .line-gold {
+  stroke: var(--dj-gold);
+  stroke-width: 4;
+  fill: none;
+}
+.dj-slide .label-muted {
+  fill: var(--dj-muted);
+  font-size: 18px;
+}
+.dj-slide .label-main {
+  fill: var(--dj-navy);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+/* ============================================================
+   このアプリで足したもの（layout ごとの部品。features/ai/report/slides/layouts.tsx・charts.tsx）。
+   色・角丸・余白は上の slide_creator の値（--dj-*、角丸 14〜16px）にそろえる。文字の大きさは拡大前の値
+   （13px 以下 = 補足、14〜19px = 本文、20〜27px = 中見出し、28px〜 = 大きな数字）。
+   ============================================================ */
+.dj-slide .rs-fill {
+  flex: 1;
+  min-height: 0;
+}
+/* 良し悪しの縁（カードの上端）と札。札は必ず言葉つき */
+.dj-slide .rs-edge--good {
+  --accent: var(--dj-green);
+}
+.dj-slide .rs-edge--warn {
+  --accent: var(--dj-gold);
+}
+.dj-slide .rs-edge--bad {
+  --accent: var(--dj-red);
+}
+.dj-slide .rs-edge--neutral {
+  --accent: var(--dj-navy);
+}
+.dj-slide :is(.rs-card, .rs-kpi) {
+  box-shadow: inset 0 5px 0 var(--accent, var(--dj-navy));
+}
+.dj-slide .rs-tone {
+  flex: none;
+  padding: 2px 10px 3px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.dj-slide .rs-tone--good {
+  background: #e3f4ea;
+  color: #075c33;
+}
+.dj-slide .rs-tone--warn {
+  background: var(--dj-gold-pale);
+  color: var(--dj-gold-deep);
+}
+.dj-slide .rs-tone--bad {
+  background: #fdeceb;
+  color: #a3261f;
+}
+/* 本文の下の 1 文 */
+.dj-slide .rs-comment {
+  flex: none;
+  margin-top: 14px;
+  padding: 12px 20px;
+  border-radius: 14px;
+  background: var(--dj-navy-tint);
+  color: var(--dj-navy);
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+/* 要約: ラベルと文の行 */
+.dj-slide .rs-rows {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  gap: 12px;
+}
+.dj-slide .rs-row {
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  align-items: center;
+  gap: 24px;
+  padding: 10px 24px;
+  box-shadow: inset 6px 0 0 var(--dj-gold);
+}
+.dj-slide .rs-row-label {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--dj-navy);
+}
+.dj-slide .rs-row-text {
+  font-size: 16px;
+  line-height: 1.6;
+}
+/* KPI のカード */
+.dj-slide .rs-kpi {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 16px 22px;
+}
+.dj-slide .rs-kpi-head,
+.dj-slide .rs-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.dj-slide .rs-kpi .kpi-big {
+  margin: 8px 0 4px;
+  white-space: nowrap;
+}
+.dj-slide .rs-kpi .kpi-note {
+  font-size: 13px;
+  margin-top: 4px;
+}
+/* 分かったこと・ご提案のカード */
+.dj-slide .rs-cards {
+  display: grid;
+  gap: 14px;
+}
+.dj-slide .rs-card {
+  display: flex;
+  flex-direction: column;
+  padding: 20px 22px 16px;
+}
+.dj-slide .rs-card-title {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--dj-navy);
+}
+.dj-slide .rs-card-body {
+  margin-top: 8px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--dj-ink);
+}
+.dj-slide .rs-effect {
+  margin-top: auto;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--dj-gold-pale);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dj-slide .rs-card-body + .rs-effect {
+  margin-top: auto;
+}
+.dj-slide .rs-effect-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dj-gold-deep);
+}
+.dj-slide .rs-effect-text {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--dj-ink);
+}
+/* 次の一歩: 上 = いつ、下 = 何を */
+.dj-slide .rs-when {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  border-bottom: 3px solid var(--dj-gold);
+  padding-bottom: 4px;
+}
+.dj-slide .rs-when-no {
+  flex: none;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--dj-gold-deep);
+}
+.dj-slide .rs-when-text {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--dj-navy);
+}
+.dj-slide .rs-next-what {
+  font-size: 17px;
+  line-height: 1.6;
+  font-weight: 500;
+}
+.dj-slide .step-flow .step-box .step-no {
+  flex: none;
+  white-space: nowrap;
+}
+.dj-slide .rs-td-head {
+  font-weight: 700;
+  color: var(--dj-navy);
+}
+/* チャート */
+.dj-slide .rs-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 24px;
+}
+.dj-slide .rs-chart {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.dj-slide .rs-legend {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 22px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dj-ink-soft);
+}
+.dj-slide .rs-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.dj-slide .rs-legend-unit {
+  margin-left: auto;
+  font-weight: 500;
+  color: var(--dj-muted);
+}
+.dj-slide .rs-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex: none;
+}
+.dj-slide .rs-chart-box {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.dj-slide .rs-chart-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* SVG の 1 = スライドの 1px（charts.tsx の useSlideBox）。目盛 11pt・最後の点の値 12pt */
+.dj-slide .rs-tick {
+  fill: var(--dj-muted);
+  font-size: 22px;
+  font-feature-settings: 'tnum' 1;
+}
+.dj-slide .rs-end {
+  fill: var(--dj-ink);
+  font-size: 24px;
+  font-weight: 700;
+  font-feature-settings: 'tnum' 1;
+}
+.dj-slide .rs-bars {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  align-items: center;
+}
+.dj-slide .rs-bar-row {
+  display: grid;
+  grid-template-columns: 30% 1fr 24%;
+  align-items: center;
+  gap: 16px;
+}
+.dj-slide .rs-bar-label {
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 500;
+  text-align: right;
+}
+.dj-slide .rs-bar-svg {
+  display: block;
+  overflow: visible;
+}
+.dj-slide .rs-bar-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 4px;
+  white-space: nowrap;
+}
+.dj-slide .rs-bar-num {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--dj-navy);
+}
+.dj-slide .rs-bar-unit {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dj-navy);
+}
+.dj-slide .rs-bar-compare {
+  flex-basis: 100%;
+  font-size: 13px;
+  color: var(--dj-muted);
+}
+
+/* 置かれた幅に合わせて縮める箱（16:9）。スライドの外側なので、文字の設定をスライドへ引き継がせない（.dj-slide が自分で持つ） */
+.rs-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: #fff;
+}
+.rs-stage-inner {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1920px;
+  height: 1080px;
+  transform-origin: top left;
+}

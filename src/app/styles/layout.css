@@ -17,6 +17,8 @@
 .rail-nav a[aria-current='page'] { background: var(--accent-soft); color: var(--heading); border-left-color: var(--dj-gold); }
 .rail-nav a .icon { color: var(--muted); }
 .rail-nav a[aria-current='page'] .icon { color: var(--heading); }
+.rail-sub { border-top: 1px solid var(--rule); padding-top: var(--s3); }
+.rail-sub-title { font-size: var(--fs-11); font-weight: 700; color: var(--muted); letter-spacing: 0.04em; padding: 0 10px 4px; }
 .rail-fresh { display: flex; flex-direction: column; gap: 3px; font-size: var(--fs-11); color: var(--muted); border-top: 1px solid var(--rule); padding-top: var(--s3); }
 .rail-fresh b { color: var(--ink-soft); font-weight: 600; }
 .rail-fresh .num { color: var(--ink); }
