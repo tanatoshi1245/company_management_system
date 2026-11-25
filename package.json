@@ -9,6 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "wrangler deploy",
+    "build:staging": "CLOUDFLARE_ENV=staging vite build",
+    "deploy:staging": "npm run build:staging && wrangler deploy && (wrangler d1 migrations apply CMS_DB --remote || echo '[deploy:staging] D1 のマイグレーションを自動で適用できませんでした。docs/テスト環境.md の手順 3 で適用してください')",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
     "test": "vitest run",
     "dryrun": "tsx scripts/bq-dryrun.ts",

@@ -51,7 +51,7 @@
   },
   "observability": { "enabled": true },
   // テスト環境（docs/テスト環境.md）。別の Worker `company-management-system-staging` として、`staging` ブランチから出す
-  // （Build command: CLOUDFLARE_ENV=staging npm run build、Deploy command: npx wrangler deploy。`--env staging` では切り替わらない =
+  // （Deploy command: npm run deploy:staging。`--env staging` では切り替わらない =
   // Vite の Cloudflare プラグインがビルドのときに環境を決めるため）。本番の Worker 名・URL・D1 は変えない。
   // 数値は本番と同じマート（読み取りだけ）、保存先（D1）は別。ログインは本番と同じ（Secret が無い間は 503）。
   // vars と d1_databases は env へ引き継がれないので、ここに全部書く。

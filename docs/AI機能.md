@@ -106,7 +106,7 @@ npx wrangler d1 migrations apply CMS_DB --remote
 | 項目 | 値 |
 |---|---|
 | リポジトリ | `tanatoshi1245/company_management_system` |
-| 環境 | **環境変数 `BQ_ACCESSOR_KEY` がある環境**（分析用のセッションと同じ環境。セッションが BigQuery を読むのに使う）。ネットワークは、`*.workers.dev`（このアプリ）・`secretmanager.googleapis.com`・`oauth2.googleapis.com`・`bigquery.googleapis.com`・npm（`registry.npmjs.org`）へ出られること |
+| 環境 | **環境変数 `BQ_ACCESSOR_KEY` がある環境**（分析用のセッションと同じ環境。セッションが BigQuery を読むのに使う）。ネットワークは、**このアプリの URL のホスト（`company-management-system.<サブドメイン>.workers.dev`。テスト環境も使うなら `company-management-system-staging.…` も）を Allowed domains に足す**（2026-11-25 時点の分析用の環境は `*.workers.dev` を許可していない。足さないと、セッションが結果を返せない）。`secretmanager.googleapis.com`・`oauth2.googleapis.com`・`bigquery.googleapis.com`・npm は、いまの設定で通る |
 | コネクタ | すべて外す（使わない） |
 | トリガー | API トリガーを足し、**Generate token** でトークンを発行する（1 度しか表示されない） |
 | プロンプト | 下の文をそのまま貼る |
