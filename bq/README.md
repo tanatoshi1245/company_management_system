@@ -99,3 +99,16 @@ bq query --use_legacy_sql=false 'SELECT * FROM `bq-hgt.dwh.cms_refresh_log` ORDE
 ## 失敗時
 - スクリプトは `BEGIN … EXCEPTION` で `cms_refresh_log` に `error` 行を残す。Worker は前日の `dataVersion` で配信を続け、画面の左レールに「今朝の更新に失敗」と出る
 - 再実行は冪等（全件差し替え / 当日分の DELETE → INSERT）。同じ日に何度実行してもよい
+
+## AI 機能の SQL（セッションが読む。マートではない）
+
+AI 機能（[docs/AI機能.md](../docs/AI機能.md)）で立ち上がった Claude Code のセッションが `npm run ai:sql` で実行する SQL（[`ai/<機能>/sql/`](../ai/README.md)）。**Worker は実行しない**（Worker が読むのは従来どおりマートだけ）。読むだけ（SELECT 1 文・`@param`）で、表は作らない。実行の前に必ず dry run し、宣言した上限を超えたら実行しない。
+
+| SQL | 読む表 | dry run（2026-11-25 実測） | 上限（`-- max_bytes`） | 実行時間・行数（実測） |
+|---|---|---|---|---|
+| `ai/scout/sql/peer_templates.sql` | cms_company_master / scouts / scout_histories / **messages**（subject・body） | 18.43 GB | 25 GB | 約 3〜4 秒・1 + 文面の数（既定で最大 1 + 5 社 × 3 + 自社 3 行。実測 11 行・28 行） |
+| `ai/job/sql/peer_jobs.sql` | cms_company_master / cms_company_job_monthly / **jobs_all**（job_description・application_condition） | 1.23 GB | 3 GB | 約 2 秒・1 + 上位の求人の数（既定 9 行） |
+| `ai/job/sql/target_job.sql` | cms_company_master / cms_company_job_monthly / **jobs_all** | 1.57 GB | 3 GB | 約 1 秒・0〜2 行（言語ごと） |
+
+- `messages` はパーティションもクラスタリングも無く、件名と本文を読むと期間によらず毎回 約 18〜20GB。② の依頼 1 件につき 1 回（[ai/session.md](../ai/session.md)）。依頼が増えて量が問題になったら、スカウトの最初の 1 通だけを持つマート（企業 × 文面 × 月）を日次で作り、SQL の読み先を差し替える
+- スキャン量は表の大きさとともに増える。SQL を変えたとき・上限に近づいたときは、この表を測り直す（`BQ_SA_KEY_FILE=… npm run ai:sql -- <機能>/<名前> --param company_id=<ID> … --dry`）
