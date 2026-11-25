@@ -240,8 +240,11 @@ describe('AiPageHeader・AiJobStatus・PiiNotice・CopyButton', () => {
     expect(document.querySelectorAll('.notice')).toHaveLength(0);
     rerender(<AiPageHeader kind="job" config={{ ...cfg, sampleMode: true, fireConfigured: false, canWrite: false }} />);
     expect(screen.getByText(AI_TEXT.sampleMode)).toBeTruthy();
-    expect(screen.getByText(AI_TEXT.readOnly)).toBeTruthy();
+    // サンプルデータ中は、仮の利用者でも見本を実行できるので「閲覧のみ」は出さない
+    expect(screen.queryByText(AI_TEXT.readOnly)).toBeNull();
     expect(screen.queryByText(AI_TEXT.fireMissing)).toBeNull();
+    rerender(<AiPageHeader kind="job" config={{ ...cfg, canWrite: false }} />);
+    expect(screen.getByText(AI_TEXT.readOnly)).toBeTruthy();
     rerender(<AiPageHeader kind="job" config={{ ...cfg, fireConfigured: false }} />);
     expect(screen.getByText(AI_TEXT.fireMissing)).toBeTruthy();
   });

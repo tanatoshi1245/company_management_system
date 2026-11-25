@@ -33,6 +33,7 @@ metaRoutes.get('/meta', async (c) => {
     holidaysVersion: HOLIDAYS_VERSION,
     dataSchemaVersion: DATA_VERSION,
     mock: isMock(c.env),
+    stage: c.env.APP_ENV?.trim() || 'production',
   };
   return c.json(body);
 });

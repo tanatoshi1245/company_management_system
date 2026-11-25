@@ -47,6 +47,8 @@ export const MetaResponseSchema = z.object({
   holidaysVersion: z.string(),
   dataSchemaVersion: z.number(),
   mock: z.boolean(),
+  /** どの環境か（wrangler.jsonc の APP_ENV）: production / staging（docs/テスト環境.md）/ preview */
+  stage: z.string().default('production'),
 });
 export type MetaResponse = z.infer<typeof MetaResponseSchema>;
 
