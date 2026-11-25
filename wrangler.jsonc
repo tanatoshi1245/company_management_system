@@ -49,5 +49,27 @@
       { "binding": "CMS_DB", "database_name": "company-management-system", "database_id": "4674c6c0-ec7d-487a-a0fc-24b374d818de", "migrations_dir": "d1/migrations" }
     ]
   },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // テスト環境（docs/テスト環境.md）。別の Worker `company-management-system-staging` として、`staging` ブランチから出す
+  // （Deploy command: npx wrangler deploy --env staging）。本番の Worker 名・URL・D1 は変えない。
+  // 数値は本番と同じマート（読み取りだけ）、保存先（D1）は別。ログインは本番と同じ（Secret が無い間は 503）。
+  // vars と d1_databases は env へ引き継がれないので、ここに全部書く。
+  // D1 は database_id を書かずに置く: 初回のデプロイで wrangler が作って結び付ける。作られなかったときは、
+  // ダッシュボードで作って database_id をここに書く（docs/テスト環境.md「うまくいかないとき」）
+  "env": {
+    "staging": {
+      "name": "company-management-system-staging",
+      "vars": {
+        "BQ_PROJECT": "bq-hgt",
+        "BQ_LOCATION": "asia-northeast1",
+        "BQ_MOCK": "0",
+        "CACHE_TTL_SEC": "0",
+        "ALLOWED_EMAIL_DOMAINS": "daijob.com,athuman.com",
+        "OWNER_SOURCE": "sales_staff",
+        "BENCH_MIN_N": "5",
+        "APP_ENV": "staging"
+      },
+      "d1_databases": [{ "binding": "CMS_DB", "database_name": "company-management-system-staging", "migrations_dir": "d1/migrations" }]
+    }
+  }
 }

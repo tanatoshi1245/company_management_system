@@ -7,6 +7,7 @@ import { sameOriginGuard } from './auth/csrf';
 import { requestLog } from './lib/log';
 import { authRoutes } from './auth/routes';
 import { api } from './routes';
+import { aiHookRoutes } from './ai/hook';
 import { errorResponse } from './lib/errors';
 
 const app = new Hono<AppEnv>();
@@ -18,6 +19,10 @@ app.use('/api/*', sameOriginGuard);
 app.use('/api/*', requestLog);
 app.route('/auth', authRoutes);
 app.route('/api', api);
+// AI 機能のセッションが使う入口（docs/AI機能.md）。authenticate は /hook/ を素通しするので、hook の側でジョブごとの合言葉を必ず確かめる。
+// /hook/ のほかのパスは 404（ログインの外にあるので、静的アセットへ落とさない）
+app.route('/hook/ai', aiHookRoutes);
+app.all('/hook/*', (c) => c.json({ error: 'not found', code: 'notFound' }, 404));
 app.onError(errorResponse);
 // それ以外は静的アセット（SPA）
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));

@@ -34,6 +34,17 @@ status: active
 | GET / PUT /api/settings/plan-defaults | session / verified | `{plan, values}`（null の指標は削除） | `{plans, updatedAt}` | D1 plan_target_defaults + audit_log |
 | POST /api/admin/cache/bump | verified + 同一オリジン | — | `{cacheEpoch}` | D1 app_meta + audit_log |
 | `GET /api/scout-unused?month=` / `PUT`・`DELETE /api/scout-unused/:companyId/:month` / `POST /api/scout-unused/sync` | `scoutUnused.ts` | スカウト未利用の理由・補足（D1 が正 → BigQuery `scout_unused_companies_monthly` に `match_method = 'app'` の行を MERGE）。書き込みは `requireVerified` + 同一オリジン、strict zod、監査ログ同 batch |
+| GET /api/ai/config | session | — | `AiConfigResponse`（発火の設定・保存先の有無、見本で動くか、書き込めるか、管理者か。真偽値だけ） | Worker の変数 |
+| GET /api/ai/companies | session | — | `AiCompaniesResponse`（当月のボードに出ている企業） | ボードのマート（キャッシュ共用） |
+| GET /api/ai/companies/:id/defaults | session | :id | `AiCompanyDefaultsResponse`（業界・掲載職種・直近 6 か月の求人、業界・職種の選択肢。無い企業は 404） | cms_company_master, cms_company_job_monthly |
+| GET /api/ai/jobs | session | ?company=&kind=report\|scout\|job（strict） | `AiJobListResponse`（新しい順・30 件まで。結果の本体なし。D1 が無ければ空） | D1 ai_jobs |
+| GET /api/ai/jobs/:jobId | session | :jobId `^[a-z0-9]{16,40}$` | `AiJobDetail`（入力・結果・直した版。期限切れの running は failed にして返す。sessionUrl は管理者だけ） | D1 ai_jobs, cms_company_master（企業名。10 分キャッシュ） |
+| POST /api/companies/:id/ai/jobs | verified + 同一オリジン（サンプルデータのときだけ仮の利用者も可・保存しない） | `{kind, input}`（strict。input は kind ごとの型。社名・個人情報があれば 400） | 201 `AiCreateResponse`（fire = sent / sample / failed） | D1 ai_jobs + audit_log（1 batch）、発火（api.anthropic.com） |
+| POST /api/ai/jobs/:jobId/fire | verified + 同一オリジン | — | `AiCreateResponse`（未起動・失敗のジョブだけ。それ以外は 409） | 同上 |
+| PUT / DELETE /api/ai/jobs/:jobId/edited | verified + 同一オリジン | `{result}`（strict。結果と同じ型。done のジョブだけ） | `AiJobDetail` | D1 ai_jobs + audit_log |
+| DELETE /api/ai/jobs/:jobId | verified + 同一オリジン | — | 204 | 同上（deleted_at） |
+
+`/api` の外: `GET /hook/ai/jobs/:jobId/context`・`POST /hook/ai/jobs/:jobId/result`（`src/worker/ai/hook.ts`。AI 機能のセッションが使う。Google ログインの外で、ジョブごとの合言葉（`Authorization: Bearer`）を確かめる。違えば一律 401、`/hook/` のほかのパスは 404）。詳しくは [`src/worker/ai/README.md`](../ai/README.md)。
 
 D1 が束ねられていない環境では書き込み系は 503 `storage`、読み取り系は空を返す。
 

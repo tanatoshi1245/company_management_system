@@ -2,7 +2,7 @@ import type { BuiltQuery } from '../params';
 import type { Row } from '../parseRows';
 import { todayJst } from '../../../shared/calendar/periods';
 import { mockCompanyLogin, mockCompanyMaster, mockCompanyMonthly, mockIndustryBenchmark } from './board';
-import { mockApplicationCohort, mockBenchSeries, mockCompanyAccountMonthlyOne, mockCompanyJobMonthlyOne, mockCompanyJobs, mockCompanyLoginOne, mockCompanyMasterOne, mockCompanyMonthlyOne, mockDailyUsage, mockMemberAttributes, mockScoutCohort } from './company';
+import { JOB_OCCUPATIONS, mockApplicationCohort, mockBenchSeries, mockCompanyAccountMonthlyOne, mockCompanyJobMonthlyOne, mockCompanyJobs, mockCompanyLoginOne, mockCompanyMasterOne, mockCompanyMonthlyOne, mockDailyUsage, mockMemberAttributes, mockScoutCohort } from './company';
 
 export function paramValue(q: BuiltQuery, name: string): string | null {
   const v = q.params.find((x) => x.name === name)?.parameterValue.value;
@@ -51,6 +51,9 @@ export function mockRows(q: BuiltQuery): Row[] {
       return mockCompanyJobMonthlyOne(paramValue(q, 'id') ?? '', paramValue(q, 'job') ?? '', paramValue(q, 'from') ?? '2000-01-01', paramValue(q, 'to') ?? '2999-12-01', paramValue(q, 'account'));
     case 'bench_series':
       return mockBenchSeries(paramValue(q, 'industry') ?? '', paramValue(q, 'company_type') ?? '');
+    case 'ai_occupation_options':
+      // AI 機能の職種の選択肢（求人のフィクスチャにある職種）
+      return JOB_OCCUPATIONS.map((o) => ({ job_occupation: o }));
     default:
       return [];
   }

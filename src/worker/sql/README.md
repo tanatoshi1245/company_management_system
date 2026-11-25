@@ -20,6 +20,7 @@ status: active
 | companyLogin.ts | cms_company_login | GA4 analytics_*（`get_ID`） |
 | industryBenchmark.ts | cms_industry_benchmark_monthly | cms_company_monthly, cms_company_master |
 | companyDetail.ts（8 ビルダー: company_master_one / company_monthly_one / daily_usage / scout_cohort / application_cohort / member_attributes / bench_series / company_login_one） | cms_company_master, cms_company_monthly, cms_company_daily_usage, cms_scout_cohort_status, cms_application_cohort_status, cms_scout_member_attributes_monthly, cms_industry_benchmark_monthly, cms_company_login | 各マート README |
+| ai.ts（ai_occupation_options: AI 機能の職種の選択肢） | cms_company_job_monthly | 各マート README |
 
 ## テスト
 tests/worker/sql.test.ts（@param 以外のリテラルが無いこと）

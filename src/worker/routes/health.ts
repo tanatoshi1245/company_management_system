@@ -6,12 +6,15 @@ import { parseAllowList } from '../auth/allowlist';
 import { todayJst } from '../../shared/calendar/periods';
 import { DATA_VERSION } from '../../shared/schema/common';
 import type { HealthResponse } from '../../shared/schema/me';
+import { aiFireDiagnostics } from '../ai/fire';
 
 export const healthRoutes = new Hono<AppEnv>();
 
 /** 設定の診断。値は返さず「設定されているか」だけを返す（ログイン後にだけ見える）。変数・Secret の名前も出さない */
 healthRoutes.get('/health', (c) => {
   const allow = parseAllowList(c.env.ALLOWED_EMAILS, c.env.ALLOWED_EMAIL_DOMAINS);
+  const ai = aiFireDiagnostics(c.env);
+  const fire = ai.routineId === 'missing' || ai.routineToken === 'missing' ? 'missing' : ai.routineId === 'ok' && ai.routineToken === 'ok' ? 'ok' : 'unexpectedFormat';
   const body: HealthResponse = {
     ok: true,
     asOf: todayJst(),
@@ -23,6 +26,7 @@ healthRoutes.get('/health', (c) => {
     allowedDomains: Array.from(allow.domains),
     allowedEmailsCount: allow.emails.size,
     dataVersion: DATA_VERSION,
+    ai: { fire, store: ai.store, admins: ai.admins },
   };
   return c.json(body);
 });

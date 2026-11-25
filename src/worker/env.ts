@@ -29,6 +29,12 @@ export interface Env {
   /** モック時のログイン者メール（担当=自分 の確認用） */
   DEV_USER_EMAIL?: string;
   APP_ENV?: string;
+  /** AI 機能（docs/AI機能.md）: セッションを立ち上げるスケジュールタスクの ID（`trig_…`。Secret）。無ければ依頼は「未起動」で残る */
+  AI_ROUTINE_ID?: string;
+  /** AI 機能: そのタスクの API トリガーのトークン（Secret。/api/health・/api/ai/config に値を出さない） */
+  AI_ROUTINE_TOKEN?: string;
+  /** AI 機能: 管理者のメール（カンマ区切り）。セッションの URL を見られる人。未設定なら誰も管理者にならない */
+  AI_ADMIN_EMAILS?: string;
 }
 
 export function isMock(env: Env): boolean {
