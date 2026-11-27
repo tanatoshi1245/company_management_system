@@ -5,8 +5,7 @@ import { SCOUT_MODELS } from './models';
 /**
  * ② の見本（サンプルデータのとき。Vertex AI を呼ばない）。数値は見本で、実際の集計ではない。
  * 実在の社名・個人名を書かない（差し込みは {{企業名}} {{候補者名}} {{担当者名}}）。
- * target = 何をもとに作ったか（求人・候補者の要約。サンプルデータのフィクスチャから引いたもの）。input は、求人・候補者の値で置き換えた後のもの。
- * 候補者に職務経歴・自己PR の登録があるとき（target.member.resume）は、見本の冒頭を「職務経歴と自己PR を拝見し」に変える（本文そのものは、見本にも入れない）
+ * target = 何をもとに作ったか（求人・候補者の要約。サンプルデータのフィクスチャから引いたもの）。input は、求人・候補者の値で置き換えた後のもの
  */
 export function scoutSample(input: ScoutInput, jobId: string, target: ScoutTarget | null = null): ScoutResult {
   const position = input.positionName || 'ポジション';
@@ -14,9 +13,6 @@ export function scoutSample(input: ScoutInput, jobId: string, target: ScoutTarge
   const location = input.jobLocation || '{{勤務地}}';
   const label = (id: 'a' | 'b' | 'c') => SCOUT_MODELS.find((m) => m.id === id)!.label;
   const changes = (xs: string[]) => (review ? xs : []);
-  const hasResume = Boolean(target?.member?.resume);
-  const seen = hasResume ? 'ご登録の職務経歴と自己PR を拝見し、{{ご経験}} のご経験' : 'ご経歴を拝見し、これまでのご経験';
-  const resumeNote = hasResume ? '候補者の職務経歴・自己PR に触れる箇所は、見本では {{ご経験}} の差し込みにしています。' : '';
   return ScoutResultSchema.parse({
     ok: true,
     summary: `【見本】${input.industry}の直近 1 年の送信実績から、返信率 10% 超の文面 412 件を分析し、3 つのモデルで文面を${review ? '添削' : '作成'}しました（サンプルデータの見本で、実際の集計ではありません）。`,
@@ -71,8 +67,8 @@ export function scoutSample(input: ScoutInput, jobId: string, target: ScoutTarge
         modelLabel: label('a'),
         modelVersion: 1,
         subject: `【${location}】${position}のご案内`,
-        body: `{{候補者名}} 様\n\nはじめまして。{{企業名}} の {{担当者名}} と申します。\n${seen}が「${position}」で活かせると考え、ご連絡しました。\n\n■ お任せしたいこと\n・{{仕事内容}}\n\n■ 条件\n・勤務地: ${location}\n・年収: {{年収}}\n\nまずはカジュアルにお話しできればうれしいです。ご興味があれば、ひとことご返信ください。`,
-        rationale: `【見本】返信率の高い文面に多い「件名に勤務地とポジション名」「冒頭で送った理由」「箇条書き」「軽い締め」の型に沿いました。${resumeNote}`,
+        body: `{{候補者名}} 様\n\nはじめまして。{{企業名}} の {{担当者名}} と申します。\nご経歴を拝見し、これまでのご経験が「${position}」で活かせると考え、ご連絡しました。\n\n■ お任せしたいこと\n・{{仕事内容}}\n\n■ 条件\n・勤務地: ${location}\n・年収: {{年収}}\n\nまずはカジュアルにお話しできればうれしいです。ご興味があれば、ひとことご返信ください。`,
+        rationale: '【見本】返信率の高い文面に多い「件名に勤務地とポジション名」「冒頭で送った理由」「箇条書き」「軽い締め」の型に沿いました。',
         changes: changes(['件名を、勤務地とポジション名が先に分かる型に変えました。', '冒頭に、連絡した理由を足しました。']),
       },
       {

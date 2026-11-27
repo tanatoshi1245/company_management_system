@@ -229,7 +229,7 @@ describe('AiPageHeader・AiJobStatus・PiiNotice・CopyButton', () => {
     cleanup();
     vi.useRealTimers();
   });
-  const cfg = { fireConfigured: true, storeConfigured: true, sampleMode: false, canWrite: true, admin: false, features: { scout: true, job: false, report: false } };
+  const cfg = { fireConfigured: true, storeConfigured: true, sampleMode: false, canWrite: true, admin: false, features: { scout: true, job: false, report: false, scoutMember: false } };
 
   it('見出しと、見本モード / 閲覧のみ / 設定なし の知らせ', () => {
     const { rerender } = render(<AiPageHeader kind="scout" config={null} />);

@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import { AI_DISABLED_MESSAGE, aiEnabled } from './enabled';
+import { AI_DISABLED_MESSAGE, aiEnabled, aiScoutMemberEnabled } from './enabled';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv, Ctx } from '../types';
@@ -55,7 +55,7 @@ async function detailOf(c: Ctx, row: AiJobRow): Promise<AiJobDetail> {
 aiRoutes.get('/ai/config', (c) => {
   const id = c.get('identity');
   // fireConfigured = Vertex AI を呼べる設定があるか（以前は、セッションを立ち上げる設定の有無）
-  const body: AiConfigResponse = { fireConfigured: vertexConfigured(c.env), storeConfigured: Boolean(c.env.CMS_DB), sampleMode: isMock(c.env), canWrite: Boolean(id?.verified), admin: isAiAdmin(c.env, id), features: AI_FEATURES };
+  const body: AiConfigResponse = { fireConfigured: vertexConfigured(c.env), storeConfigured: Boolean(c.env.CMS_DB), sampleMode: isMock(c.env), canWrite: Boolean(id?.verified), admin: isAiAdmin(c.env, id), features: { ...AI_FEATURES, scoutMember: aiScoutMemberEnabled(c.env) } };
   return c.json(body, 200, NO_STORE);
 });
 

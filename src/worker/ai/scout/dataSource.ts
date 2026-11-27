@@ -82,7 +82,7 @@ export interface ScoutJobInfo {
   requirements: string;
 }
 
-/** 候補者の属性（マート dwh.cms_ai_member_profiles。氏名・連絡先・レジュメの本文は無い） */
+/** 候補者の属性（マート dwh.cms_ai_member_profiles。氏名・連絡先・職務経歴・自己PR の本文は無い） */
 export interface ScoutMemberInfo {
   memberId: string;
   ageGroup: string | null;
@@ -97,44 +97,7 @@ export interface ScoutMemberInfo {
   desiredOccupations: string[];
   incomeRange: string | null;
   desiredIncomeRange: string | null;
-  /**
-   * 職務経歴・自己PR のテキスト（マート dwh_restricted.cms_ai_member_resumes。2026-11-27 ユーザー指示で追加）。
-   * ターゲット人材で、本文の登録がある会員だけ。無ければ null（属性だけで作る）。
-   * メールアドレス・URL・電話番号は取り込みの時点で伏せてある。**勤務先の社名は持たない**。本文に氏名・社名が混ざっていることはある。
-   */
-  resume: ScoutMemberResume | null;
 }
-
-/** 職務経歴 1 社ぶん（新しい順）。社名は持たない */
-export interface ScoutMemberWork {
-  /** 役職・職種の名前（本人の入力） */
-  title: string | null;
-  /** 期間（YYYY-MM）。在職中は to = null */
-  from: string | null;
-  to: string | null;
-  /** 職務内容（先頭 RESUME_WORK_CHARS 文字） */
-  notes: string;
-}
-
-export interface ScoutMemberResume {
-  /** 本文の言語（ja / en）。文面の言語に合うものを優先して 1 つ */
-  lang: string;
-  /** 自己PR（先頭 RESUME_APPEAL_CHARS 文字）。無ければ空 */
-  appeal: string;
-  appealChars: number;
-  /** 職務経歴（新しい順に RESUME_WORK_MAX 社まで） */
-  work: ScoutMemberWork[];
-  /** 登録されている職務経歴の数・職務内容の合計の文字数 */
-  workCount: number;
-  workChars: number;
-  /** マネジメント経験の年数・転職回数（登録があれば） */
-  managementYears: number | null;
-  jobChanges: number | null;
-}
-
-export const RESUME_WORK_MAX = 3;
-export const RESUME_WORK_CHARS = 600;
-export const RESUME_APPEAL_CHARS = 600;
 
 export const JOB_TEXT_CHARS = 1500;
 
@@ -148,8 +111,8 @@ export interface ScoutDataSource {
   benchmark(q: ScoutBenchmarkQuery): Promise<ScoutBenchmark | null>;
   /** 求人の内容。**その企業の求人でなければ null**（ほかの企業の求人を読ませない）。無い ID も null */
   job(companyId: string, jobId: string): Promise<ScoutJobInfo | null>;
-  /** 候補者の属性と、職務経歴・自己PR（あれば。lang = 文面の言語に合う本文を優先）。無い ID は null */
-  member(memberId: string, lang?: ScoutLang): Promise<ScoutMemberInfo | null>;
+  /** 候補者の属性。無い ID は null */
+  member(memberId: string): Promise<ScoutMemberInfo | null>;
   /** 選ばれた案を BigQuery へ写す（MERGE）。書き込めないとき（権限なし・サンプルデータ）は false */
   exportDrafts(rows: ScoutDraftExport[]): Promise<boolean>;
   /** 写した案の照合結果を読む */

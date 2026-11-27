@@ -15,3 +15,5 @@ DEV_USER_EMAIL=preview@daijob.com
 # ALLOWED_EMAILS=a@daijob.com,b@daijob.com
 # AI 機能の停止スイッチ（既定は停止。docs/AI機能.md）。ローカルで、サンプルデータの見本の画面を確かめるときだけ 1 にする（Vertex AI は呼ばれない）
 # AI_ENABLED=1
+# ② スカウトの、会員 ID から作る 2 つの作り方を開ける（既定は閉じる。候補者の属性を AI へ渡すので、ユーザーの確認が済むまで開けない）
+# AI_SCOUT_MEMBER=1

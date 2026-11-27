@@ -15,3 +15,6 @@ work/
 !package-lock.json
 !tsconfig*.json
 !src/shared/calendar/jp-holidays.json
+
+# 確認用のスクリプトの出力（リポジトリに入れない）
+out-*.json

@@ -17,7 +17,6 @@ import {
   type ScoutDraftFeedback,
   type ScoutInput,
   type ScoutJobSummary,
-  type ScoutLang,
   type ScoutMemberSummary,
   type ScoutModel,
   type ScoutModelId,
@@ -31,6 +30,7 @@ import { AiJobsRepo, type AiJobRow } from '../repo';
 import { newJobId } from '../ids';
 import { companyBrief, isAiAdmin, issuesOf, PII_MESSAGE, piiDetails, toDetail, type AiDeps, type WaitCtx } from '../service';
 import { scoutEngines, totalTokens, vertexConfigured, VertexError } from '../vertex';
+import { AI_SCOUT_MEMBER_DISABLED_CODE, AI_SCOUT_MEMBER_DISABLED_MESSAGE, aiScoutMemberEnabled } from '../enabled';
 import type { ScoutDataSource, ScoutJobInfo, ScoutMemberInfo } from './dataSource';
 import { generateScoutDrafts } from './generate';
 import { getScoutInsight } from './insight';
@@ -94,10 +94,9 @@ async function loadJob(ds: ScoutDataSource, companyId: string, jobId: string, na
   return job ? maskJob(job, names) : null;
 }
 
-/** 候補者の属性と、職務経歴・自己PR（lang = 文面の言語に合う本文を優先）。本文は、ログに出さない */
-async function loadMember(ds: ScoutDataSource, memberId: string, lang?: ScoutLang): Promise<ScoutMemberInfo | null> {
+async function loadMember(ds: ScoutDataSource, memberId: string): Promise<ScoutMemberInfo | null> {
   try {
-    return await ds.member(memberId, lang);
+    return await ds.member(memberId);
   } catch (e) {
     console.error(`[ai/scout] member: ${e instanceof Error ? e.message.slice(0, 300) : ''}`);
     throw new AppError('bq', 502, DATA_ERROR_MESSAGE);
@@ -123,13 +122,10 @@ export async function scoutJobSummary(d: ScoutLookupDeps, companyId: string, job
   return jobSummaryOf(job);
 }
 
-/**
- * GET /api/ai/scout/members/:memberId … 候補者の属性を確かめる（誰が・どの会員 ID を引いたかを、ログに残す）。
- * 職務経歴・自己PR は、登録の有無（件数・文字数・直近の役職名）だけを返す。本文は返さない（文面の言語は未定なので、既定の日本語を優先して引く）
- */
+/** GET /api/ai/scout/members/:memberId … 候補者の属性を確かめる（誰が・どの会員 ID を引いたかを、ログに残す） */
 export async function scoutMemberSummary(d: Omit<ScoutLookupDeps, 'client' | 'ctx'>, memberId: string): Promise<ScoutMemberSummary> {
   const member = await loadMember(d.ds, memberId);
-  logEvent('ai.scout.lookup', { reqId: d.requestId, actor: d.actor, target: 'member', memberId, found: Boolean(member), resume: Boolean(member?.resume) });
+  logEvent('ai.scout.lookup', { reqId: d.requestId, actor: d.actor, target: 'member', memberId, found: Boolean(member) });
   if (!member) throw new AppError('notFound', 404, MEMBER_NOT_FOUND_MESSAGE);
   return memberSummaryOf(member);
 }
@@ -143,6 +139,8 @@ export async function createScoutJob(d: ScoutDeps, companyId: string, rawInput: 
   const parsed = ScoutInputSchema.safeParse(rawInput);
   if (!parsed.success) throw new AppError('badRequest', 400, '入力が不正です', issuesOf(parsed.error, 'input'));
   const asked = parsed.data;
+  // 会員 ID から作る 2 つの作り方は、設定で開けたときだけ（既定は閉じる）。閉じている間は、保存せず、会員のデータも Vertex AI も触らない
+  if (scoutBasisUsesMember(asked.basis) && !aiScoutMemberEnabled(d.env)) throw new AppError(AI_SCOUT_MEMBER_DISABLED_CODE, 403, AI_SCOUT_MEMBER_DISABLED_MESSAGE);
   const brief = await companyBrief(d.client, companyId, d.ctx);
   if (!brief) throw new AppError('notFound', 404, '企業が見つかりません');
   const pii = piiDetails(asked, brief, 'input');
@@ -153,9 +151,9 @@ export async function createScoutJob(d: ScoutDeps, companyId: string, rawInput: 
   const names = [brief.name, brief.internalName];
   const [job, member] = await Promise.all([
     scoutBasisUsesJob(asked.basis) && asked.jobId ? loadJob(d.ds, companyId, asked.jobId, names) : null,
-    scoutBasisUsesMember(asked.basis) && asked.memberId ? loadMember(d.ds, asked.memberId, asked.lang) : null,
+    scoutBasisUsesMember(asked.basis) && asked.memberId ? loadMember(d.ds, asked.memberId) : null,
   ]);
-  if (asked.memberId) logEvent('ai.scout.lookup', { reqId: d.requestId, actor, target: 'member', memberId: asked.memberId, found: Boolean(member), resume: Boolean(member?.resume), via: 'create' });
+  if (asked.memberId) logEvent('ai.scout.lookup', { reqId: d.requestId, actor, target: 'member', memberId: asked.memberId, found: Boolean(member), via: 'create' });
   const missing = [
     ...(scoutBasisUsesJob(asked.basis) && !job ? [{ path: 'input.jobId', message: 'この企業の求人ではありません' }] : []),
     ...(scoutBasisUsesMember(asked.basis) && !member ? [{ path: 'input.memberId', message: MEMBER_NOT_FOUND_MESSAGE }] : []),

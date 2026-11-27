@@ -96,13 +96,14 @@ const NO_FEEDBACK = { chosen: false, usedState: 'unknown' as const, usedSource: 
 /**
  * AI 機能の API のモック。create = POST /api/companies/:id/ai/jobs の応答を作る関数（既定は「見本を返した」）。
  * 保存済みのジョブ（jobs）は、履歴と 1 件の取得に出る。
+ * 会員 ID から作る 2 つの作り方は、scoutMember: true を渡したときだけ開く（閉じている間、会員の API は 403）。
  */
-export function mockAiApi(opts: { config?: Partial<AiConfigResponse>; jobs?: AiJobDetail[]; scoutOptions?: ScoutOptionsResponse; scoutModels?: ScoutModelsResponse; create?: (companyId: string, body: { kind: AiKind; input: unknown }, m: AiMock) => { status?: number; json: unknown } } = {}): AiMock {
+export function mockAiApi(opts: { config?: Partial<AiConfigResponse>; /** 会員 ID から作る機能を開ける（既定は閉じる = Worker の既定と同じ） */ scoutMember?: boolean; jobs?: AiJobDetail[]; scoutOptions?: ScoutOptionsResponse; scoutModels?: ScoutModelsResponse; create?: (companyId: string, body: { kind: AiKind; input: unknown }, m: AiMock) => { status?: number; json: unknown } } = {}): AiMock {
   const m: AiMock = {
     calls: [],
     bodies: [],
     jobs: new Map((opts.jobs ?? []).map((j) => [j.id, j])),
-    config: { fireConfigured: true, storeConfigured: true, sampleMode: false, canWrite: true, admin: false, features: { scout: true, job: false, report: false }, ...opts.config },
+    config: { fireConfigured: true, storeConfigured: true, sampleMode: false, canWrite: true, admin: false, features: { scout: true, job: false, report: false, scoutMember: opts.scoutMember ?? false }, ...opts.config },
     scoutOptions: opts.scoutOptions ?? SCOUT_OPTIONS,
     scoutModels: opts.scoutModels ?? SCOUT_MODELS_VIEWER,
     scoutTune: SCOUT_TUNE,
@@ -141,7 +142,10 @@ export function mockAiApi(opts: { config?: Partial<AiConfigResponse>; jobs?: AiJ
     x = url.match(/^\/api\/companies\/([^/]+)\/ai\/scout\/jobs\/([^/]+)$/);
     if (x && method === 'GET') return m.scoutJobs[`${x[1]}:${x[2]}`] ? Response.json(m.scoutJobs[`${x[1]}:${x[2]}`]) : nf();
     x = url.match(/^\/api\/ai\/scout\/members\/([^/]+)$/);
-    if (x && method === 'GET') return m.scoutMembers[x[1]] ? Response.json(m.scoutMembers[x[1]]) : nf();
+    if (x && method === 'GET') {
+      if (!m.config.features.scoutMember) return Response.json({ error: '会員 ID から作る機能は、確認が済むまで閉じています', code: 'featureDisabled' }, { status: 403 });
+      return m.scoutMembers[x[1]] ? Response.json(m.scoutMembers[x[1]]) : nf();
+    }
     if (url === '/api/ai/scout/options') return Response.json(m.scoutOptions);
     if (url === '/api/ai/scout/models') return Response.json(m.scoutModels);
     if (url === '/api/ai/scout/tune' && method === 'POST') return Response.json(m.scoutTune);

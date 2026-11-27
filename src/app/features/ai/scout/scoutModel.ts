@@ -2,6 +2,7 @@ import type { AiJobDetail } from '../../../../shared/ai/common';
 import { hasBlockingPii, type PiiFinding } from '../../../../shared/ai/pii';
 import {
   EMPTY_SCOUT_FILTERS,
+  SCOUT_BASES,
   SCOUT_FILTER_KEYS,
   SCOUT_FILTER_LABEL,
   SCOUT_FILTER_MAX,
@@ -19,7 +20,6 @@ import {
   type ScoutFilters,
   type ScoutInput,
   type ScoutLang,
-  type ScoutMemberSummary,
   type ScoutPurpose,
   type ScoutResult,
   type ScoutUsedState,
@@ -93,23 +93,14 @@ export function parseScoutId(kind: 'job' | 'member', text: string): { ok: true; 
   return r.success ? { ok: true, id: r.data } : { ok: false, error: r.error.issues[0]?.message ?? 'ID は数字で入れてください' };
 }
 
+/**
+ * 画面に出す作り方: 会員 ID から作る機能（GET /api/ai/config の features.scoutMember）が閉じている間は、「条件を指定」「求人 ID」の 2 つだけ。
+ * 設定を読むまで（null）も、閉じているものとして扱う
+ */
+export const scoutBasesOf = (memberEnabled: boolean): readonly ScoutBasisKind[] => (memberEnabled ? SCOUT_BASES : SCOUT_BASES.filter((b) => !scoutBasisUsesMember(b)));
+
 /** 条件を「年齢層: 30代」の形の一覧にする（候補者から決まった条件を見せる用） */
 export const filterChips = (f: ScoutFilters): { key: ScoutFilterKey; label: string; value: string }[] => SCOUT_FILTER_KEYS.flatMap((key) => f[key].map((value) => ({ key, label: SCOUT_FILTER_LABEL[key], value })));
-
-const nf = (n: number): string => n.toLocaleString('ja-JP');
-const RESUME_LANG_LABEL: Record<string, string> = { ja: '日本語', en: '英語' };
-
-/**
- * 候補者の職務経歴・自己PR の登録（要約）を、画面に出す 1 行にする。本文は応答に無い（件数・文字数・直近の役職名だけ）。
- * 例: 「職務経歴 3 社（計 1,240 字）・自己PR 380 字（日本語）。直近の役職: 営業マネージャー。マネジメント経験 3 年」
- */
-export function resumeLine(r: NonNullable<ScoutMemberSummary['resume']>): string {
-  const lang = RESUME_LANG_LABEL[r.lang] ?? r.lang;
-  const work = r.workCount > 0 ? `職務経歴 ${nf(r.workCount)} 社（計 ${nf(r.workChars)} 字）` : '職務経歴 なし';
-  const appeal = r.appealChars > 0 ? `自己PR ${nf(r.appealChars)} 字` : '自己PR なし';
-  const tail = [r.latestTitle ? `直近の役職: ${r.latestTitle}` : '', r.managementYears !== null && r.managementYears > 0 ? `マネジメント経験 ${r.managementYears} 年` : ''].filter(Boolean);
-  return [`${work}・${appeal}（${lang}）`, ...tail].join('。');
-}
 
 /** 件名・本文・ポジション名・勤務地・補足に、社名・個人情報が入っていないか（block があれば実行できない）。求人 ID から作るときは、送らない欄（ポジション名・勤務地）を見ない */
 export function scoutPii(purpose: ScoutPurpose, form: ScoutForm, companyNames: readonly (string | null | undefined)[], basis: ScoutBasisKind = 'conditions'): PiiFinding[] {

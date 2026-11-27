@@ -5,29 +5,11 @@ import type { BqClient } from '../../bq/client';
 import type { Row } from '../../bq/parseRows';
 import type { Env } from '../../env';
 import { makeClient } from '../../services/clients';
-import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutJobQuery, aiScoutMemberQuery, aiScoutMemberResumeQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery, EXPORT_MAX_ROWS, SCOUT_FEATURES } from '../../sql/aiScout';
-import {
-  DIGEST_BODY_CHARS,
-  DIGEST_MAX,
-  JOB_TEXT_CHARS,
-  RESUME_APPEAL_CHARS,
-  RESUME_WORK_CHARS,
-  RESUME_WORK_MAX,
-  type ScoutBenchmark,
-  type ScoutBenchmarkQuery,
-  type ScoutDataSource,
-  type ScoutDigestTemplate,
-  type ScoutDraftExport,
-  type ScoutDraftOutcome,
-  type ScoutJobInfo,
-  type ScoutMemberInfo,
-  type ScoutMemberResume,
-  type ScoutMemberWork,
-} from './dataSource';
+import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutJobQuery, aiScoutMemberQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery, EXPORT_MAX_ROWS, SCOUT_FEATURES } from '../../sql/aiScout';
+import { DIGEST_BODY_CHARS, DIGEST_MAX, JOB_TEXT_CHARS, type ScoutBenchmark, type ScoutBenchmarkQuery, type ScoutDataSource, type ScoutDigestTemplate, type ScoutDraftExport, type ScoutDraftOutcome, type ScoutJobInfo, type ScoutMemberInfo } from './dataSource';
 
 /**
  * ② スカウト: 分析に使うデータの入口の実装（日次マート dwh.cms_ai_*。SQL は src/worker/sql/aiScout.ts）。
- * 候補者の職務経歴・自己PR だけは、閲覧制限付きのデータセットのマート dwh_restricted.cms_ai_member_resumes（この 1 表だけ。読めなければ、属性だけで返す）。
  * サンプルデータ（BQ_MOCK=1）でも同じ道を通る（クライアントがフィクスチャを返す。書き込みだけはしない）。
  * マートが無い・権限が無い・鍵が無いときは、例外にせず「データなし」を返す（生成の側は、数値なしの案内に切り替える）。
  */
@@ -199,51 +181,8 @@ export function toJobInfo(row: Row | undefined, jobId: string): ScoutJobInfo | n
   };
 }
 
-const isYm = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}$/.test(v);
-
-/**
- * マート dwh_restricted.cms_ai_member_resumes の 1 行 → 契約の型。
- * 行が無い・会員 ID が違う・本文が空（自己PR も、職務内容も無い）のときは null（属性だけで作る）。
- * マネジメント経験の年数は、元の列がコード値（0〜7）で意味を確かめられていないので、返さない（null）。
- * 転職回数は、元の列が「経験した会社の数」（職務経歴の数と一致。2026-11-27 実測）なので、1 を引く。
- */
-export function toMemberResume(row: Row | undefined, memberId: string): ScoutMemberResume | null {
-  if (!row || String(row.member_id ?? '') !== memberId.trim()) return null;
-  const lang = row.lang === 'en' ? 'en' : row.lang === 'ja' ? 'ja' : null;
-  if (!lang) return null;
-  const appeal = typeof row.appeal === 'string' ? row.appeal.slice(0, RESUME_APPEAL_CHARS).trim() : '';
-  const work: ScoutMemberWork[] = [];
-  if (typeof row.work_json === 'string' && row.work_json) {
-    try {
-      const arr: unknown = JSON.parse(row.work_json);
-      for (const x of Array.isArray(arr) ? (arr as Record<string, unknown>[]) : []) {
-        if (!x || typeof x !== 'object') continue;
-        const title = typeof x.title === 'string' && x.title.trim() ? x.title.trim().slice(0, 80) : null;
-        const notes = typeof x.notes === 'string' ? x.notes.slice(0, RESUME_WORK_CHARS).trim() : '';
-        if (!title && !notes) continue;
-        work.push({ title, from: isYm(x.start_ym) ? x.start_ym : null, to: isYm(x.end_ym) ? x.end_ym : null, notes });
-        if (work.length >= RESUME_WORK_MAX) break;
-      }
-    } catch {
-      // 形が違うときは、職務経歴なしとして扱う
-    }
-  }
-  if (!appeal && !work.some((w) => w.notes)) return null;
-  const changes = row.job_change_times === null || row.job_change_times === undefined ? NaN : Number(row.job_change_times);
-  return {
-    lang,
-    appeal,
-    appealChars: Math.max(num(row.appeal_chars), appeal.length),
-    work,
-    workCount: Math.max(num(row.work_count), work.length),
-    workChars: num(row.work_chars),
-    managementYears: null,
-    jobChanges: Number.isFinite(changes) && changes >= 1 && changes <= 60 ? Math.trunc(changes) - 1 : null,
-  };
-}
-
-/** マート cms_ai_member_profiles の 1 行 → 契約の型（未入力は null。値は cms_ai_scout_sends の属性と同じ）。行が無いときは null。職務経歴・自己PR は別の表（resume） */
-export function toMemberInfo(row: Row | undefined, memberId: string, resume: ScoutMemberResume | null = null): ScoutMemberInfo | null {
+/** マート cms_ai_member_profiles の 1 行 → 契約の型（未入力は null。値は cms_ai_scout_sends の属性と同じ）。行が無いときは null */
+export function toMemberInfo(row: Row | undefined, memberId: string): ScoutMemberInfo | null {
   if (!row || String(row.member_id ?? '') !== memberId.trim()) return null;
   return {
     memberId: String(row.member_id),
@@ -259,7 +198,6 @@ export function toMemberInfo(row: Row | undefined, memberId: string, resume: Sco
     desiredOccupations: parseStrings(row.desired_json),
     incomeRange: text(row.income_range),
     desiredIncomeRange: text(row.desired_income_range),
-    resume,
   };
 }
 
@@ -302,26 +240,13 @@ class BqScoutDataSource implements ScoutDataSource {
     }
   }
 
-  async member(memberId: string, lang: ScoutLang = 'ja'): Promise<ScoutMemberInfo | null> {
+  async member(memberId: string): Promise<ScoutMemberInfo | null> {
     if (!isId(memberId)) return null;
     try {
-      const client = this.client();
-      // 属性と、職務経歴・自己PR を並行して引く。レジュメの表を読めない（表が無い・権限が無い）ときは、属性だけで返す
-      const [res, resume] = await Promise.all([client.run(aiScoutMemberQuery(memberId)), this.resume(client, memberId, lang)]);
-      return toMemberInfo(res.rows[0], memberId, resume);
+      const res = await this.client().run(aiScoutMemberQuery(memberId));
+      return toMemberInfo(res.rows[0], memberId);
     } catch (e) {
       logError('member（マートが無い・権限が無いときは、候補者なしで返す）', e);
-      return null;
-    }
-  }
-
-  /** 職務経歴・自己PR（無い・読めないときは null。ログに出すのは理由だけで、本文は出さない） */
-  private async resume(client: BqClient, memberId: string, lang: ScoutLang): Promise<ScoutMemberResume | null> {
-    try {
-      const res = await client.run(aiScoutMemberResumeQuery(memberId, lang));
-      return toMemberResume(res.rows[0], memberId);
-    } catch (e) {
-      logError('member の resume（dwh_restricted.cms_ai_member_resumes が無い・権限が無いときは、属性だけで返す）', e);
       return null;
     }
   }

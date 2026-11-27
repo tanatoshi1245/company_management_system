@@ -2,12 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { clearResourceCache } from '../../src/app/lib/useResource';
 import ScoutPage from '../../src/app/features/ai/scout/ScoutPage';
-import { chosenDraft, CONDITIONS_SOURCE, emptyScoutForm, filterChips, parseScoutId, readScoutResult, resumeLine, scoutFormFromInput, scoutPii, scoutThresholdText, toggleFilter, toScoutInput, validateScout, withLocalChoice, withLocalUsage, withScoutDraft } from '../../src/app/features/ai/scout/scoutModel';
+import { chosenDraft, CONDITIONS_SOURCE, emptyScoutForm, filterChips, parseScoutId, readScoutResult, scoutBasesOf, scoutFormFromInput, scoutPii, scoutThresholdText, toggleFilter, toScoutInput, validateScout, withLocalChoice, withLocalUsage, withScoutDraft } from '../../src/app/features/ai/scout/scoutModel';
 import { AI_KIND_LABEL, type AiJobDetail } from '../../src/shared/ai/common';
 import { AI_TEXT, SCOUT_TEXT } from '../../src/shared/ai/options';
 import { EMPTY_SCOUT_FILTERS, SCOUT_BASES, SCOUT_BASIS_DESCRIPTION, SCOUT_BASIS_LABEL, SCOUT_FILTER_MAX, ScoutChoiceInputSchema, ScoutInputSchema, ScoutJobSummarySchema, ScoutMemberSummarySchema, ScoutModelsResponseSchema, ScoutOptionsResponseSchema, ScoutResultSchema, ScoutTuneResponseSchema, ScoutUsageInputSchema, type ScoutBasisKind, type ScoutResult } from '../../src/shared/ai/scout';
 import { makeJob, mockAiApi, SCOUT_INPUT, SCOUT_JOB_ENDED, SCOUT_JOB_INPUT, SCOUT_JOB_MEMBER_INPUT, SCOUT_JOB_MEMBER_RESULT, SCOUT_JOB_RESULT, SCOUT_JOB_SUMMARY, SCOUT_MEMBER_SUMMARY, SCOUT_MODELS, SCOUT_MODELS_VIEWER, SCOUT_OPTIONS, SCOUT_RESULT, SCOUT_REVIEW_RESULT, SCOUT_TUNE, type AiMock } from './aiFixtures';
-import { SCOUT_MEMBER_NO_RESUME } from './aiScoutFixtures';
 
 const ID1 = 'scout00000000001';
 const ID2 = 'scout00000000002';
@@ -78,12 +77,12 @@ describe('② スカウト文面の AI 作成（/ai/scout）: 入力', () => {
     expect(screen.getByText(AI_TEXT.historyNoCompany)).toBeTruthy();
     expect(screen.getByText('結果はここに出ます')).toBeTruthy();
     await waitFor(() => expect(m.calls).toContain('GET /api/ai/config'));
-    // 4 つの作り方（ラベルと説明）。どれも選ばれていない
+    // 作り方（ラベルと説明）。既定（会員 ID から作る機能が閉じている）では「条件を指定」「求人 ID」の 2 つ。どれも選ばれていない
     const group = screen.getByRole('radiogroup', { name: SCOUT_TEXT.basisLegend });
     const radios = within(group).getAllByRole('radio') as HTMLInputElement[];
-    expect(radios).toHaveLength(SCOUT_BASES.length);
+    expect(radios.map((r) => r.value)).toEqual(['conditions', 'job']);
     expect(radios.every((r) => !r.checked)).toBe(true);
-    for (const b of SCOUT_BASES) expect(group.textContent).toContain(SCOUT_BASIS_LABEL[b] + SCOUT_BASIS_DESCRIPTION[b]);
+    for (const b of ['conditions', 'job'] as const) expect(group.textContent).toContain(SCOUT_BASIS_LABEL[b] + SCOUT_BASIS_DESCRIPTION[b]);
     expect(screen.getByText(SCOUT_TEXT.basisHint)).toBeTruthy();
     // 選ぶまでは、目的・入力欄・条件・実行ボタンが無い
     const hidden = () => {
@@ -470,7 +469,7 @@ describe('② スカウト文面の AI 作成: 求人 ID・会員 ID から作�
   });
 
   it('会員 ID から作る: 確かめる → 候補者のカードと、絞り込みに使う条件のチップ → 実行。送る相手の条件の欄は出さない。求人の内容は自分で入れる', async () => {
-    const m = mockAiApi({ create: create({ ...SCOUT_RESULT, target: { basis: 'member', job: null, member: SCOUT_MEMBER_SUMMARY } }, '作成: 法人営業（会員 70001）') });
+    const m = mockAiApi({ scoutMember: true, create: create({ ...SCOUT_RESULT, target: { basis: 'member', job: null, member: SCOUT_MEMBER_SUMMARY } }, '作成: 法人営業（会員 70001）') });
     open('?company=101&basis=member');
     await ready();
     expect(screen.queryByText(SCOUT_TEXT.filtersLegend)).toBeNull();
@@ -502,51 +501,13 @@ describe('② スカウト文面の AI 作成: 求人 ID・会員 ID から作�
     expect(ScoutInputSchema.safeParse(input).success).toBe(true);
     const target = await screen.findByRole('group', { name: SCOUT_TEXT.targetLabel });
     expect(target.textContent).toContain(SCOUT_BASIS_LABEL.member);
-    expect(target.textContent).toContain('候補者: 会員 ID 70001・営業・日本語 ビジネス会話・英語 ネイティヴ・職務経歴・自己PR あり');
-    // 結果の「何をもとに作ったか」の候補者のカードにも、職務経歴・自己PR の要約（件数・文字数・直近の役職名）と注意が出る
-    const targetResume = within(target).getByRole('group', { name: SCOUT_TEXT.resumeLabel });
-    for (const t of ['職務経歴 3 社（計 1,240 字）・自己PR 380 字（日本語）。直近の役職: 営業マネージャー', SCOUT_TEXT.resumeUse, SCOUT_TEXT.resumeCaution]) expect(targetResume.textContent).toContain(t);
+    expect(target.textContent).toContain('候補者: 会員 ID 70001・営業・日本語 ビジネス会話・英語 ネイティヴ');
     // 候補者の要約は畳んである
     expect((target.querySelector('details') as HTMLDetailsElement).open).toBe(false);
   });
 
-  it('候補者のカード: 職務経歴・自己PR の登録あり = 件数・文字数・直近の役職名と「具体的に触れた文面を作ります」。登録なし = 属性だけで作る旨。本文は出ない', async () => {
-    expect(ScoutMemberSummarySchema.safeParse(SCOUT_MEMBER_NO_RESUME).success).toBe(true);
-    expect(resumeLine(SCOUT_MEMBER_SUMMARY.resume!)).toBe('職務経歴 3 社（計 1,240 字）・自己PR 380 字（日本語）。直近の役職: 営業マネージャー。マネジメント経験 3 年');
-    expect(resumeLine({ lang: 'en', workCount: 0, workChars: 0, appealChars: 95, latestTitle: null, managementYears: null })).toBe('職務経歴 なし・自己PR 95 字（英語）');
-    const m = mockAiApi({ create: create({ ...SCOUT_RESULT, target: { basis: 'member', job: null, member: SCOUT_MEMBER_NO_RESUME } }, '作成: 法人営業（会員 70002）') });
-    m.scoutMembers['70002'] = SCOUT_MEMBER_NO_RESUME;
-    open('?company=101&basis=member');
-    await ready();
-    // 登録あり
-    type(field('会員 ID'), '70001');
-    fireEvent.click(screen.getByRole('button', { name: SCOUT_TEXT.checkMember }));
-    let cardEl = await screen.findByRole('region', { name: '候補者の情報' });
-    let resume = within(cardEl).getByRole('group', { name: SCOUT_TEXT.resumeLabel });
-    expect(resume.getAttribute('data-resume')).toBe('yes');
-    for (const t of ['職務経歴 3 社（計 1,240 字）・自己PR 380 字（日本語）', '直近の役職: 営業マネージャー', SCOUT_TEXT.resumeUse, SCOUT_TEXT.resumeCaution]) expect(resume.textContent).toContain(t);
-    expect(resume.textContent).not.toContain(SCOUT_TEXT.resumeNone);
-    expect(cardEl.textContent).toContain(SCOUT_TEXT.memberPrivacy);
-    // 登録なし
-    type(field('会員 ID'), '70002');
-    fireEvent.click(screen.getByRole('button', { name: SCOUT_TEXT.checkMember }));
-    await waitFor(() => expect(memberCard()?.getAttribute('data-member')).toBe('70002'));
-    cardEl = memberCard()!;
-    resume = within(cardEl).getByRole('group', { name: SCOUT_TEXT.resumeLabel });
-    expect(resume.getAttribute('data-resume')).toBe('no');
-    expect(resume.textContent).toBe(`${SCOUT_TEXT.resumeLabel}${SCOUT_TEXT.resumeNone}`);
-    expect(SCOUT_TEXT.resumeNone).toBe('職務経歴・自己PR の登録がありません（ターゲット人材でない、または未入力）。経験職種・語学力などの属性だけで作ります');
-    // 結果の「何をもとに作ったか」にも、同じ要約が出る（登録なし）
-    type(field('ポジション名'), '法人営業');
-    fireEvent.click(runButton());
-    await waitFor(() => expect(posts(m)).toHaveLength(1));
-    const target = await screen.findByRole('group', { name: SCOUT_TEXT.targetLabel });
-    expect(target.textContent).toContain('候補者: 会員 ID 70002・営業・日本語 ビジネス会話・英語 ネイティヴ・職務経歴・自己PR なし（属性だけで作成）');
-    expect(within(target).getByRole('group', { name: SCOUT_TEXT.resumeLabel }).textContent).toContain(SCOUT_TEXT.resumeNone);
-  });
-
   it('求人 ID + 会員 ID から作る: 両方を確かめるまで実行できない。ポジション名の欄も、送る相手の条件の欄も出さない。添削とも組み合わせられる', async () => {
-    const m = mockAiApi({ create: create(SCOUT_JOB_MEMBER_RESULT, '添削: バイリンガル法人営業マネージャー（求人 5001・会員 70001）') });
+    const m = mockAiApi({ scoutMember: true, create: create(SCOUT_JOB_MEMBER_RESULT, '添削: バイリンガル法人営業マネージャー（求人 5001・会員 70001）') });
     open('?company=101&basis=jobMember&purpose=review');
     await ready();
     expect(screen.queryByRole('textbox', { name: 'ポジション名' })).toBeNull();
@@ -585,7 +546,7 @@ describe('② スカウト文面の AI 作成: 求人 ID・会員 ID から作�
   });
 
   it('作り方を変えると、使わない ID は URL から外れる。履歴から開くと、作り方と ID が入力欄に戻り、自動で確かめ直す（AI は動かない）', async () => {
-    const m = mockAiApi({ jobs: [makeJob({ id: ID1, kind: 'scout', companyId: '101', title: '作成: 求人 5001・会員 70001', input: SCOUT_JOB_MEMBER_INPUT, result: SCOUT_JOB_MEMBER_RESULT }), makeJob({ id: ID2, kind: 'scout', companyId: '101', title: '作成: 以前の結果', input: { ...SCOUT_INPUT, basis: undefined, jobId: undefined, memberId: undefined }, result: { ...SCOUT_RESULT, target: undefined }, createdAt: '2026-11-20T01:00:00.000Z' })] });
+    const m = mockAiApi({ scoutMember: true, jobs: [makeJob({ id: ID1, kind: 'scout', companyId: '101', title: '作成: 求人 5001・会員 70001', input: SCOUT_JOB_MEMBER_INPUT, result: SCOUT_JOB_MEMBER_RESULT }), makeJob({ id: ID2, kind: 'scout', companyId: '101', title: '作成: 以前の結果', input: { ...SCOUT_INPUT, basis: undefined, jobId: undefined, memberId: undefined }, result: { ...SCOUT_RESULT, target: undefined }, createdAt: '2026-11-20T01:00:00.000Z' })] });
     open(`?company=101&job=${ID1}`);
     await screen.findByText(SCOUT_RESULT.summary);
     await waitFor(() => expect(window.location.search).toBe(`?company=101&job=${ID1}&basis=jobMember&jobId=5001&memberId=70001`));
@@ -609,6 +570,87 @@ describe('② スカウト文面の AI 作成: 求人 ID・会員 ID から作�
     await waitFor(() => expect(window.location.search).toBe(`?company=101&job=${ID2}&basis=conditions`));
     await waitFor(() => expect((field('ポジション名') as HTMLInputElement).value).toBe('法人営業マネージャー'));
     expect(screen.queryByRole('group', { name: SCOUT_TEXT.targetLabel })).toBeNull();
+  });
+});
+
+describe('② スカウト文面の AI 作成: 会員 ID から作る 2 つの作り方は、設定（features.scoutMember）が開いているときだけ出す', () => {
+  beforeEach(() => clearResourceCache());
+  afterEach(() => cleanup());
+  const basisValues = () => (within(screen.getByRole('radiogroup', { name: SCOUT_TEXT.basisLegend })).getAllByRole('radio') as HTMLInputElement[]).map((r) => r.value);
+  const memberJob = (over: Partial<AiJobDetail> = {}) => makeJob({ id: ID1, kind: 'scout', companyId: '101', title: '作成: 求人 5001・会員 70001', input: SCOUT_JOB_MEMBER_INPUT, result: SCOUT_JOB_MEMBER_RESULT, ...over });
+
+  it('部品: scoutBasesOf。文言から、職務経歴・自己PR が消えている', () => {
+    expect(scoutBasesOf(false)).toEqual(['conditions', 'job']);
+    expect(scoutBasesOf(true)).toEqual([...SCOUT_BASES]);
+    expect(SCOUT_BASIS_DESCRIPTION.member).toBe('候補者の情報（経験職種・語学力など）に沿った文面を作ります。求人の内容は自分で入れます');
+    expect(SCOUT_TEXT.memberPrivacy).toBe('氏名・連絡先は表示されません。属性は現在のプロフィールです');
+    expect(JSON.stringify(SCOUT_TEXT) + JSON.stringify(SCOUT_BASIS_DESCRIPTION)).not.toMatch(/職務経歴|自己PR|レジュメ/);
+    expect(Object.keys(SCOUT_TEXT).filter((k) => /resume/i.test(k))).toEqual([]);
+  });
+
+  it('閉じているとき（既定）: 「条件を指定」「求人 ID」の 2 つだけ。URL に basis=member / jobMember があっても選ばれず、会員の API を呼ばない', async () => {
+    const m = mockAiApi();
+    expect(m.config.features.scoutMember).toBe(false);
+    open('?company=101&basis=member&memberId=70001');
+    await waitFor(() => expect(m.calls).toContain('GET /api/ai/config'));
+    // 選んでいない状態に戻る（URL からも消える）
+    await waitFor(() => expect(window.location.search).toBe('?company=101'));
+    expect(basisValues()).toEqual(['conditions', 'job']);
+    expect(screen.queryByRole('radio', { name: new RegExp(`^${SCOUT_BASIS_LABEL.member}`) })).toBeNull();
+    expect(screen.getByText(SCOUT_TEXT.basisHint)).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: '会員 ID' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'この内容で文面を作る' })).toBeNull();
+    expect(gets(m, /scout\/members\//)).toEqual([]);
+    cleanup();
+    clearResourceCache();
+    const m2 = mockAiApi();
+    open('?company=101&basis=jobMember&jobId=5001&memberId=70001');
+    await waitFor(() => expect(window.location.search).toBe('?company=101&jobId=5001'));
+    expect(basisValues()).toEqual(['conditions', 'job']);
+    expect(gets(m2, /scout\/(members|jobs)\//)).toEqual([]);
+    // 残った 2 つは、今までどおり選べる
+    pickBasis('job');
+    expect(window.location.search).toBe('?company=101&basis=job&jobId=5001');
+    expect(await screen.findByRole('region', { name: '求人の内容' })).toBeTruthy();
+    expect(gets(m2, /scout\/members\//)).toEqual([]);
+  });
+
+  it('閉じているとき: 以前の会員 ID の依頼は、履歴から結果を読める。入力欄へ戻さず、会員を確かめ直さず、もう一度作るボタンも出さない', async () => {
+    const m = mockAiApi({ jobs: [memberJob(), memberJob({ id: ID2, title: '作成: 失敗した会員の依頼', status: 'failed', result: null, error: '作成に失敗しました' })] });
+    open(`?company=101&job=${ID1}`);
+    // 結果（何をもとに作ったか・3 つの案）は読める
+    await screen.findByText(SCOUT_RESULT.summary);
+    const target = await screen.findByRole('group', { name: SCOUT_TEXT.targetLabel });
+    for (const t of [SCOUT_BASIS_LABEL.jobMember, '候補者: 会員 ID 70001']) expect(target.textContent).toContain(t);
+    expect(target.textContent).not.toMatch(/職務経歴|自己PR/);
+    expect(card('モデル A')).toBeTruthy();
+    // 入力欄へは戻らない（作り方は選ばれていない。URL に basis・ID が入らない）
+    expect(window.location.search).toBe(`?company=101&job=${ID1}`);
+    expect(basisValues()).toEqual(['conditions', 'job']);
+    expect(screen.getByText(SCOUT_TEXT.basisHint)).toBeTruthy();
+    expect(gets(m, /scout\/(members|jobs)\//)).toEqual([]);
+    // 失敗した会員 ID の依頼を開いても、「もう一度」は出ない
+    const list = screen.getByRole('list', { name: 'これまでの結果' });
+    fireEvent.click(within(list).getAllByRole('button', { name: /^作成: 失敗した会員の依頼/ })[0]!);
+    await waitFor(() => expect(window.location.search).toBe(`?company=101&job=${ID2}`));
+    await screen.findByText('作成に失敗しました');
+    expect(screen.queryByRole('button', { name: /もう一度/ })).toBeNull();
+    expect(m.bodies).toHaveLength(0);
+    expect(gets(m, /scout\/members\//)).toEqual([]);
+  });
+
+  it('開いているとき（features.scoutMember = true）: 4 つとも出る（今までどおり）', async () => {
+    const m = mockAiApi({ scoutMember: true });
+    open('?company=101&basis=member&memberId=70001');
+    await waitFor(() => expect(basisValues()).toEqual([...SCOUT_BASES]));
+    await waitFor(() => expect(basisRadio('member').checked).toBe(true));
+    expect(window.location.search).toBe('?company=101&basis=member&memberId=70001');
+    const cardEl = await screen.findByRole('region', { name: '候補者の情報' });
+    expect(cardEl.textContent).toContain(SCOUT_TEXT.memberPrivacy);
+    expect(cardEl.textContent).not.toMatch(/職務経歴|自己PR/);
+    expect(gets(m, /scout\/members\//)).toEqual(['GET /api/ai/scout/members/70001']);
+    const group = screen.getByRole('radiogroup', { name: SCOUT_TEXT.basisLegend });
+    for (const b of SCOUT_BASES) expect(group.textContent).toContain(SCOUT_BASIS_LABEL[b] + SCOUT_BASIS_DESCRIPTION[b]);
   });
 });
 

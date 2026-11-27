@@ -1,6 +1,6 @@
 import { p, type BuiltQuery } from '../bq/params';
 import { SCOUT_MIN_SENDS, SCOUT_MIN_TEMPLATES, SCOUT_RATE_THRESHOLD, SCOUT_TOP_TEMPLATES, SCOUT_WINDOW_MONTHS, type ScoutFilters, type ScoutLang } from '../../shared/ai/scout';
-import { DIGEST_BODY_CHARS, DIGEST_MAX, JOB_TEXT_CHARS, RESUME_APPEAL_CHARS, RESUME_WORK_CHARS, RESUME_WORK_MAX, type ScoutDraftExport } from '../ai/scout/dataSource';
+import { DIGEST_BODY_CHARS, DIGEST_MAX, JOB_TEXT_CHARS, type ScoutDraftExport } from '../ai/scout/dataSource';
 
 /**
  * ② スカウト文面の AI 作成: 日次マート dwh.cms_ai_*（bq/ai/scout_marts.sql）を読む・書く SQL。
@@ -304,7 +304,7 @@ LIMIT 1`,
   };
 }
 
-/** 候補者の属性（日次マート dwh.cms_ai_member_profiles。1 行。氏名・連絡先・自由記述は表に無い）。表は member_id でクラスタ。職務経歴・自己PR は aiScoutMemberResumeQuery（別の照会） */
+/** 候補者の属性（日次マート dwh.cms_ai_member_profiles。1 行。氏名・連絡先・自由記述は表に無い）。表は member_id でクラスタ */
 export function aiScoutMemberQuery(memberId: string): BuiltQuery {
   return {
     label: 'ai_scout_member',
@@ -317,38 +317,5 @@ FROM \`bq-hgt.dwh.cms_ai_member_profiles\`
 WHERE member_id = @member_id
 LIMIT 1`,
     params: [p.int('member_id', idParam(memberId))],
-  };
-}
-
-/**
- * 候補者の職務経歴・自己PR のテキスト（日次マート **dwh_restricted**.cms_ai_member_resumes。会員 × 言語 = 1 行。1 行を返す）。
- *
- * **「Worker の SQL が読む表は bq-hgt.dwh.cms_* だけ」の、ただ 1 つの例外**（2026-11-27 ユーザー指示で、職務経歴・自己PR を文面の材料にする）。
- * 本文は閲覧制限付きのデータセット dwh_restricted にあり、だれでも読める dwh へ写さないために、マートも同じデータセットの中に置いた。
- * 読んでよいのは、この 1 表だけ（元の member_work_histories / member_resumes は読まない。テストの許可リストも、この 1 表だけ）。
- * 属性の照会（aiScoutMemberQuery）と分けてあるのは、この表を読めない（権限なし）ときも、属性だけは返すため。
- *
- * 言語は、文面の言語（@lang = ja / en）のレジュメを優先し、無ければもう一方（中国語のレジュメは表に無い）。
- * 自己PR は先頭 @appeal_chars 文字、職務経歴は新しい順に @work_max 社・職務内容は先頭 @work_chars 文字。**勤務先の社名は表に無い**。
- * 表は会員 ID の 2,000 番ごとにパーティション + member_id でクラスタ（1 回 約 1 MB）
- */
-export function aiScoutMemberResumeQuery(memberId: string, lang: ScoutLang): BuiltQuery {
-  return {
-    label: 'ai_scout_member_resume',
-    maxBytes: 400 * MB,
-    sql: `
-SELECT CAST(member_id AS STRING) AS member_id, lang,
-       SUBSTR(appeal, 1, @appeal_chars) AS appeal, appeal_chars,
-       TO_JSON_STRING(ARRAY(
-         SELECT AS STRUCT w.title, w.start_ym, w.end_ym, SUBSTR(w.notes, 1, @work_chars) AS notes
-         FROM UNNEST(work) AS w WITH OFFSET AS i
-         WHERE i < @work_max
-         ORDER BY i)) AS work_json,
-       work_count, work_chars, management_experience, management_experience_years, job_change_times
-FROM \`bq-hgt.dwh_restricted.cms_ai_member_resumes\`
-WHERE member_id = @member_id
-ORDER BY IF(lang = @lang, 0, 1), language_id DESC
-LIMIT 1`,
-    params: [p.int('member_id', idParam(memberId)), p.str('lang', lang === 'en' ? 'en' : 'ja'), p.int('appeal_chars', RESUME_APPEAL_CHARS), p.int('work_chars', RESUME_WORK_CHARS), p.int('work_max', RESUME_WORK_MAX)],
   };
 }

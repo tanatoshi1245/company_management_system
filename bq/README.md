@@ -115,7 +115,7 @@ bq query --use_legacy_sql=false 'SELECT * FROM `bq-hgt.dwh.cms_refresh_log` ORDE
 | SQL | `ai/scout_marts.sql`（スクリプト。宛先テーブルなし） |
 | 実行者 | `id-69-213@bq-hgt.iam.gserviceaccount.com` |
 | 登録日 | 2026-11-27（Data Transfer API で登録。登録直後の実行 ok） |
-| SQL の差し替え | 2026-11-27（求人・会員の 2 表を足した版に差し替え）→ 同日、**`dwh_restricted.cms_ai_member_resumes`（候補者の職務経歴・自己PR）を足した版に差し替え**。どちらも、登録された SQL が `ai/scout_marts.sql` と一致することを確認（38,294 文字）。次の実行は 2026-11-28 JST 08:10。実行者 `id-69-213@` は `dwh_restricted` の OWNER（同じ鍵で、スクリプトの全体を手元で実行して ok） |
+| SQL の差し替え | 2026-11-27（求人・会員の 2 表を足した版）→ 同日、候補者の職務経歴・自己PR の表を足した版 → 同日、**その表を作らない版に差し替え**（ユーザー指示で、職務経歴・自己PR を使う機能を取り外した。表 `dwh_restricted.cms_ai_member_resumes` は削除済み）。登録された SQL と `ai/scout_marts.sql` の一致を確認（32,041 文字）。**設定は無効のまま** |
 
 | 表 | 粒度 | 行数（2026-11-27） |
 |---|---|---|
@@ -126,7 +126,6 @@ bq query --use_legacy_sql=false 'SELECT * FROM `bq-hgt.dwh.cms_refresh_log` ORDE
 | cms_ai_scout_draft_outcomes | 案と送信実績の照合 | 0 |
 | cms_ai_jobs | 求人の内容（求人 ID からの作成用。社名・URL などは置き換え済み。求人 ID の 2,000 番ごとにパーティション） | 42,738（97.8 MB） |
 | cms_ai_member_profiles | 候補者の属性（会員 ID からの作成用。退会を除く。会員 ID の 2,000 番ごとにパーティション） | 832,665（204.7 MB） |
-| **`dwh_restricted`**.cms_ai_member_resumes | 候補者の職務経歴・自己PR のテキスト（会員 × 言語。会員 ID からの作成用。**この 1 表だけ、閲覧制限付きのデータセット `dwh_restricted` に置く** = 本文を `dwh` へ写さない。勤務先の社名は持たない。会員 ID の 2,000 番ごとにパーティション） | 166,403（102,223 人。302.4 MB） |
 | cms_ai_refresh_log | 実行記録（`step = 'scout_marts'`） | 追記 |
 
 | SQL | 読む表 | スキャン（2026-11-27 実測） | 上限 | 時間 |
@@ -138,7 +137,6 @@ bq query --use_legacy_sql=false 'SELECT * FROM `bq-hgt.dwh.cms_refresh_log` ORDE
 | Worker `ai_scout_drafts_merge`（書き込み） | cms_ai_scout_drafts | 0 MB | 200 MB | 1.7 秒 |
 | Worker `ai_scout_job`（求人 1 件） | cms_ai_jobs | 1.6〜2.3 MB | 200 MB | 0.4〜0.5 秒 |
 | Worker `ai_scout_member`（会員 1 人） | cms_ai_member_profiles | 0.3〜0.4 MB | 400 MB | 0.4〜0.55 秒 |
-| Worker `ai_scout_member_resume`（会員 1 人の職務経歴・自己PR。属性の照会と並行） | **dwh_restricted**.cms_ai_member_resumes | 0.02〜1.24 MB | 400 MB | 0.45〜0.55 秒（属性と合わせた `member()` の全体も 0.46〜0.58 秒） |
 
 - `messages` はパーティションもクラスタリングも無く、件名と本文を読むと期間によらず毎回 約 18.4 GB。日次の 1 回だけにして、依頼ごとには読まない（以前は依頼 1 件につき 1 回 18.4 GB）
 - Worker 用 SA（`cms-bq-reader@bq-hgt`）に、読む 6 表（`cms_ai_jobs`・`cms_ai_member_profiles` を含む。この 2 表は 2026-11-27 時点でまだ付けていない）の dataViewer と、`cms_ai_scout_drafts` の dataEditor を表単位で付ける（コマンドは [`ai/README.md`](./ai/README.md)）。`dwh_restricted.cms_ai_member_resumes` の dataViewer も表単位（データセットの ACL は変えない。まだ付けていない。付けるまでは、候補者は属性だけで返る）

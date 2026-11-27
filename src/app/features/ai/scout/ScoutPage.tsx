@@ -20,7 +20,7 @@ import { ScoutForm, SCOUT_RUN_LABEL } from './components/ScoutForm';
 import { ScoutModelsPanel } from './components/ScoutModelsPanel';
 import { ScoutResultTop, ScoutResultView } from './components/ScoutResultView';
 import { ScoutTargetView } from './components/ScoutTargetCards';
-import { emptyScoutForm, hasBlockingPii, parseScoutId, readScoutResult, scoutFormFromInput, scoutPii, validateScout, withLocalChoice, withLocalUsage, type ScoutForm as ScoutFormState } from './scoutModel';
+import { emptyScoutForm, hasBlockingPii, parseScoutId, readScoutResult, scoutBasesOf, scoutFormFromInput, scoutPii, validateScout, withLocalChoice, withLocalUsage, type ScoutForm as ScoutFormState } from './scoutModel';
 import { useScoutLookup } from './useScoutLookup';
 import '../../../styles/ai.css';
 
@@ -55,6 +55,8 @@ const notStored = (job: AiJobDetail, e: unknown): boolean => job.sample && e ins
  * 既存企業 → **何をもとに作るか（条件 / 求人 ID / 会員 ID / 求人 ID + 会員 ID。選ぶまで先の欄を出さない）** → 目的（作成 / 添削）→
  * 求人・候補者を確かめる（GET だけ。AI は動かない）→ 実行（ここで初めて AI が動く。Worker が分析して 3 案を作り、十数秒で応答に結果が入る）→
  * 3 つの案から選ぶ → 企業が使ったかを記録する。
+ * 会員 ID から作る 2 つの作り方は、設定（GET /api/ai/config の features.scoutMember。既定は閉じる）が開いているときだけ出す。
+ * 閉じている間は、URL に basis=member などがあっても選ばれず、以前の会員 ID の依頼は、結果を読むだけ（入力欄へ戻さない・もう一度作らない）。
  */
 export default function ScoutPage(_props: PageProps) {
   const [url, setUrl] = useUrlState(UrlSchema, URL_DEFAULTS);
@@ -63,11 +65,19 @@ export default function ScoutPage(_props: PageProps) {
   const companyId = url.company || null;
   const jobId = url.job || null;
   const purpose = url.purpose;
-  const basis: ScoutBasisKind | null = url.basis || null;
-  const usesJob = basis !== null && scoutBasisUsesJob(basis);
-  const usesMember = basis !== null && scoutBasisUsesMember(basis);
   const setJobId = useCallback((id: string | null) => setUrlRef.current({ job: id ?? '', tab: 'result' }), []);
   const ws = useAiWorkspace({ kind: 'scout', companyId, jobId, setJobId });
+  /** 会員 ID から作る機能が開いているか（設定を読むまでは、閉じているものとして扱う） */
+  const memberEnabled = ws.config?.features.scoutMember === true;
+  const bases = useMemo(() => scoutBasesOf(memberEnabled), [memberEnabled]);
+  const basis: ScoutBasisKind | null = url.basis && bases.includes(url.basis) ? url.basis : null;
+  const usesJob = basis !== null && scoutBasisUsesJob(basis);
+  const usesMember = basis !== null && scoutBasisUsesMember(basis);
+  // 閉じている作り方が URL に残っていたら消す（選んでいない状態に戻す。設定を読んでから）
+  const configLoaded = ws.config !== null;
+  useEffect(() => {
+    if (configLoaded && url.basis && !bases.includes(url.basis)) setUrlRef.current({ basis: '', memberId: '' });
+  }, [configLoaded, bases, url.basis]);
   const options = useScoutOptions();
 
   const [form, setForm] = useState<ScoutFormState>(emptyScoutForm);
@@ -140,10 +150,13 @@ export default function ScoutPage(_props: PageProps) {
   const loadedJob = jobId && ws.job && ws.job.id === jobId ? ws.job : null;
   const filledFrom = useRef<string | null>(null);
   useEffect(() => {
-    if (!loadedJob || filledFrom.current === loadedJob.id) return;
+    // 設定を読んでから（会員 ID から作る機能が開いているかで、戻すかどうかが変わる）
+    if (!loadedJob || !configLoaded || filledFrom.current === loadedJob.id) return;
     filledFrom.current = loadedJob.id;
     const read = scoutFormFromInput(loadedJob.input);
     if (!read) return;
+    // 閉じている作り方（会員 ID）の依頼は、結果を読むだけ（入力欄へ戻さない）
+    if (!bases.includes(read.source.basis)) return;
     autofill.keep(loadedJob.companyId);
     setForm(read.form);
     setShowErrors(false);
@@ -154,7 +167,7 @@ export default function ScoutPage(_props: PageProps) {
     if (loadedJob.companyId !== companyId || read.purpose !== purpose || b !== url.basis || (jid ?? '') !== url.jobId || (mid ?? '') !== url.memberId)
       setUrlRef.current({ company: loadedJob.companyId, purpose: read.purpose, basis: b, jobId: jid ?? '', memberId: mid ?? '' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadedJob]);
+  }, [loadedJob, configLoaded]);
 
   const companyNames = useMemo(() => [ws.company?.name, ws.job?.companyId === companyId ? ws.job?.companyName : null], [ws.company, ws.job, companyId]);
   const pii = useMemo(() => scoutPii(purpose, form, companyNames, basis ?? 'conditions'), [purpose, form, companyNames, basis]);
@@ -191,8 +204,9 @@ export default function ScoutPage(_props: PageProps) {
   const retryInput = useMemo(() => {
     if (!job || (job.status !== 'failed' && job.status !== 'queued')) return null;
     const r = ScoutInputSchema.safeParse(job.input);
-    return r.success ? r.data : null;
-  }, [job]);
+    // 閉じている作り方（会員 ID）の依頼は、もう一度作らない
+    return r.success && bases.includes(r.data.basis) ? r.data : null;
+  }, [job, bases]);
 
   const choose = async (draftId: string | null, comment: string) => {
     if (!job) return;
@@ -227,6 +241,7 @@ export default function ScoutPage(_props: PageProps) {
               purpose={purpose}
               onPurpose={(p) => setUrl({ purpose: p })}
               basis={basis}
+              bases={bases}
               onBasis={onBasis}
               job={{ text: jobText, onText: onJobText, onCheck: checkJob, loading: jobState?.status === 'loading', error: usesJob && jobState?.status === 'error' ? jobState.error : null, summary: jobSummary }}
               member={{ text: memberText, onText: onMemberText, onCheck: checkMember, loading: memberState?.status === 'loading', error: usesMember && memberState?.status === 'error' ? memberState.error : null, summary: memberSummary }}

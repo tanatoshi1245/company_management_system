@@ -100,7 +100,7 @@ export const SCOUT_BASIS_LABEL: Record<ScoutBasisKind, string> = {
 export const SCOUT_BASIS_DESCRIPTION: Record<ScoutBasisKind, string> = {
   conditions: 'ポジション名と、送る相手の条件を自分で入れます',
   job: '求人の内容（仕事内容・応募条件・勤務地・年収など）に沿った文面を作ります',
-  member: '候補者の情報（職務経歴・自己PR・経験職種・語学力など）に沿った文面を作ります。求人の内容は自分で入れます',
+  member: '候補者の情報（経験職種・語学力など）に沿った文面を作ります。求人の内容は自分で入れます',
   jobMember: '求人の内容をもとに、その候補者向けに合わせた文面を作ります',
 };
 export const scoutBasisUsesJob = (b: ScoutBasisKind): boolean => b === 'job' || b === 'jobMember';
@@ -255,8 +255,7 @@ export type ScoutJobSummary = z.infer<typeof ScoutJobSummarySchema>;
 
 /**
  * 候補者の情報（画面で確かめる用 + 結果に残す用）。GET /api/ai/scout/members/:memberId。
- * 属性（現在のプロフィール）と、職務経歴・自己PR の登録の有無。氏名・連絡先は無い。
- * 職務経歴・自己PR の本文は、文面を作るときに Worker が読んで Vertex AI へ渡すが、画面・結果・D1 には本文を出さない / 残さない。
+ * BigQuery にある属性だけ（氏名・連絡先・レジュメの本文は無い）。属性は現在のプロフィール。
  */
 export const ScoutMemberSummarySchema = z.object({
   memberId: z.string(),
@@ -274,21 +273,6 @@ export const ScoutMemberSummarySchema = z.object({
   desiredOccupations: z.array(z.string()).max(12),
   incomeRange: z.string().nullable(),
   desiredIncomeRange: z.string().nullable(),
-  /**
-   * 職務経歴・自己PR の登録の有無（本文そのものは返さない。件数・文字数と、直近の役職名だけ）。
-   * null = 登録なし（ターゲット人材でない・本文が無い）→ 属性だけで作る
-   */
-  resume: z
-    .object({
-      lang: z.string(),
-      workCount: z.number().int().min(0),
-      workChars: z.number().int().min(0),
-      appealChars: z.number().int().min(0),
-      latestTitle: z.string().nullable(),
-      managementYears: z.number().nullable(),
-    })
-    .nullable()
-    .default(null),
   /** 分析対象の絞り込みに使った条件（Worker が候補者の属性から決める。年齢層・経験職種） */
   filters: ScoutFiltersSchema,
 });

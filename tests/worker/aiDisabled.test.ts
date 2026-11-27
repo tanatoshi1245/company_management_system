@@ -22,12 +22,14 @@ describe('AI 機能の停止スイッチ', () => {
     expect(aiEnabled({ AI_ENABLED: '1' })).toBe(true);
   });
 
-  it('設定ファイルは、本番・プレビュー・テスト環境のすべてで停止。cron も無い', () => {
+  it('設定ファイルは、本番・プレビューで停止。テスト環境だけ動かす（会員 ID から作る機能は、どこでも閉じる）。cron は無い', () => {
     const raw = readFileSync(join(process.cwd(), 'wrangler.jsonc'), 'utf8').replace(/^\s*\/\/.*$/gm, '');
     const cfg = JSON.parse(raw) as { vars: Record<string, string>; triggers?: unknown; previews: { vars: Record<string, string> }; env: { staging: { vars: Record<string, string>; triggers?: unknown } } };
     expect(cfg.vars.AI_ENABLED).toBe('0');
     expect(cfg.previews.vars.AI_ENABLED).toBe('0');
-    expect(cfg.env.staging.vars.AI_ENABLED).toBe('0');
+    // 2026-11-27 ユーザー指示: 求人 ID からの作成を、テスト環境へ反映（本番は、確認が済むまで停止）
+    expect(cfg.env.staging.vars.AI_ENABLED).toBe('1');
+    for (const v of [cfg.vars, cfg.previews.vars, cfg.env.staging.vars]) expect(v.AI_SCOUT_MEMBER).toBe('0');
     expect(cfg.triggers).toBeUndefined();
     expect(cfg.env.staging.triggers).toBeUndefined();
   });

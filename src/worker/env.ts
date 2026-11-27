@@ -40,6 +40,8 @@ export interface Env {
   AI_INSIGHT_ENGINE?: string;
   /** AI 機能の停止スイッチ。"1" のときだけ AI 機能が動く（既定は停止。src/worker/ai/enabled.ts） */
   AI_ENABLED?: string;
+  /** AI 機能 ② スカウト: 会員 ID から作る機能。候補者の属性を AI へ渡すので、確認が済むまで閉じる。"1" のときだけ開く（既定は閉じる。src/worker/ai/enabled.ts の aiScoutMemberEnabled） */
+  AI_SCOUT_MEMBER?: string;
   /** AI 機能: 管理者のメール（カンマ区切り）。モデルの作り方（プレイブック）を見て、検証・チューニングを実行できる人。未設定なら誰も管理者にならない */
   AI_ADMIN_EMAILS?: string;
 }

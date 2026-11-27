@@ -154,7 +154,7 @@ export const SCOUT_JOB_SUMMARY: ScoutJobSummary = {
 /** 掲載が終わった求人 */
 export const SCOUT_JOB_ENDED: ScoutJobSummary = { ...SCOUT_JOB_SUMMARY, jobId: '5002', title: 'カスタマーサクセス', occupation: 'カスタマーサポート', published: false, salary: null };
 
-/** 候補者の情報（GET /api/ai/scout/members/:memberId）。氏名・連絡先は無い。職務経歴・自己PR は、登録の要約だけ（本文は無い） */
+/** 候補者の情報（GET /api/ai/scout/members/:memberId）。氏名・連絡先は無い */
 export const SCOUT_MEMBER_SUMMARY: ScoutMemberSummary = {
   memberId: '70001',
   ageGroup: '30代',
@@ -169,12 +169,8 @@ export const SCOUT_MEMBER_SUMMARY: ScoutMemberSummary = {
   desiredOccupations: ['営業', '事業開発'],
   incomeRange: '600〜800万円',
   desiredIncomeRange: '800〜1000万円',
-  resume: { lang: 'ja', workCount: 3, workChars: 1240, appealChars: 380, latestTitle: '営業マネージャー', managementYears: 3 },
   filters: { ageGroups: ['30代'], nationalities: [], japaneseLevels: [], englishLevels: [], residences: [], occupations: ['営業'] },
 };
-
-/** 職務経歴・自己PR の登録が無い候補者（ターゲット人材でない・未入力）。属性だけで作る */
-export const SCOUT_MEMBER_NO_RESUME: ScoutMemberSummary = { ...SCOUT_MEMBER_SUMMARY, memberId: '70002', resume: null };
 
 /** 求人 ID から作った依頼の入力（保存される形。ポジション名は Worker が求人の値で置き換える） */
 export const SCOUT_JOB_INPUT: ScoutInput = { ...SCOUT_INPUT, basis: 'job', jobId: '5001', positionName: 'バイリンガル法人営業マネージャー', jobOccupations: [], jobLocation: '' };

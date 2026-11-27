@@ -14,6 +14,7 @@ import { ScoutChoiceInputSchema, ScoutJobIdSchema, ScoutMemberIdSchema, ScoutMod
 import { AiJobsRepo, type AiJobRow } from '../repo';
 import { companyBrief, isAiAdmin, toDetail } from '../service';
 import { vertexConfigured } from '../vertex';
+import { AI_SCOUT_MEMBER_DISABLED_CODE, AI_SCOUT_MEMBER_DISABLED_MESSAGE, aiScoutMemberEnabled } from '../enabled';
 import { makeScoutDataSource } from './bqDataSource';
 import { AI_CONFIG_MESSAGE, rollbackScoutModel, scoutJobSummary, scoutMemberSummary, scoutModelsResponse, setScoutChoice, setScoutUsage, withScoutFeedback } from './service';
 import { runScoutTuning } from './tuning';
@@ -85,8 +86,12 @@ scoutRoutes.get('/companies/:id/ai/scout/jobs/:jobId', async (c) => {
   return c.json(body, 200, NO_STORE);
 });
 
-/** 候補者の属性を確かめる（「会員 ID から作る」の、実行の前）。BigQuery にある属性だけ。Vertex AI は呼ばない。誰が・どの会員 ID を引いたかをログに残す */
+/**
+ * 候補者の属性を確かめる（「会員 ID から作る」の、実行の前）。BigQuery にある属性だけ。Vertex AI は呼ばない。誰が・どの会員 ID を引いたかをログに残す。
+ * 会員 ID から作る機能が閉じている（既定。enabled.ts の aiScoutMemberEnabled）間は 403 で、会員のデータを読まない
+ */
 scoutRoutes.get('/ai/scout/members/:memberId', async (c) => {
+  if (!aiScoutMemberEnabled(c.env)) throw new AppError(AI_SCOUT_MEMBER_DISABLED_CODE, 403, AI_SCOUT_MEMBER_DISABLED_MESSAGE);
   const memberId = parseParam(c.req.param('memberId'), ScoutMemberIdSchema);
   const body: ScoutMemberSummary = await scoutMemberSummary({ ds: makeScoutDataSource(c.env), actor: c.get('identity')?.email ?? 'preview', requestId: c.get('requestId') }, memberId);
   return c.json(body, 200, NO_STORE);

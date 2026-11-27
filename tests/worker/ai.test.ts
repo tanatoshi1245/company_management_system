@@ -65,7 +65,7 @@ describe('AI 機能の API（/api/ai/*・/api/companies/:id/ai/jobs）', () => {
     const res = await api.get('/api/ai/config');
     expect(res.headers.get('cache-control')).toBe('private, no-store');
     const text = await res.text();
-    expect(AiConfigResponseSchema.parse(JSON.parse(text))).toEqual({ fireConfigured: true, storeConfigured: true, sampleMode: false, canWrite: true, admin: false, features: { scout: true, job: false, report: false } });
+    expect(AiConfigResponseSchema.parse(JSON.parse(text))).toEqual({ fireConfigured: true, storeConfigured: true, sampleMode: false, canWrite: true, admin: false, features: { scout: true, job: false, report: false, scoutMember: false } });
     expect(text).not.toContain('private_key');
     expect(text).not.toContain(ENGINES.a);
     expect(AiConfigResponseSchema.parse(await (await api.get('/api/ai/config', adminCookie)).json()).admin).toBe(true);

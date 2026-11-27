@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { baseEnv } from '../helpers/env';
 import { EMPTY_SCOUT_FILTERS, SCOUT_FILTER_KEYS, SCOUT_MIN_SENDS, SCOUT_MIN_TEMPLATES, SCOUT_RATE_THRESHOLD, SCOUT_TOP_TEMPLATES, SCOUT_WINDOW_MONTHS, ScoutBasisSchema, ScoutOptionsResponseSchema, ScoutStatsSchema, type ScoutFilters } from '../../src/shared/ai/scout';
 import { INDUSTRY_GROUPS, industryGroupOf } from '../../src/shared/ai/industryGroups';
-import { DIGEST_BODY_CHARS, DIGEST_MAX, JOB_TEXT_CHARS, RESUME_APPEAL_CHARS, RESUME_WORK_CHARS, RESUME_WORK_MAX } from '../../src/worker/ai/scout/dataSource';
-import { makeScoutDataSource, normalizeFilters, scopeLabelOf, scoutCacheKey, scoutDataSourceOf, toBenchmark, toJobInfo, toMemberInfo, toMemberResume } from '../../src/worker/ai/scout/bqDataSource';
-import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutJobQuery, aiScoutMemberQuery, aiScoutMemberResumeQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery, EXPORT_MAX_ROWS, OPTION_EXCLUDED, SCOUT_FEATURES } from '../../src/worker/sql/aiScout';
-import { fakeScoutDs, sampleJob, sampleMember, sampleResume } from '../helpers/scoutFake';
+import { DIGEST_BODY_CHARS, DIGEST_MAX, JOB_TEXT_CHARS } from '../../src/worker/ai/scout/dataSource';
+import { makeScoutDataSource, normalizeFilters, scopeLabelOf, scoutCacheKey, scoutDataSourceOf, toBenchmark, toJobInfo, toMemberInfo } from '../../src/worker/ai/scout/bqDataSource';
+import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutJobQuery, aiScoutMemberQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery, EXPORT_MAX_ROWS, OPTION_EXCLUDED, SCOUT_FEATURES } from '../../src/worker/sql/aiScout';
+import { fakeScoutDs, sampleJob, sampleMember } from '../helpers/scoutFake';
 import type { BqClient } from '../../src/worker/bq/client';
 import type { BuiltQuery } from '../../src/worker/bq/params';
 import { BqError } from '../../src/worker/bq/client';
+import { MockBqClient } from '../../src/worker/bq/mockClient';
 
 const filters = (f: Partial<ScoutFilters> = {}): ScoutFilters => ({ ...EMPTY_SCOUT_FILTERS, ...f });
 const draft = (n: number) => ({ draftId: `d${String(n).padStart(8, '0')}`, jobId: 'job1', companyId: '1001', modelId: 'a', modelVersion: 1, subject: '件名', body: '本文', chosenAt: '2026-11-27T01:00:00.000Z' });
@@ -47,7 +48,7 @@ describe('AI スカウトのマートの SQL（src/worker/sql/aiScout.ts）', ()
   it('SQL の本文を文字列連結・差し込みで組み立てていない（入力が違っても本文は同じ）', () => {
     const src = readFileSync(join(process.cwd(), 'src/worker/sql/aiScout.ts'), 'utf8');
     const sqlBlocks = Array.from(src.matchAll(/sql: `([\s\S]*?)`,\n/g)).map((m) => m[1]);
-    expect(sqlBlocks.length).toBe(7);
+    expect(sqlBlocks.length).toBe(6);
     for (const b of sqlBlocks) expect(b).not.toContain('${');
     expect(src).not.toMatch(/sql:\s*[^`\s]/);
     expect(src).not.toMatch(/\.sql\s*\+=|sql\s*\+\s*/);
@@ -335,7 +336,7 @@ describe('求人 ID・会員 ID からの作成（cms_ai_jobs / cms_ai_member_pr
     expect(m!.experiencedOccupations).toEqual(['IT関連（オープン・WEB系）', 'IT関連（その他）', 'コンサルティング']);
     const m2 = await ds.member('20002');
     expect(m2).toMatchObject({ careerLevel: null, incomeRange: null, desiredOccupations: [] });
-    expect(Object.keys(m!).sort()).toEqual(['ageGroup', 'careerLevel', 'desiredIncomeRange', 'desiredOccupations', 'englishLevel', 'experiencedOccupations', 'incomeRange', 'japaneseLevel', 'lastIndustry', 'memberId', 'nationality', 'occupation', 'residence', 'resume'].sort());
+    expect(Object.keys(m!).sort()).toEqual(['ageGroup', 'careerLevel', 'desiredIncomeRange', 'desiredOccupations', 'englishLevel', 'experiencedOccupations', 'incomeRange', 'japaneseLevel', 'lastIndustry', 'memberId', 'nationality', 'occupation', 'residence'].sort());
     expect(await ds.member('99999')).toBeNull();
     expect(await ds.member('')).toBeNull();
     expect(await ds.member('20001; --')).toBeNull();
@@ -367,11 +368,10 @@ describe('求人 ID・会員 ID からの作成（cms_ai_jobs / cms_ai_member_pr
     const d = scoutDataSourceOf(failing);
     expect(await d.job('1001', '1001')).toBeNull();
     expect(await d.member('20001')).toBeNull();
-    // member は、属性とレジュメの 2 つを照会する
-    expect(calls).toBe(3);
+    expect(calls).toBe(2);
     expect(await d.job('1001', 'x')).toBeNull();
     expect(await d.member('x')).toBeNull();
-    expect(calls).toBe(3);
+    expect(calls).toBe(2);
     const noKey = makeScoutDataSource({ ...baseEnv, BQ_MOCK: undefined });
     expect(await noKey.job('1001', '1001')).toBeNull();
     expect(await noKey.member('20001')).toBeNull();
@@ -421,161 +421,40 @@ describe('cacheKey（分析の使い回しのキー）', () => {
   });
 });
 
-describe('候補者の職務経歴・自己PR（dwh_restricted.cms_ai_member_resumes。Worker が dwh の外で読む、ただ 1 つの表）', () => {
-  const val = (q: BuiltQuery, n: string) => q.params.find((x) => x.name === n)?.parameterValue.value;
-  const RESUME_TABLE = 'bq-hgt.dwh_restricted.cms_ai_member_resumes';
+describe('候補者の職務経歴・自己PR を使う機能は外した（2026-11-27 ユーザー指示）', () => {
+  const walk = (dir: string): string[] =>
+    readdirSync(join(process.cwd(), dir), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : /\.(ts|tsx|sql)$/.test(e.name) ? [join(dir, e.name)] : []));
+  const read = (file: string) => readFileSync(join(process.cwd(), file), 'utf8');
 
-  it('レジュメの照会: 読む表はこの 1 表だけ・値は @param だけ・社名の列を読まない・上限を持つ', () => {
-    const q = aiScoutMemberResumeQuery('20001', 'ja');
-    expect(q.label).toBe('ai_scout_member_resume');
-    // バッククォートで囲んだ表は 1 つだけで、許可した 1 表と一致する（dwh_restricted 全体は通さない）
-    const tables = Array.from(q.sql.matchAll(/`([^`]+)`/g)).map((m) => m[1]);
-    expect(tables).toEqual([RESUME_TABLE]);
-    expect(Array.from(q.sql.matchAll(/dwh_restricted\.([a-z_]+)/g)).map((m) => m[1])).toEqual(['cms_ai_member_resumes']);
-    expect(q.sql).not.toMatch(/\bdwh\./);
-    expect(q.sql).not.toMatch(/member_work_histories|member_resumes\b(?<!cms_ai_member_resumes)/);
-    expect(q.sql).not.toMatch(/company_name|company|title\s*,\s*appeal/);
-    expect(q.sql).not.toContain("'");
-    expect(q.sql).toContain('WHERE member_id = @member_id');
-    expect(q.sql).toContain('LIMIT 1');
-    const refs = Array.from(new Set(Array.from(q.sql.matchAll(/@([a-z_]+)/g)).map((m) => m[1]))).sort();
-    expect(refs).toEqual(['appeal_chars', 'lang', 'member_id', 'work_chars', 'work_max']);
-    expect(q.params.map((x) => x.name).sort()).toEqual(refs);
-    expect(val(q, 'member_id')).toBe('20001');
-    expect(val(q, 'appeal_chars')).toBe(String(RESUME_APPEAL_CHARS));
-    expect(val(q, 'work_chars')).toBe(String(RESUME_WORK_CHARS));
-    expect(val(q, 'work_max')).toBe(String(RESUME_WORK_MAX));
-    expect(q.maxBytes).toBeGreaterThan(0);
-    expect(q.maxBytes).toBeLessThanOrEqual(400 * 1024 ** 2);
-    // 入力が違っても本文は同じ。言語は ja / en だけ
-    expect(aiScoutMemberResumeQuery("x' OR '1'='1", 'en').sql).toBe(q.sql);
-    expect(val(aiScoutMemberResumeQuery('abc', 'ja'), 'member_id')).toBe('-1');
-    expect(val(aiScoutMemberResumeQuery('1', 'en'), 'lang')).toBe('en');
-    expect(val(aiScoutMemberResumeQuery('1', 'zh' as never), 'lang')).toBe('ja');
-    // 指定の言語を優先する
-    expect(q.sql).toContain('ORDER BY IF(lang = @lang, 0, 1)');
+  it('Worker・画面・共通のコード、スクリプト、日次マートの SQL のどこにも、閲覧制限付きのデータセット（dwh_restricted）が出てこない', () => {
+    const files = [...walk('src'), ...walk('scripts'), ...walk('bq')];
+    expect(files.length).toBeGreaterThan(50);
+    expect(files).toContain(join('src/worker/sql', 'aiScout.ts'));
+    expect(files).toContain(join('bq/ai', 'scout_marts.sql'));
+    expect(files.filter((f) => read(f).includes('dwh_restricted'))).toEqual([]);
   });
 
-  it('ほかの照会は dwh_restricted を読まない。属性の照会は変わらない', () => {
-    const src = readFileSync(join(process.cwd(), 'src/worker/sql/aiScout.ts'), 'utf8');
-    const sqlBlocks = Array.from(src.matchAll(/sql: `([\s\S]*?)`,\n/g)).map((m) => m[1]);
-    expect(sqlBlocks.filter((b) => b.includes('dwh_restricted')).length).toBe(1);
-    expect(aiScoutMemberQuery('20001').sql).not.toContain('dwh_restricted');
-    // src/worker/sql のほかのファイルは、dwh_restricted を読まない
-    for (const f of ['ai.ts', 'companyDetail.ts', 'companyMaster.ts', 'companyMonthly.ts']) {
-      expect(readFileSync(join(process.cwd(), 'src/worker/sql', f), 'utf8')).not.toContain('dwh_restricted');
+  it('Worker の SQL が読むデータセットは bq-hgt.dwh だけ（例外なし。スカウトの SQL は cms_ai_* だけ）。レジュメの照会・型・プロンプトの部品が残っていない', () => {
+    for (const f of walk('src/worker/sql')) {
+      const tables = Array.from(read(f).matchAll(/`(bq-hgt\.[^`\\]+)/g)).map((m) => m[1]!);
+      // データセットは dwh だけ（表ごとの許可リストは tests/worker/sql.test.ts）。AI のスカウトの SQL は cms_ai_* だけ
+      for (const t of tables) expect(t, f).toMatch(f.endsWith('aiScout.ts') ? /^bq-hgt\.dwh\.cms_ai_[a-z_]+$/ : /^bq-hgt\.dwh\.[a-z_]+$/);
+      expect(read(f), f).not.toMatch(/member_resumes|member_work_histories/);
     }
+    const worker = walk('src/worker').concat(walk('src/shared'), walk('src/app'));
+    for (const f of worker) expect(read(f), f).not.toMatch(/aiScoutMemberResumeQuery|ScoutMemberResume|resumeForPrompt|resumePrompt|RESUME_|職務経歴と自己PR/);
+    expect(read('bq/ai/scout_marts.sql')).not.toMatch(/cms_ai_member_resumes|member_work_histories|resumes=/);
   });
 
-  it('マート: dwh_restricted に作る・会員 ID でパーティションとクラスタ・社名の列を読まない・dwh には本文の表を作らない', () => {
-    const mart = readFileSync(join(process.cwd(), 'bq/ai/scout_marts.sql'), 'utf8');
-    const step = mart.split('CREATE OR REPLACE TABLE `bq-hgt.dwh_restricted.cms_ai_member_resumes`')[1]?.split('-- 13.')[0] ?? '';
-    expect(step).toContain('PARTITION BY RANGE_BUCKET(member_id, GENERATE_ARRAY(0, 4000000, 2000))');
-    expect(step).toContain('CLUSTER BY member_id, language_id');
-    expect(step).toContain('language_id IN (1, 2)');
-    expect(step).toContain('FROM `bq-hgt.dwh.cms_ai_member_profiles`');
-    expect(step).not.toMatch(/company_name|industry_id|job_type_id/);
-    // スクリプトが dwh_restricted に作る・変えるのは、この 1 表だけ
-    expect(Array.from(mart.matchAll(/(?:CREATE[A-Z ]*TABLE(?: IF NOT EXISTS)?|INSERT INTO|MERGE(?: INTO)?|DROP TABLE(?: IF EXISTS)?|DELETE FROM|UPDATE)\s+`bq-hgt\.dwh_restricted\.([a-z_]+)`/g)).map((m) => m[1])).toEqual(['cms_ai_member_resumes']);
-    // dwh の側の表は、職務内容・自己PR の列を読まない
-    expect(mart.split('-- 12. cms_ai_member_resumes')[0]).not.toMatch(/dwh_restricted\.member_|\.appeal\b|w\.notes/);
-  });
-
-  it('member: レジュメのある会員は resume が入り、無い会員は null。言語は指定を優先', async () => {
-    const ds = makeScoutDataSource(baseEnv);
-    const m = await ds.member('20001');
-    expect(m?.resume).not.toBeNull();
-    const r = m!.resume!;
-    expect(Object.keys(r).sort()).toEqual(['appeal', 'appealChars', 'jobChanges', 'lang', 'managementYears', 'work', 'workChars', 'workCount']);
-    expect(r.lang).toBe('ja');
-    expect(r.appeal.length).toBeGreaterThan(200);
-    expect(r.appeal.length).toBeLessThanOrEqual(RESUME_APPEAL_CHARS);
-    expect(r.appealChars).toBeGreaterThanOrEqual(r.appeal.length);
-    expect(r.work.length).toBe(2);
-    expect(r.work[0]).toMatchObject({ from: '2022-04', to: null });
-    expect(r.work[1]).toMatchObject({ from: '2017-04', to: '2022-03' });
-    for (const w of r.work) {
-      expect(Object.keys(w).sort()).toEqual(['from', 'notes', 'title', 'to']);
-      expect(w.notes.length).toBeLessThanOrEqual(RESUME_WORK_CHARS);
-    }
-    expect(r.workCount).toBe(2);
-    expect(r.managementYears).toBeNull();
-    expect(r.jobChanges).toBe(1);
-    // 作り物に、社名・連絡先の形が無い
-    expect(JSON.stringify(r)).not.toMatch(/株式会社|Inc\.|Ltd|@|https?:/);
-    expect((await ds.member('20001', 'en'))?.resume?.lang).toBe('en');
-    expect((await ds.member('20001', 'ja'))?.resume?.lang).toBe('ja');
-    const m2 = await ds.member('20002');
-    expect(m2).not.toBeNull();
-    expect(m2!.resume).toBeNull();
-    expect(await ds.member('99999')).toBeNull();
-  });
-
-  it('レジュメの照会が失敗しても（表が無い・権限が無い）、属性は返る（resume = null）。属性が無ければ null', async () => {
+  it('会員を引いた結果に resume が無い。照会は属性の 1 本だけ', async () => {
     const labels: string[] = [];
-    const profileRow = { member_id: '20001', age_group: '25-34歳', nationality_category: '日本国籍', experienced_json: '[]', desired_json: '[]' };
-    const denied: BqClient = {
-      mock: false,
-      run: async (q) => {
-        labels.push(q.label);
-        if (q.label === 'ai_scout_member_resume') throw new BqError('Access Denied: Table bq-hgt:dwh_restricted.cms_ai_member_resumes', 'accessDenied', 403);
-        return { rows: [profileRow] } as never;
-      },
-      dryRun: async () => ({ bytesProcessed: 0 }),
-    };
-    const m = await scoutDataSourceOf(denied).member('20001', 'en');
-    expect(m).toMatchObject({ memberId: '20001', ageGroup: '25-34歳', resume: null });
-    expect(labels.sort()).toEqual(['ai_scout_member', 'ai_scout_member_resume']);
-    // レジュメはあるが、属性の行が無い（退会など）→ null
-    const noProfile: BqClient = {
-      mock: false,
-      run: async (q) => ({ rows: q.label === 'ai_scout_member_resume' ? [{ member_id: '20001', lang: 'ja', appeal: 'あ', appeal_chars: 1, work_json: '[]' }] : [] }) as never,
-      dryRun: async () => ({ bytesProcessed: 0 }),
-    };
-    expect(await scoutDataSourceOf(noProfile).member('20001')).toBeNull();
-    // 言語は照会に渡る
-    let lang = '';
-    const spy: BqClient = {
-      mock: false,
-      run: async (q) => {
-        if (q.label === 'ai_scout_member_resume') lang = String(val(q, 'lang'));
-        return { rows: [profileRow] } as never;
-      },
-      dryRun: async () => ({ bytesProcessed: 0 }),
-    };
-    await scoutDataSourceOf(spy).member('20001', 'en');
-    expect(lang).toBe('en');
-    await scoutDataSourceOf(spy).member('20001');
-    expect(lang).toBe('ja');
-  });
-
-  it('行 → 契約の型: 本文が空・ID 違い・形が違うときは null。本文は切る。職務経歴は RESUME_WORK_MAX 社まで', () => {
-    const work = (n: number) => JSON.stringify(Array.from({ length: n }, (_, i) => ({ title: i === 1 ? '' : `役職${i}`, start_ym: `20${10 + i}-04`, end_ym: i === 0 ? null : 'x', notes: 'の'.repeat(RESUME_WORK_CHARS + 10) })));
-    const r = toMemberResume({ member_id: '5', lang: 'en', appeal: ` ${'あ'.repeat(RESUME_APPEAL_CHARS + 30)}`, appeal_chars: 5000, work_json: work(5), work_count: 7, work_chars: 9000, management_experience: true, management_experience_years: 3, job_change_times: 4 }, '5');
-    expect(r).toMatchObject({ lang: 'en', appealChars: 5000, workCount: 7, workChars: 9000, managementYears: null, jobChanges: 3 });
-    expect(r!.appeal.length).toBeLessThanOrEqual(RESUME_APPEAL_CHARS);
-    expect(r!.work.length).toBe(RESUME_WORK_MAX);
-    expect(r!.work[0]).toEqual({ title: '役職0', from: '2010-04', to: null, notes: 'の'.repeat(RESUME_WORK_CHARS) });
-    expect(r!.work[1]).toMatchObject({ title: null, from: '2011-04', to: null });
-    // 自己PR だけ / 職務内容だけでも返す
-    expect(toMemberResume({ member_id: '5', lang: 'ja', appeal: '自己PR', appeal_chars: 4, work_json: '[]' }, '5')).toMatchObject({ appeal: '自己PR', work: [], jobChanges: null });
-    expect(toMemberResume({ member_id: '5', lang: 'ja', appeal: '', work_json: JSON.stringify([{ title: null, start_ym: null, end_ym: null, notes: '職務内容' }]) }, '5')).toMatchObject({ appeal: '', appealChars: 0, workCount: 1 });
-    // 本文が空（役職だけ・空白だけ）は null
-    expect(toMemberResume({ member_id: '5', lang: 'ja', appeal: '  ', work_json: JSON.stringify([{ title: '役職', notes: '' }]) }, '5')).toBeNull();
-    expect(toMemberResume({ member_id: '5', lang: 'ja', appeal: '', work_json: 'not json' }, '5')).toBeNull();
-    expect(toMemberResume({ member_id: '5', lang: 'zh', appeal: '自己PR' }, '5')).toBeNull();
-    expect(toMemberResume({ member_id: '6', lang: 'ja', appeal: '自己PR' }, '5')).toBeNull();
-    expect(toMemberResume(undefined, '5')).toBeNull();
-    // toMemberInfo は、渡した resume をそのまま入れる（渡さなければ null）
-    expect(toMemberInfo({ member_id: '5' }, '5')?.resume).toBeNull();
-    expect(toMemberInfo({ member_id: '5' }, '5', sampleResume())?.resume?.work.length).toBe(2);
-  });
-
-  it('テスト用の偽物（scoutFake）: sampleMember は resume を持ち、{ resume: null } で外せる', () => {
-    expect(sampleMember().resume).toMatchObject({ lang: 'ja', workCount: 2 });
-    expect(sampleMember().resume!.appealChars).toBe(sampleMember().resume!.appeal.length);
-    expect(sampleMember({ resume: null }).resume).toBeNull();
-    expect(sampleMember({ resume: sampleResume({ lang: 'en' }) }).resume?.lang).toBe('en');
-    expect(JSON.stringify(sampleResume())).not.toMatch(/株式会社|Inc\.|Ltd|@|https?:/);
+    const inner = new MockBqClient();
+    const spy: BqClient = { mock: true, run: async (q) => (labels.push(q.label), inner.run(q)), dryRun: async () => inner.dryRun() };
+    const m = await scoutDataSourceOf(spy).member('20001');
+    expect(m).not.toBeNull();
+    expect(m).not.toHaveProperty('resume');
+    expect(labels).toEqual(['ai_scout_member']);
+    expect(sampleMember()).not.toHaveProperty('resume');
+    expect(toMemberInfo({ member_id: '5' }, '5')).not.toHaveProperty('resume');
   });
 });

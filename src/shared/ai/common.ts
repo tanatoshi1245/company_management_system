@@ -110,8 +110,14 @@ export const AiConfigResponseSchema = z.object({
   /** 書き込める人か（Google ログイン済み） */
   canWrite: z.boolean(),
   admin: z.boolean(),
-  /** 機能ごとに、いま使えるか（false = 準備中。依頼は 409 notReady） */
-  features: z.object({ scout: z.boolean(), job: z.boolean(), report: z.boolean() }).default({ scout: true, job: false, report: false }),
+  /**
+   * 機能ごとに、いま使えるか（false = 準備中。依頼は 409 notReady）。
+   * scoutMember = ② スカウトの、会員 ID から作る 2 つの作り方（member・jobMember）が開いているか（Worker の AI_SCOUT_MEMBER。既定は閉じる。
+   * 閉じている間は、画面に出さず、Worker も 403 featureDisabled で受け付けない）
+   */
+  features: z
+    .object({ scout: z.boolean(), job: z.boolean(), report: z.boolean(), scoutMember: z.boolean().default(false) })
+    .default({ scout: true, job: false, report: false, scoutMember: false }),
 });
 export type AiConfigResponse = z.infer<typeof AiConfigResponseSchema>;
 

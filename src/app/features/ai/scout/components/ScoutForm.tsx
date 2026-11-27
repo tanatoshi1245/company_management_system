@@ -92,6 +92,7 @@ export function ScoutForm({
   purpose,
   onPurpose,
   basis,
+  bases = SCOUT_BASES,
   onBasis,
   job,
   member,
@@ -116,6 +117,8 @@ export function ScoutForm({
   onPurpose: (p: ScoutPurpose) => void;
   /** 何をもとに作るか（null = まだ選んでいない） */
   basis: ScoutBasisKind | null;
+  /** 出す作り方（既定は 4 つ。会員 ID から作る機能が閉じている間は、条件・求人 ID の 2 つだけ = scoutModel.ts の scoutBasesOf） */
+  bases?: readonly ScoutBasisKind[];
   onBasis: (b: ScoutBasisKind) => void;
   job: ScoutIdField<ScoutJobSummary>;
   member: ScoutIdField<ScoutMemberSummary>;
@@ -160,7 +163,7 @@ export function ScoutForm({
       <fieldset className="ai-group ai-basis-pick">
         <legend>{SCOUT_TEXT.basisLegend}</legend>
         <div className="ai-basis-cards" role="radiogroup" aria-label={SCOUT_TEXT.basisLegend}>
-          {SCOUT_BASES.map((b) => (
+          {bases.map((b) => (
             <label key={b} className={`ai-basis-card${basis === b ? ' on' : ''}`}>
               <input type="radio" name={`${uid}-basis`} value={b} checked={basis === b} disabled={disabled} onChange={() => onBasis(b)} />
               <span className="txt">

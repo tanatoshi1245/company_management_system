@@ -11,7 +11,7 @@ import { companyMonthlyQuery } from '../src/worker/sql/companyMonthly';
 import { companyLoginQuery } from '../src/worker/sql/companyLogin';
 import { industryBenchmarkQuery } from '../src/worker/sql/industryBenchmark';
 import { applicationCohortQuery, benchSeriesQuery, companyLoginByIdQuery, companyMasterByIdQuery, companyMonthlyByIdQuery, dailyUsageQuery, memberAttributesQuery, scoutCohortQuery } from '../src/worker/sql/companyDetail';
-import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutJobQuery, aiScoutMemberQuery, aiScoutMemberResumeQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery } from '../src/worker/sql/aiScout';
+import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutJobQuery, aiScoutMemberQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery } from '../src/worker/sql/aiScout';
 import { EMPTY_SCOUT_FILTERS } from '../src/shared/ai/scout';
 import { addDays, addMonths, monthOf, todayJst } from '../src/shared/calendar/periods';
 
@@ -45,8 +45,6 @@ const queries = [
   // 求人 ID・会員 ID からの作成（1 行を引く。推定は表全体 = クラスタリング前の量で、実行は数 MB）
   aiScoutJobQuery(sampleId, '1'),
   aiScoutMemberQuery('1'),
-  // 職務経歴・自己PR（閲覧制限付きの dwh_restricted.cms_ai_member_resumes。Worker が dwh の外で読む、ただ 1 つの表）
-  aiScoutMemberResumeQuery('1', 'ja'),
   aiScoutDraftsMergeQuery([{ draftId: 'dryrun0001', jobId: 'dryrun', companyId: sampleId, modelId: 'a', modelVersion: 1, subject: 'dry run', body: 'dry run', chosenAt: new Date().toISOString() }]),
 ];
 const BUDGET = 10 * 1024 ** 2;

@@ -34,8 +34,10 @@
     "VERTEX_LOCATION": "global",
     "AI_SCOUT_ENGINES": "a=gemini-3.5-flash-lite,b=gemini-3.8-flash,c=gemini-3.5-flash",
     "AI_INSIGHT_ENGINE": "gemini-3.8-flash",
-    // AI 機能の停止スイッチ: "1" のときだけ動く。内容の確認（docs/AI機能.md「再開の前に確かめること」）が済むまで "0"
+    // AI 機能の停止スイッチ: "1" のときだけ動く。**本番は停止**（内容の確認 = docs/AI機能.md「本番で動かす前に確かめること」が済むまで "0"）
     "AI_ENABLED": "0",
+    // 会員 ID から作る機能（候補者の属性を AI へ渡す）。確認が済むまで閉じる
+    "AI_SCOUT_MEMBER": "0",
     "APP_ENV": "production"
   },
   // 非本番ブランチ（PR）の Workers Builds は `wrangler preview` で動き、この previews ブロックが無いと失敗する。
@@ -53,8 +55,9 @@
       "VERTEX_LOCATION": "global",
       "AI_SCOUT_ENGINES": "a=gemini-3.5-flash-lite,b=gemini-3.8-flash,c=gemini-3.5-flash",
       "AI_INSIGHT_ENGINE": "gemini-3.8-flash",
-    // AI 機能の停止スイッチ: "1" のときだけ動く。内容の確認（docs/AI機能.md「再開の前に確かめること」）が済むまで "0"
-    "AI_ENABLED": "0",
+      // プレビュー（サンプルデータ）も停止
+      "AI_ENABLED": "0",
+      "AI_SCOUT_MEMBER": "0",
       "APP_ENV": "preview"
     },
     "d1_databases": [
@@ -87,8 +90,10 @@
         "VERTEX_LOCATION": "global",
         "AI_SCOUT_ENGINES": "a=gemini-3.5-flash-lite,b=gemini-3.8-flash,c=gemini-3.5-flash",
         "AI_INSIGHT_ENGINE": "gemini-3.8-flash",
-    // AI 機能の停止スイッチ: "1" のときだけ動く。内容の確認（docs/AI機能.md「再開の前に確かめること」）が済むまで "0"
-    "AI_ENABLED": "0",
+        // **テスト環境だけ AI を動かす**（2026-11-27 ユーザー指示: 求人 ID からのスカウト文面の作成を、テスト環境へ反映）。
+        // 使えるのは「条件を指定」「求人 ID」の 2 つ。会員 ID から作る機能は閉じたまま
+        "AI_ENABLED": "1",
+        "AI_SCOUT_MEMBER": "0",
         "APP_ENV": "staging"
       },
   // 週次の検証・チューニングの cron（"triggers": { "crons": ["0 20 * * 0"] }）は、AI 機能の停止に合わせて外してある（2026-11-27。再開するときに戻す）
