@@ -5,7 +5,7 @@
 --   作る表: cms_ai_dim_industry_group / cms_ai_scout_templates / cms_ai_scout_sends / cms_ai_scout_drafts（枠だけ）/ cms_ai_scout_draft_outcomes
 --           / cms_ai_jobs（求人の内容。求人 ID からの作成用）/ cms_ai_member_profiles（候補者の属性。会員 ID からの作成用）（2026-11-27 追加）
 --           / dwh_restricted.cms_ai_member_resumes（候補者の職務経歴・自己PR のテキスト。**この 1 表だけ、閲覧制限付きのデータセットに作る**。2026-11-27 追加）
---   スキャン: 約 24 GB/日（messages の subject・body を 1 回 = 約 18.4 GB。messages はパーティションが無い。jobs_all = 約 1.9 GB（本文 2 列が 1.3 GB））。所要 約 80 秒
+--   スキャン: 約 24.6 GB/日（messages の subject・body を 1 回 = 約 18.4 GB。messages はパーティションが無い。jobs_all = 約 1.9 GB（本文 2 列が 1.3 GB））。所要 約 80 秒
 --   失敗時は EXCEPTION で cms_ai_refresh_log に error 行を残し、前日の表がそのまま残る。再実行は冪等（全件差し替え）
 --   設計・列定義・正規表現: company_management_system/bq/ai/README.md
 -- 変更時の注意: Worker 側の読み取り SQL（src/worker/sql/aiScout.ts）・型（src/shared/ai/scout.ts）・業界の対応表（src/shared/ai/industryGroups.ts）を合わせる

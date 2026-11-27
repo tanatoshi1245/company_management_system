@@ -1,5 +1,5 @@
 ---
-tags: [domain/scout, domain/company-behavior, layer/engineering, type/data-mart-spec, source/bq-internal, table/messages, table/scouts, table/scout_histories, table/cms_company_master, table/jobs_all, table/member_details]
+tags: [domain/scout, domain/company-behavior, layer/engineering, type/data-mart-spec, source/bq-internal, table/messages, table/scouts, table/scout_histories, table/cms_company_master, table/jobs_all, table/member_details, table/member_work_histories, table/member_resumes]
 related:
   - "[[bq/README]]"
   - "[[docs/AI機能]]"
@@ -7,7 +7,7 @@ related:
 status: active
 ---
 
-# bq/ai — AI 機能の日次マート cms_ai_*（BigQuery `bq-hgt.dwh`）
+# bq/ai — AI 機能の日次マート cms_ai_*（BigQuery `bq-hgt.dwh`。候補者の職務経歴・自己PR の 1 表だけ `bq-hgt.dwh_restricted`）
 
 ## 役割
 ② スカウト文面の AI 作成（[docs/AI機能.md](../../docs/AI機能.md)）が使う日次マート。**Worker は Vertex AI を直接呼び、分析の材料はここの表だけを読む**（`messages` などの生テーブルは読まない）。1 本のスクリプト [`scout_marts.sql`](./scout_marts.sql) が毎朝、スカウトの最初の 1 通を文面にまとめ、社名などを記号に置き換え、特徴のフラグと返信の実績を付ける。
@@ -16,7 +16,7 @@ status: active
 - 分析の決まり（返信率 10% 超の上位 1000 件・直近 12 か月・最小 5 通・最小 20 件）は [`src/shared/ai/scout.ts`](../../src/shared/ai/scout.ts) の定数。マートは 13 か月 + 当月を持ち、絞るのは Worker の SQL
 
 ## 依存するデータ（元テーブル）
-`cms_company_master`（企業・業界・プロファイル・社名。**07:45 JST の cms_marts 日次更新の後に走らせる**）/ `scouts` / `scout_histories` / `messages`（subject・body。スカウトの最初の 1 通 = `scout_id IS NOT NULL AND is_from_company = 1` を scout_id ごとに `created_at` の最も早いもの）/ `member_profile_latest`（年齢層・国籍の区分・語学・最終経験職種の大分類）/ `member_details`（現住所・経験職種・希望職種・希望年収・退会日。最新のスナップショット）/ `jobs_all`（求人の内容。本文 2 列を含む）/ `job_publish_history`（掲載の期間）。ビジネス定義（RA 4928 / 14508・RDS 7080 の除外、興味あり返信 = `質問する / 開封のみ → 興味あり`、スナップショットの重複排除）は claude_analysis の `CLAUDE.md`。
+`cms_company_master`（企業・業界・プロファイル・社名。**07:45 JST の cms_marts 日次更新の後に走らせる**）/ `scouts` / `scout_histories` / `messages`（subject・body。スカウトの最初の 1 通 = `scout_id IS NOT NULL AND is_from_company = 1` を scout_id ごとに `created_at` の最も早いもの）/ `member_profile_latest`（年齢層・国籍の区分・語学・最終経験職種の大分類）/ `member_details`（現住所・経験職種・希望職種・希望年収・退会日。最新のスナップショット）/ `jobs_all`（求人の内容。本文 2 列を含む）/ `job_publish_history`（掲載の期間）/ **`dwh_restricted.member_work_histories`・`dwh_restricted.member_resumes`**（職務経歴・自己PR のテキスト。閲覧制限付き。ターゲット人材だけ。毎日 06:20 JST に全件差し替え。仕様は claude_analysis の `02_データエンジニアリング/daijob5_etl/member_work_histories/`）。ビジネス定義（RA 4928 / 14508・RDS 7080 の除外、興味あり返信 = `質問する / 開封のみ → 興味あり`、スナップショットの重複排除）は claude_analysis の `CLAUDE.md`。
 
 | 表 | 粒度 | 更新 | Worker |
 |---|---|---|---|
@@ -27,6 +27,7 @@ status: active
 | `cms_ai_scout_draft_outcomes` | 案 | 全件差し替え | 読む |
 | `cms_ai_jobs` | 求人（マートに居る企業の、直近 13 か月 + 当月に掲載があった求人） | 全件差し替え（求人 ID の 2,000 番ごとにパーティション） | 読む（求人 ID からの作成） |
 | `cms_ai_member_profiles` | 会員（退会を除く） | 全件差し替え（会員 ID の 2,000 番ごとにパーティション） | 読む（会員 ID からの作成） |
+| **`dwh_restricted`**`.cms_ai_member_resumes` | 会員 × 言語（ターゲット人材で、職務経歴か自己PR の本文がある会員。退会を除く） | 全件差し替え（会員 ID の 2,000 番ごとにパーティション） | 読む（会員 ID からの作成。**Worker が `dwh` の外で読む、ただ 1 つの表**） |
 | `cms_ai_refresh_log` | 実行記録 | 追記（`step = 'scout_marts'`） | 読む（更新日 = 最新の `ok` の `run_date`） |
 
 ## 更新スケジュール（登録済み）
@@ -39,6 +40,7 @@ status: active
 | SQL | `scout_marts.sql`（スクリプト。宛先テーブルなし） |
 | 実行者 | `id-69-213@bq-hgt.iam.gserviceaccount.com`（cms_marts と同じ） |
 | 登録日 | 2026-11-27（Data Transfer API で登録。登録直後の実行 ok） |
+| SQL の差し替え（2 回目） | 2026-11-27（`dwh_restricted.cms_ai_member_resumes` を足した版。同じ方法で差し替え、登録された SQL がファイルと一致（38,294 文字）。実行者 `id-69-213@` は `dwh_restricted` の OWNER で、同じ鍵でスクリプトの全体を手元で実行して ok（`resumes=166403`）） |
 | SQL の差し替え | 2026-11-27（`cms_ai_jobs`・`cms_ai_member_profiles` を足した版。`bq update --transfer_config --params` で差し替え、登録された SQL がファイルと 1 文字も違わないことを確認） |
 
 **SQL を変えたとき**: BigQuery Studio → スケジュールドクエリ → 上の設定 ID を開き、`scout_marts.sql` の全文に差し替えて保存する（または Data Transfer API の `PATCH transferConfigs/<設定 ID>?updateMask=params`。`bq` なら `bq update --transfer_config --params='{"query": "<全文>"}' projects/89568037526/locations/asia-northeast1/transferConfigs/<設定 ID>`）。**表のパーティション・クラスタの決め方を変えたときは、先にその表を DROP する**（`CREATE OR REPLACE` は、分け方の違う表を置き換えられず、スクリプト全体が失敗する）。列を変えたら `src/worker/sql/aiScout.ts`・`src/shared/ai/scout.ts`・フィクスチャ（`src/worker/bq/fixtures/aiScout.ts`）を合わせる。
@@ -47,13 +49,14 @@ status: active
 
 | 何 | スキャン | 時間 |
 |---|---|---|
-| `scout_marts.sql`（日次。`messages` の subject・body を **1 回の実行で 1 回**だけ読む = 約 18.4 GB。`messages` はパーティションもクラスタリングも無いので、期間で絞っても量は変わらない。`jobs_all` = 約 1.9 GB（本文 2 列が 1.3 GB）） | 24.2 GB（求人・会員の 2 表を足す前は 20.1 GB） | 79〜94 秒（足す前は 34〜40 秒。増えた分は、求人の本文の置き換え = 約 28 秒が主） |
+| `scout_marts.sql`（日次。`messages` の subject・body を **1 回の実行で 1 回**だけ読む = 約 18.4 GB。`messages` はパーティションもクラスタリングも無いので、期間で絞っても量は変わらない。`jobs_all` = 約 1.9 GB（本文 2 列が 1.3 GB）） | 24.6 GB（レジュメの表を足す前は 24.2 GB。足した分は元の 2 表 = 0.43 GB。求人・会員の 2 表を足す前は 20.1 GB） | 96 秒（レジュメの表を足す前は 79〜94 秒、求人・会員を足す前は 34〜40 秒。レジュメの表だけなら 約 15 秒） |
 | Worker: `ai_scout_benchmark`（分析対象の数値 + 要点の材料。1 回の SELECT） | dry run 93 MB・実行 69〜85 MB（条件が多いほど列が増える） | 1.4〜2.0 秒（同じ日の同じ条件は BigQuery のキャッシュで 0.6 秒・0 MB） |
 | Worker: `ai_scout_options`（条件の選択肢） | 26 MB | 0.5〜0.6 秒 |
 | Worker: `ai_scout_outcomes`（照合結果） | 0 MB（表が小さい） | 0.4 秒 |
 | Worker: `ai_scout_drafts_merge`（選ばれた案の書き込み。1 回 50 行まで） | 0 MB | 1.7 秒 |
 | Worker: `ai_scout_job`（求人 1 件。`company_id = @company_id AND job_id = @job_id`） | 1.6〜2.3 MB（dry run も同じ。パーティションを分ける前は 1 件でも表全体 = 93 MB） | 0.4〜0.5 秒 |
 | Worker: `ai_scout_member`（会員 1 人） | 0.3〜0.4 MB（分ける前は 189 MB） | 0.4〜0.55 秒 |
+| Worker: `ai_scout_member_resume`（会員 1 人の職務経歴・自己PR。属性の照会と並行して走る） | 0.02〜1.24 MB（表の全体は 302 MB） | 0.45〜0.55 秒。`member()` の全体（2 つの照会を並行）は 0.46〜0.58 秒（初回だけ 1.2 秒）。返る本文は、自己PR 600 字まで + 職務内容 600 字 × 3 社まで（JSON で 0.4〜2.7 KB） |
 
 初回の中身: 文面 23,400（送信 5 通以上 4,296）・送信 269,616 通（興味あり返信 21,052・採用 87・自動 47,803）・本文のメッセージが無いスカウト 9,095 通（表に入らない）・`cms_ai_scout_templates` 49.8 MB・`cms_ai_scout_sends` 48.0 MB。直近 12 か月で、送信 5 通以上の文面 3,670 のうち返信率 10% 超は 1,216。
 
@@ -204,6 +207,39 @@ status: active
 
 `cms_ai_scout_sends` との突き合わせ（2026-11-27）: 送信 269,616 通のうち、受け取った会員がこの表に居る 259,062 通で、6 つの属性がすべて一致（違い 0）。残り 10,554 通は退会した会員。未入力: 現住所 257,605 人・経験職種なし 322,041 人・希望職種なし 288,115 人・希望年収 339,811 人。Worker（`bqDataSource.ts`）は `(未入力)` を null にして返す。
 
+### dwh_restricted.cms_ai_member_resumes（会員 × 言語 = 1 行。職務経歴・自己PR のテキスト。会員 ID からの作成用）
+2026-11-27 ユーザー指示（「職務経歴と自己PR のデータがテキストで BigQuery に入っている。テーブルを確認して構築し直して」）で追加。`PARTITION BY RANGE_BUCKET(member_id, GENERATE_ARRAY(0, 4000000, 2000))`、`CLUSTER BY member_id, language_id`。
+
+**閲覧制限付きのデータセットに置く理由**: 元の 2 表（`dwh_restricted.member_work_histories`・`member_resumes`）は、候補者が自由に書いた本文で、氏名などの混入を検出できないため、読める人を絞ったデータセットにある（ACL: 取り込みの専用 SA = WRITER、`id-69-213@` と projectOwners = OWNER、管理者 1 人 = READER）。引きやすくした表を、だれでも読める `dwh` に作ると、その制限が外れる。**本文を含む表を `dwh` に作らない。** Worker の SA には、この 1 表だけの読み取りを表単位で付ける（データセットの ACL は変えない。元の 2 表は Worker から読めないまま）。スクリプトが `dwh_restricted` に作るのは、この 1 表だけ。
+
+**持たないもの**: 勤務先の社名（元の `company_name` の列を読まない）・職種 / 業界の ID・レジュメのタイトル・雇用形態・勤務国・中国語のレジュメ（`language_id = 3`）・レジュメ ID。
+
+| 列 | 型 | 説明 |
+|---|---|---|
+| member_id | INT64 | 会員 ID |
+| language_id / lang | INT64 / STRING | レジュメの言語（1 = `en` / 2 = `ja`） |
+| appeal | STRING | 自己PR（先頭 1,200 字。無ければ空） |
+| appeal_chars | INT64 | 自己PR の文字数（切る前。伏せ字にした後） |
+| work | ARRAY\<STRUCT\<title STRING, start_ym STRING, end_ym STRING, notes STRING, notes_chars INT64\>\> | 職務経歴（新しい順に 4 社まで）。title = 役職（本人の入力。80 字まで。無ければ NULL）、start_ym / end_ym = 期間（`YYYY-MM`。未入力・1950 年より前・未来・開始より前の終了は NULL。end_ym が NULL = 在職中か未入力）、notes = 職務内容（先頭 1,200 字）、notes_chars = その文字数（切る前） |
+| work_count | INT64 | 登録されている職務経歴の数（役職か職務内容のある行。重複を除く） |
+| work_chars | INT64 | 職務内容の合計の文字数（全社。切る前） |
+| management_experience / management_experience_years | BOOL / INT64 | 元の列のまま。**`management_experience_years` は年数ではなくコード値（0〜7）で、意味は未確認**（マネジメント経験ありの人で 2〜7 に散らばり、8 以上が無い）。Worker は、意味を確かめるまで返さない（`managementYears = null`） |
+| job_change_times | INT64 | 元の列のまま。**値は「経験した会社の数」**（職務経歴の数と一致: 値 1 → 平均 1.17 社、3 → 3.08 社、6 → 5.98 社。0 はほぼ無い）。Worker は 1 を引いて転職回数にする。NULL が 4 割 |
+| updated_at | DATETIME | レジュメ・職務経歴の最後の更新（元の値。タイムゾーンの変換なし） |
+| refreshed_at | TIMESTAMP | 作成日時 |
+
+**行の決め方**（2026-11-27 に実データで確かめた）:
+- 対象 = `cms_ai_member_profiles` に居る会員（退会していない）× 日本語 / 英語のレジュメで、**自己PR か職務内容のどちらかに本文がある**もの（空・空白だけは除く。元の `appeal_length > 0` には、空白 1 文字だけの行が約 9 千あるので、文字数の列ではなく本文で見る）
+- 1 会員 × 1 言語にレジュメが複数あるとき（約 1 割）は 1 つを選ぶ: 企業の検索対象（`is_searchable`）→ 入力完了（`is_complete`）→ 本文の多い順 → 更新の新しい順
+- 職務経歴は、選んだレジュメの行。**行の `is_complete` では絞らない**（未完了の行の約 4 割に本文があり、未完了の行だけで本文のあるレジュメが 4.3 万件あるため。下書きの印としては使えない）。同じレジュメの中で、開始日・役職・職務内容が同じ行（約 4 千行）は 1 行にする。レジュメの無い職務経歴の行（元の 2.7 万行）は入らない
+- 並びは開始日の新しい順（開始日なしは最後。元の `position` は、新しい順のレジュメが 9 割・古い順が 1 割強で、そろっていないので使わない）
+
+**伏せ字**: 元の 2 表で、メールアドレス → `[EMAIL]`、URL → `[URL]`、電話番号 → `[PHONE]` に置き換え済み。このスクリプトでも、同じ記号へもう一度置き換える（取り込みの決まりから漏れた形 = スキームの後に空白のある URL、ドットが続くアドレス、区切りが 2 文字の番号、`tel` / `mob` / 電話 / 携帯 / 連絡先 の後の 9〜13 桁、0 で始まる 10〜11 桁）。**氏名・社名の混入は検出できない**（勤務先の社名の列は持たないが、本文に書かれた社名・取引先の名前は残る）。生成の側は、本文をそのまま写さない。
+
+中身（2026-11-27）: 166,403 行・302.4 MB・498 パーティション。会員 102,223 人（自己PR あり 69,329 人・職務内容あり 93,233 人）。日本語 94,235 行（自己PR あり 63,052・職務内容あり 85,828）・英語 72,168 行（46,538・65,964）。日本語と英語の両方 64,180 人・日本語だけ 30,055 人・英語だけ 7,988 人。自己PR が 1,200 字を超える行 8,296・職務経歴が 5 社以上の行 14,825。`cms_ai_member_profiles` の会員 832,665 人のうち、レジュメの本文がある人は 12%（元の表がターゲット人材だけのため）。
+
+伏せ字の残り（2026-11-27。自己PR 166,403 + 職務内容 278,915 + 役職 108,648 件を正規表現で数えた）: メールアドレスの形 0、`http(s)://`・`www.` 0、0 で始まる携帯の番号 0、区切りのある番号の形 7（`99.99.99-9999` の形 = 期間の表記）、10〜11 桁の数字 8（ID・登録番号の形）、英数字 @ 英数字 52（「A@B」の形の表記 = 所属・場所で、アドレスではない）、`.com` `.jp` などで終わる語 1,475（サービス・技術の名前が主。**`://` の無いドメインだけの表記は残る**）。伏せ字が入っている件数: `[EMAIL]` 415・`[URL]` 3,077・`[PHONE]` 388。
+
 ## Worker の SA に付ける権限（表単位）
 ```bash
 SA=serviceAccount:cms-bq-reader@bq-hgt.iam.gserviceaccount.com
@@ -211,18 +247,21 @@ for t in cms_ai_refresh_log cms_ai_scout_templates cms_ai_scout_sends cms_ai_sco
   bq add-iam-policy-binding --member=$SA --role=roles/bigquery.dataViewer bq-hgt:dwh.$t
 done
 bq add-iam-policy-binding --member=$SA --role=roles/bigquery.dataEditor bq-hgt:dwh.cms_ai_scout_drafts
+# 候補者の職務経歴・自己PR（閲覧制限付き。この 1 表だけ。データセット dwh_restricted の ACL は変えない）
+bq add-iam-policy-binding --member=$SA --role=roles/bigquery.dataViewer bq-hgt:dwh_restricted.cms_ai_member_resumes
 ```
-付ける前は、Worker は例外にせず「データなし」で返す（選択肢は空・分析は null・求人と候補者は null・書き込みは false。ログに理由）。`cms_ai_jobs`・`cms_ai_member_profiles` は 2026-11-27 に作った表で、**この 2 表の dataViewer は、まだ付けていない**（付けるのは上のコマンド。表を DROP して作り直したときは、付け直す）。
+付ける前は、Worker は例外にせず「データなし」で返す（選択肢は空・分析は null・求人と候補者は null・書き込みは false。ログに理由）。`cms_ai_jobs`・`cms_ai_member_profiles` は 2026-11-27 に作った表で、**この 2 表の dataViewer は、まだ付けていない**（付けるのは上のコマンド。表を DROP して作り直したときは、付け直す）。**`dwh_restricted.cms_ai_member_resumes` の dataViewer も、まだ付けていない**（表単位の IAM なので、データセットの ACL = 読める人の一覧は変わらず、元の 2 表は Worker から読めないまま。付けるまでは、候補者は属性だけで返る = `resume: null`。毎朝の `CREATE OR REPLACE` では、表単位の IAM は残る）。
 
 ## 編集の入口
 - 業界のまとまり → `scout_marts.sql` の対応表と `src/shared/ai/industryGroups.ts`
 - 置き換え・特徴のフラグ → `scout_marts.sql` ステップ 05・07（この README の表も直す）
+- 候補者の職務経歴・自己PR → `scout_marts.sql` ステップ 12（この README の表、`src/worker/sql/aiScout.ts` の `aiScoutMemberResumeQuery`、`bqDataSource.ts` の `toMemberResume`、契約の型 `src/worker/ai/scout/dataSource.ts`、フィクスチャも直す）。マートは 1,200 字 × 4 社まで持ち、Worker が返すのは 600 字 × 3 社（`RESUME_*` の定数。マートの上限までは、定数を変えるだけで増やせる）
 - 求人・会員の列、求人の置き換え → `scout_marts.sql` ステップ 03b・10・11（この README の表、`src/worker/sql/aiScout.ts` の `aiScoutJobQuery`・`aiScoutMemberQuery`、`bqDataSource.ts` の `toJobInfo`・`toMemberInfo`、フィクスチャも直す）
 - 分析対象の決め方（範囲の広げ方・上位の取り方）→ `src/worker/sql/aiScout.ts` の `aiScoutBenchmarkQuery`
-- 手元での実行: `bq --project_id=bq-hgt --location=asia-northeast1 query --use_legacy_sql=false --maximum_bytes_billed=40000000000 < bq/ai/scout_marts.sql`（1 回 約 24 GB）。実行記録は `SELECT * FROM dwh.cms_ai_refresh_log ORDER BY finished_at DESC LIMIT 5`
+- 手元での実行: `bq --project_id=bq-hgt --location=asia-northeast1 query --use_legacy_sql=false --maximum_bytes_billed=40000000000 < bq/ai/scout_marts.sql`（1 回 約 24.6 GB）。実行記録は `SELECT * FROM dwh.cms_ai_refresh_log ORDER BY finished_at DESC LIMIT 5`
 
 ## 失敗時
-`BEGIN … EXCEPTION` で `cms_ai_refresh_log` に `error` 行（`message` に理由）を残し、前日の表がそのまま残る。再実行は冪等（全件差し替え。`cms_ai_scout_drafts` は変えない）。
+`BEGIN … EXCEPTION` で `cms_ai_refresh_log` に `error` 行（`message` に理由）を残し、前日の表がそのまま残る（レジュメの表は最後のステップなので、元の `dwh_restricted` の 2 表を読めないときは、ほかの表は当日の分に替わり、レジュメの表だけ前日のまま）。再実行は冪等（全件差し替え。`cms_ai_scout_drafts` は変えない）。
 
 ## テスト
-`tests/worker/aiScoutData.test.ts`（SQL が `cms_ai_*` と `@param` だけ・業界の対応表が SQL と定数で一致・フィクスチャで契約の型を通る・求人は企業と求人の両方で絞る・ほかの企業の求人と無い ID は null）。スキャン量は `npm run dryrun`（`scripts/bq-dryrun.ts`）。
+`tests/worker/aiScoutData.test.ts`（SQL が `cms_ai_*` と `@param` だけ・レジュメの照会が読む表は `dwh_restricted.cms_ai_member_resumes` の 1 表だけで社名の列を読まない・レジュメの照会が失敗しても属性は返る・業界の対応表が SQL と定数で一致・フィクスチャで契約の型を通る・求人は企業と求人の両方で絞る・ほかの企業の求人と無い ID は null）。スキャン量は `npm run dryrun`（`scripts/bq-dryrun.ts`）。

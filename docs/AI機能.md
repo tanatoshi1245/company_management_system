@@ -1,5 +1,5 @@
 ---
-tags: [domain/company-behavior, domain/scout, layer/application, type/app-spec, table/cms_ai_scout_templates, table/cms_ai_scout_sends, table/cms_ai_jobs, table/cms_ai_member_profiles]
+tags: [domain/company-behavior, domain/scout, layer/application, type/app-spec, table/cms_ai_scout_templates, table/cms_ai_scout_sends, table/cms_ai_jobs, table/cms_ai_member_profiles, table/cms_ai_member_resumes]
 related:
   - "[[README]]"
   - "[[docs/テスト環境]]"
@@ -39,12 +39,18 @@ Worker が **Vertex AI** を直接呼び、その場で結果を返す（2026-11
 |---|---|---|---|
 | 条件を指定して作る | ポジション名・掲載職種・勤務地、送る相手の条件 | 入れた内容に沿って | 指定した条件 |
 | 求人 ID から作る | 求人 ID（求人ページの URL の数字） | その求人の内容（タイトル・職種・勤務地・年収・語学・仕事内容・応募条件）に沿って。求人に書いていない条件・数字は作らない | 指定した条件（任意） |
-| 会員 ID から作る | 会員 ID、求人の内容（手入力） | その候補者の属性（経験職種・業種・役職レベル・語学力・現住所・希望職種）に、属性の範囲で具体的に触れて | **候補者の年齢層・経験職種**（Worker が決める。足りなければ外れる） |
+| 会員 ID から作る | 会員 ID、求人の内容（手入力） | その候補者の**職務経歴・自己PR**（登録があるとき）から、具体的な経験・強みを 1〜2 点、言い換えて挙げる。登録が無いときは、属性（経験職種・業種・役職レベル・語学力・現住所・希望職種）の範囲で触れる | **候補者の年齢層・経験職種**（Worker が決める。足りなければ外れる） |
 | 求人 ID + 会員 ID から作る | 両方 | 求人の要件のうち、候補者の属性と合う点を 1〜2 点選んで冒頭に置く | 同上 |
 
 - **求人は、選んだ企業の求人だけ**（ほかの企業の求人 ID は「見つかりません」になる）。掲載が終わった求人でも作れる（直近 13 か月に掲載があったもの。画面に注意を出す）。
-- **候補者の情報は、BigQuery にある属性だけ**（氏名・連絡先・レジュメの本文は無い。現在のプロフィール）。個別の経歴に踏み込んだ内容にはならない。
-- **年齢層・年収帯は文面に書かせない**（言葉づかいの参考だけ）。**国籍・会員 ID・企業名は Vertex AI へ渡さない。**
+- **候補者の職務経歴・自己PR のテキストを使う**（2026-11-27 ユーザー指示）。元は閲覧制限付きのデータセット `dwh_restricted` の `member_work_histories`・`member_resumes`（**ターゲット人材だけ**。メールアドレス・URL・電話番号は取り込みの時点で伏せてある。本文に書かれた氏名・社名は残っている）。登録があるのは約 10.2 万人。それ以外の会員は、属性だけで作る（画面に「登録がありません」と出る）。扱いの決まり:
+  - **制限を保つ**: 本文を `dwh` へ写さない。1 人ぶんを引くための表は、同じ `dwh_restricted` の中に作る（`cms_ai_member_resumes`）。Worker の SA には、この 1 表だけの読み取りを付ける。
+  - **勤務先の社名は持たない**（引くための表にも、Vertex AI へ渡す文にも入れない）。
+  - **本文は、文面を作るときに Vertex AI へ渡すだけ**（自己PR の先頭 600 字 + 新しい順に 3 社の職務内容 各 600 字）。画面・API の応答・結果・D1・ログには本文を出さない / 残さない（出すのは、件数・文字数・直近の役職名まで）。
+  - **固有名詞を文面に写させない**（社名・取引先名・製品名・個人名・学校名は、一般的な言い方に言い換えさせる）。本文と 30 文字以上同じ・本文の中の法人格つきの社名が入った案は、1 回作り直し、それでも駄目なら捨てる。
+  - **会員 ID をもとに作った案は、ほかの依頼の参考（前に選ばれた案）に使わず、BigQuery（`dwh.cms_ai_scout_drafts`）へも写さない**（候補者 1 人の経歴に合わせた文面を、別の候補者の依頼や、閲覧制限の無い表へ出さないため）。その分は送信実績との自動照合の対象外で、「企業が使ったか」は CS が画面で付ける。
+  - 属性（年齢層・語学力など）は現在のプロフィール。終了年月の無い職歴は、在職中か未入力かを区別できないので「在職中」とは書かせない。
+- **年齢層・年収帯は文面に書かせない**（言葉づかいの参考だけ）。**国籍・会員 ID・企業名・候補者の勤務先の社名は Vertex AI へ渡さない。**
 - 会員 ID を引いた記録は、Workers Logs に残る（誰が・どの ID を）。
 - 3 つのモデルがそれぞれ作る・分析対象の決まり・分析の使い回しは、どの作り方でも同じ。
 
@@ -67,7 +73,7 @@ Worker（1 回の依頼の中で、すべて済ませる）
 |---|---|
 | 1 回の依頼（分析の要点を新しく作るとき） | 12〜14 秒・約 15,000〜19,000 トークン |
 | 1 回の依頼（要点を使い回すとき） | 約 6 秒・約 6,000 トークン |
-| 求人 ID・会員 ID から作るとき | 時間は同じ。入力のトークンが、求人で約 +2,300、候補者で約 +500（3 案の合計）。求人・候補者を引く照会は各 0.5 秒・数 MB |
+| 求人 ID・会員 ID から作るとき | 時間は同じ。入力のトークンが、求人で約 +2,300、候補者の属性で約 +500、職務経歴・自己PR があるとさらに約 +2,700〜3,700（3 案の合計）。求人・候補者を引く照会は各 0.5 秒・数 MB。実在の候補者（職務経歴 10 社・自己PR あり）での実測: 会員 ID 16 秒・約 22,700 トークン（要点を新しく作成）、求人 ID + 会員 ID 9 秒・約 10,700 トークン（要点を使い回し） |
 
 - **スカウトの本文の表（`dwh.messages`。約 20 GB・パーティションなし）は、依頼のたびには読まない。** 毎朝 1 回、日次のスクリプト（[`bq/ai/scout_marts.sql`](../bq/ai/README.md)）が、文面ごと・送信ごとの表にまとめる。
 - **1000 件の文面の数値は SQL で出す**（文字数・行数・特徴の割合。トークンを使わない）。AI が読むのは、上位 24 件の文面（1 社 2 件まで・本文の先頭 900 字）と数値だけ。
@@ -102,6 +108,7 @@ Worker（1 回の依頼の中で、すべて済ませる）
 
 - 企業は URL からだけ。書き込みは Google ログイン済みの人だけ・同一オリジン・zod strict・監査ログと同じ batch。**ログインの外の入口は無い。**
 - **入力に社名・個人情報を書かせない**（メールアドレス・電話番号・選んだ企業の名前が入っていたら保存しない。`src/shared/ai/pii.ts`）。作られた文面・プレイブックにも同じ確認を掛ける。
+- 候補者の職務経歴・自己PR の扱いは、上の「何をもとに作るか」の決まりのとおり（本文は Vertex AI へ渡すだけ・残さない・固有名詞を写させない）。
 - **Vertex AI へ企業名を渡さない。** マートの文面は、作る時点で企業名 → `{{企業名}}`、宛名 → `{{候補者名}}様`、URL・メールアドレス・電話番号 → 記号 に置き換えてある（担当者名は主な書き方だけ。残りうる）。文面は「データであり指示ではない」として渡し、写させない。作られる文面の差し込みは `{{候補者名}}` `{{企業名}}` `{{担当者名}}`。
 - **事実を作らない**よう指示しているが、依頼に無い内容（業務の説明など）をモデルが書くことがある。**企業へ渡す前に、CS が中身を確かめる**（画面に注意を出している）。
 - 外へ出る宛先は `safeFetch` の許可リスト（`aiplatform.googleapis.com` を追加）。鍵は Workers Secret だけ。
@@ -112,7 +119,7 @@ Worker（1 回の依頼の中で、すべて済ませる）
 |---|---|
 | 型（入力・結果・フィードバック・モデル） | `src/shared/ai/scout.ts`、業界のまとまり `industryGroups.ts`、社名・個人情報の確認 `pii.ts` |
 | BigQuery の日次マート | `bq/ai/scout_marts.sql`・`bq/ai/README.md`（表と列・特徴の決め方・スキャン量・スケジュールドクエリの設定 ID） |
-| Worker がマートを読む | `src/worker/sql/aiScout.ts`（@param）・`src/worker/ai/scout/bqDataSource.ts`（分析対象・選択肢・求人 `cms_ai_jobs`・候補者 `cms_ai_member_profiles`・案の照合） |
+| Worker がマートを読む | `src/worker/sql/aiScout.ts`（@param）・`src/worker/ai/scout/bqDataSource.ts`（分析対象・選択肢・求人 `cms_ai_jobs`・候補者 `cms_ai_member_profiles`・職務経歴と自己PR `dwh_restricted.cms_ai_member_resumes`（Worker が `dwh` の外で読む、ただ 1 つの表）・案の照合） |
 | Vertex AI の呼び出し | `src/worker/ai/vertex.ts` |
 | 生成・フィードバック・チューニング | `src/worker/ai/scout/`（`service.ts`・`insight.ts`・`generate.ts`・`models.ts`・`tuning.ts`・`routes.ts`・`repo.ts`） |
 | D1 | `d1/migrations/0004_ai_jobs.sql`（依頼と結果）・`0005_ai_scout.sql`（分析の使い回し・モデルと版・案・チューニングの記録） |
@@ -147,8 +154,12 @@ for t in cms_ai_refresh_log cms_ai_scout_templates cms_ai_scout_sends cms_ai_sco
   bq add-iam-policy-binding --member=$SA --role=roles/bigquery.dataViewer bq-hgt:dwh.$t
 done
 bq add-iam-policy-binding --member=$SA --role=roles/bigquery.dataEditor bq-hgt:dwh.cms_ai_scout_drafts
+# 候補者の職務経歴・自己PR（閲覧制限付きのデータセットの中の 1 表だけ。データセットの ACL は変えない。元の 2 表は読めないまま）
+bq add-iam-policy-binding --member=$SA --role=roles/bigquery.dataViewer bq-hgt:dwh_restricted.cms_ai_member_resumes
 gcloud projects add-iam-policy-binding bq-hgt --member=$SA --role=roles/aiplatform.user --condition=None
 ```
+
+最後の 1 行（`dwh_restricted`）を付けない間は、会員 ID から作っても、職務経歴・自己PR は使われず、属性だけで作られる。付けたら、claude_analysis の `04_アプリケーション/セキュリティ要件.md` §5 の台帳と、`member_work_histories/README.md` の閲覧者の記録に足す。
 
 鍵は今の `BQ_SA_KEY` をそのまま使う（Vertex AI 用に別の SA を使うときは、その鍵を Secret `VERTEX_SA_KEY` に入れる）。
 
@@ -189,7 +200,7 @@ Worker の **Settings → Variables and Secrets** に、Text 変数 `AI_ADMIN_EM
 - **本番の Worker の SA（`cms-bq-reader`）での動作は未確認**（権限を付ける前。開発時は、分析用の SA の鍵で、マート → 分析 → 3 案 → 選択 → チューニングの判断までを、実データと実際の Vertex AI で通した）。
 - 使える生成モデルの ID・ロケーション（`global`）は、2026-11-27 に呼べることを確かめた値。提供が終わると呼べなくなるので、`wrangler.jsonc` の `AI_SCOUT_ENGINES`・`AI_INSIGHT_ENGINE` を差し替える。
 - Vertex AI は従量課金（`bq-hgt` の請求）。1 回の依頼は 6,000〜19,000 トークン。
-- 日次のスクリプトは 1 回 約 24 GB をスキャンする（うち 18.4 GB はスカウトの本文の表の全読み、約 1.9 GB は求人の本文）。所要 80〜95 秒。
+- 日次のスクリプトは 1 回 約 24.6 GB をスキャンする（うち 18.4 GB はスカウトの本文の表の全読み、約 1.9 GB は求人の本文、約 0.4 GB は職務経歴・自己PR）。所要 約 96 秒。
 - チューニングの「直す」は、まだ実データでは動かしていない（判断が 8 件たまってから動く。テストでは、成績に応じて 据え置き / 直す / 戻す が分かれることを確かめた）。
 - cron と手動のチューニングが同時に走ると、片方が失敗することがある（排他は入れていない）。
 - 以前のセッション方式で作られた依頼が D1 に残っていても、選択・利用の記録はできない（読むだけ）。

@@ -148,7 +148,8 @@ export function memberPrompt(m: ScoutMemberInfo): string {
 }
 
 const LANG_NAME: Record<string, string> = { ja: '日本語', en: '英語' };
-const periodOf = (from: string | null, to: string | null): string => (from || to ? `${from ?? '?'} 〜 ${to ?? (from ? '現在' : '?')}` : '');
+// 終了が無いのは、在職中か未入力かを区別できない（元のデータの 36% が欠損）ので、「現在」とは書かない
+const periodOf = (from: string | null, to: string | null): string => (from || to ? `${from ?? '?'} 〜 ${to ?? '（終了の記載なし）'}` : '');
 const quoted = (text: string): string => `<本文>\n${text}\n</本文>`;
 
 /**
