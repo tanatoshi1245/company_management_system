@@ -1,4 +1,4 @@
-import type { ScoutBenchmark, ScoutDataSource, ScoutDraftExport, ScoutDraftOutcome } from '../../src/worker/ai/scout/dataSource';
+import type { ScoutBenchmark, ScoutDataSource, ScoutDraftExport, ScoutDraftOutcome, ScoutJobInfo, ScoutMemberInfo } from '../../src/worker/ai/scout/dataSource';
 import type { ScoutOptionsResponse } from '../../src/shared/ai/scout';
 
 /** ② スカウトのテスト用: BigQuery のマートの代わり（bqDataSource.ts を vi.mock で差し替えて、これを返す） */
@@ -24,18 +24,50 @@ export const sampleBenchmark = (over: Partial<ScoutBenchmark> = {}): ScoutBenchm
 
 export const sampleOptions: ScoutOptionsResponse = { ageGroups: ['20代', '30代'], nationalities: ['日本', '日本以外'], japaneseLevels: ['ビジネス'], englishLevels: ['ビジネス', 'ネイティブ'], residences: ['東京都'], occupations: ['営業'], dataDate: '2026-11-26' };
 
+export const sampleJob = (over: Partial<ScoutJobInfo> = {}): ScoutJobInfo => ({
+  jobId: '1001',
+  title: 'バイリンガルのプロジェクトマネージャー',
+  occupation: 'IT関連（オープン・WEB系） - プロジェクトマネージャー',
+  industry: 'ITコンサルティング',
+  location: '東京都',
+  salary: '600万円〜900万円',
+  japaneseLevel: '流暢',
+  englishLevel: 'ビジネス会話',
+  published: true,
+  description: '{{企業名}}の受託開発プロジェクトで、海外拠点との進行管理を担当します。\n・要件の整理\n・進行管理',
+  requirements: '・プロジェクトマネジメントのご経験 3 年以上\n・英語での会議のご経験',
+  ...over,
+});
+
+export const sampleMember = (over: Partial<ScoutMemberInfo> = {}): ScoutMemberInfo => ({
+  memberId: '20001',
+  ageGroup: '25-34歳',
+  nationality: '日本国籍以外',
+  japaneseLevel: '5. 流暢',
+  englishLevel: '6. ネイティヴ',
+  residence: '東京都',
+  occupation: 'IT関連',
+  lastIndustry: 'IT関連',
+  careerLevel: '3. シニアレベル',
+  experiencedOccupations: ['IT関連（オープン・WEB系）', 'コンサルティング'],
+  desiredOccupations: ['IT関連（オープン・WEB系）'],
+  incomeRange: '501万円〜800万円',
+  desiredIncomeRange: '801万円以上',
+  ...over,
+});
+
 export interface FakeScoutDs extends ScoutDataSource {
-  state: { benchmark: ScoutBenchmark | null | Error; exportOk: boolean; outcomes: ScoutDraftOutcome[]; options: ScoutOptionsResponse };
-  calls: { benchmark: unknown[]; exported: ScoutDraftExport[][]; outcomes: string[][]; options: number };
+  state: { benchmark: ScoutBenchmark | null | Error; exportOk: boolean; outcomes: ScoutDraftOutcome[]; options: ScoutOptionsResponse; job: ScoutJobInfo | null; member: ScoutMemberInfo | null };
+  calls: { benchmark: unknown[]; exported: ScoutDraftExport[][]; outcomes: string[][]; options: number; job: { companyId: string; jobId: string }[]; member: string[] };
   reset(): void;
 }
 
 export const fakeScoutDs: FakeScoutDs = {
-  state: { benchmark: sampleBenchmark(), exportOk: true, outcomes: [], options: sampleOptions },
-  calls: { benchmark: [], exported: [], outcomes: [], options: 0 },
+  state: { benchmark: sampleBenchmark(), exportOk: true, outcomes: [], options: sampleOptions, job: null, member: null },
+  calls: { benchmark: [], exported: [], outcomes: [], options: 0, job: [], member: [] },
   reset() {
-    this.state = { benchmark: sampleBenchmark(), exportOk: true, outcomes: [], options: sampleOptions };
-    this.calls = { benchmark: [], exported: [], outcomes: [], options: 0 };
+    this.state = { benchmark: sampleBenchmark(), exportOk: true, outcomes: [], options: sampleOptions, job: null, member: null };
+    this.calls = { benchmark: [], exported: [], outcomes: [], options: 0, job: [], member: [] };
   },
   async options() {
     this.calls.options++;
@@ -45,6 +77,14 @@ export const fakeScoutDs: FakeScoutDs = {
     this.calls.benchmark.push(q);
     if (this.state.benchmark instanceof Error) throw this.state.benchmark;
     return this.state.benchmark;
+  },
+  async job(companyId, jobId) {
+    this.calls.job.push({ companyId, jobId });
+    return this.state.job;
+  },
+  async member(memberId) {
+    this.calls.member.push(memberId);
+    return this.state.member;
   },
   async exportDrafts(rows) {
     this.calls.exported.push(rows);

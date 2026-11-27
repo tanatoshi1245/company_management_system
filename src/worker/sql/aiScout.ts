@@ -1,6 +1,6 @@
 import { p, type BuiltQuery } from '../bq/params';
 import { SCOUT_MIN_SENDS, SCOUT_MIN_TEMPLATES, SCOUT_RATE_THRESHOLD, SCOUT_TOP_TEMPLATES, SCOUT_WINDOW_MONTHS, type ScoutFilters, type ScoutLang } from '../../shared/ai/scout';
-import { DIGEST_BODY_CHARS, DIGEST_MAX, type ScoutDraftExport } from '../ai/scout/dataSource';
+import { DIGEST_BODY_CHARS, DIGEST_MAX, JOB_TEXT_CHARS, type ScoutDraftExport } from '../ai/scout/dataSource';
 
 /**
  * ② スカウト文面の AI 作成: 日次マート dwh.cms_ai_*（bq/ai/scout_marts.sql）を読む・書く SQL。
@@ -275,5 +275,47 @@ WHEN NOT MATCHED THEN INSERT (draft_id, job_id, company_id, model_id, model_vers
         ),
       ),
     ],
+  };
+}
+
+/** 数字だけの ID → INT64 の @param の値。数字でない・大きすぎる ID は、どの行にも当たらない値（-1）にする */
+function idParam(v: string): number {
+  const s = v.trim();
+  if (!/^\d{1,15}$/.test(s)) return -1;
+  const n = Number(s);
+  return Number.isSafeInteger(n) ? n : -1;
+}
+
+/**
+ * 求人の内容（日次マート dwh.cms_ai_jobs。1 行）。**企業と求人の両方で絞る**（その企業の求人でなければ 0 行 = ほかの企業の求人を読ませない）。
+ * 仕事内容・応募条件は先頭 @chars 文字（社名・URL・メールアドレス・電話番号は、マートの時点で置き換え済み）。表は job_id でクラスタ
+ */
+export function aiScoutJobQuery(companyId: string, jobId: string): BuiltQuery {
+  return {
+    label: 'ai_scout_job',
+    maxBytes: 200 * MB,
+    sql: `
+SELECT CAST(job_id AS STRING) AS job_id, title, occupation, industry, location, salary, japanese_level, english_level, published,
+       SUBSTR(description, 1, @chars) AS description, SUBSTR(requirements, 1, @chars) AS requirements
+FROM \`bq-hgt.dwh.cms_ai_jobs\`
+WHERE company_id = @company_id AND job_id = @job_id
+LIMIT 1`,
+    params: [p.int('company_id', idParam(companyId)), p.int('job_id', idParam(jobId)), p.int('chars', JOB_TEXT_CHARS)],
+  };
+}
+
+/** 候補者の属性（日次マート dwh.cms_ai_member_profiles。1 行。氏名・連絡先・自由記述は表に無い）。表は member_id でクラスタ */
+export function aiScoutMemberQuery(memberId: string): BuiltQuery {
+  return {
+    label: 'ai_scout_member',
+    maxBytes: 400 * MB,
+    sql: `
+SELECT CAST(member_id AS STRING) AS member_id, age_group, nationality_category, japanese_level, english_level, residence, occupation_group,
+       last_industry, career_level, income_range, desired_income_range,
+       TO_JSON_STRING(experienced_occupations) AS experienced_json, TO_JSON_STRING(desired_occupations) AS desired_json
+FROM \`bq-hgt.dwh.cms_ai_member_profiles\`
+WHERE member_id = @member_id
+LIMIT 1`,
+    params: [p.int('member_id', idParam(memberId))],
   };
 }

@@ -4,7 +4,7 @@
 --   宛先テーブル: なし（スクリプト内で CREATE OR REPLACE。drafts だけ CREATE TABLE IF NOT EXISTS）
 --   作る表: cms_ai_dim_industry_group / cms_ai_scout_templates / cms_ai_scout_sends / cms_ai_scout_drafts（枠だけ）/ cms_ai_scout_draft_outcomes
 --           / cms_ai_jobs（求人の内容。求人 ID からの作成用）/ cms_ai_member_profiles（候補者の属性。会員 ID からの作成用）（2026-11-27 追加）
---   スキャン: 約 21 GB/日（messages の subject・body を 1 回 = 約 18.4 GB。messages はパーティションが無い。jobs_all の本文 2 列 = 約 1.3 GB）
+--   スキャン: 約 24 GB/日（messages の subject・body を 1 回 = 約 18.4 GB。messages はパーティションが無い。jobs_all = 約 1.9 GB（本文 2 列が 1.3 GB））。所要 約 80 秒
 --   失敗時は EXCEPTION で cms_ai_refresh_log に error 行を残し、前日の表がそのまま残る。再実行は冪等（全件差し替え）
 --   設計・列定義・正規表現: company_management_system/bq/ai/README.md
 -- 変更時の注意: Worker 側の読み取り SQL（src/worker/sql/aiScout.ts）・型（src/shared/ai/scout.ts）・業界の対応表（src/shared/ai/industryGroups.ts）を合わせる
@@ -341,7 +341,10 @@ BEGIN
     -- 10. cms_ai_jobs: 求人の内容（求人 = 1 行。求人 ID からの文面の作成用）。条件の列は既存マート cms_company_job_monthly と同じ決め方 ----
     --   タイトル・仕事内容・応募条件は、スカウトの文面（07）と同じ置き換え（URL・メールアドレス・電話番号 → 記号、その企業の社名 → {{企業名}}、
     --   求人元（client_company_name）・ほかの社名 → {{社名}}）。本文は先頭 3,000 文字まで（Worker が読むのは先頭 1,500 文字）
+    --   1 件を引くときのスキャンを小さくするため、求人 ID の 2,000 番ごとにパーティションを分ける（表が小さく、クラスタリングだけでは 1 件でも表全体を読む。
+    --   2026-11-27 実測 93 MB → 1 MB 未満）。400 万番を超えた ID は、まとめて 1 つのパーティションに入る（読めなくはならない）
     CREATE OR REPLACE TABLE `bq-hgt.dwh.cms_ai_jobs`
+    PARTITION BY RANGE_BUCKET(job_id, GENERATE_ARRAY(0, 4000000, 2000))
     CLUSTER BY job_id
     OPTIONS (description = '契約企業マネジメントシステム AI: 求人の内容（求人 = 1 行。マートに居る企業の求人のうち、直近 13 か月 + 当月に掲載があったもの）。タイトル・仕事内容・応募条件は社名・URL・メールアドレス・電話番号を記号に置き換え済み。毎朝 全件差し替え') AS
     WITH txt AS (
@@ -434,7 +437,9 @@ BEGIN
     -- 11. cms_ai_member_profiles: 候補者の属性（会員 = 1 行。会員 ID からの文面の作成用）。退会した会員（retired_on あり）は入れない ----
     --   年齢層・国籍の区分・語学・現住所・最終経験職種の大分類は cms_ai_scout_sends（08）と同じ値（候補者の属性から、分析対象の条件を作るため）。
     --   経験職種・希望職種・希望年収帯は cms_scout_member_attributes_monthly と同じ決め方。氏名・連絡先・自由記述（職務経歴・スキル）は入れない
+    --   会員 ID の 2,000 番ごとにパーティションを分ける（理由は 10 と同じ。2026-11-27 実測 189 MB → 1 MB 未満）
     CREATE OR REPLACE TABLE `bq-hgt.dwh.cms_ai_member_profiles`
+    PARTITION BY RANGE_BUCKET(member_id, GENERATE_ARRAY(0, 4000000, 2000))
     CLUSTER BY member_id
     OPTIONS (description = '契約企業マネジメントシステム AI: 候補者の属性（会員 = 1 行。退会した会員は除く。現在のプロフィール）。値は cms_ai_scout_sends の属性と同じ。氏名・連絡先・自由記述は無い。毎朝 全件差し替え') AS
     SELECT v.member_id,

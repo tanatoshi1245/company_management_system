@@ -4,9 +4,10 @@ import { join } from 'node:path';
 import { baseEnv } from '../helpers/env';
 import { EMPTY_SCOUT_FILTERS, SCOUT_FILTER_KEYS, SCOUT_MIN_SENDS, SCOUT_MIN_TEMPLATES, SCOUT_RATE_THRESHOLD, SCOUT_TOP_TEMPLATES, SCOUT_WINDOW_MONTHS, ScoutBasisSchema, ScoutOptionsResponseSchema, ScoutStatsSchema, type ScoutFilters } from '../../src/shared/ai/scout';
 import { INDUSTRY_GROUPS, industryGroupOf } from '../../src/shared/ai/industryGroups';
-import { DIGEST_BODY_CHARS, DIGEST_MAX } from '../../src/worker/ai/scout/dataSource';
-import { makeScoutDataSource, normalizeFilters, scopeLabelOf, scoutCacheKey, scoutDataSourceOf, toBenchmark } from '../../src/worker/ai/scout/bqDataSource';
-import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery, EXPORT_MAX_ROWS, SCOUT_FEATURES } from '../../src/worker/sql/aiScout';
+import { DIGEST_BODY_CHARS, DIGEST_MAX, JOB_TEXT_CHARS } from '../../src/worker/ai/scout/dataSource';
+import { makeScoutDataSource, normalizeFilters, scopeLabelOf, scoutCacheKey, scoutDataSourceOf, toBenchmark, toJobInfo, toMemberInfo } from '../../src/worker/ai/scout/bqDataSource';
+import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutJobQuery, aiScoutMemberQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery, EXPORT_MAX_ROWS, OPTION_EXCLUDED, SCOUT_FEATURES } from '../../src/worker/sql/aiScout';
+import { fakeScoutDs, sampleJob, sampleMember } from '../helpers/scoutFake';
 import type { BqClient } from '../../src/worker/bq/client';
 import type { BuiltQuery } from '../../src/worker/bq/params';
 import { BqError } from '../../src/worker/bq/client';
@@ -14,12 +15,14 @@ import { BqError } from '../../src/worker/bq/client';
 const filters = (f: Partial<ScoutFilters> = {}): ScoutFilters => ({ ...EMPTY_SCOUT_FILTERS, ...f });
 const draft = (n: number) => ({ draftId: `d${String(n).padStart(8, '0')}`, jobId: 'job1', companyId: '1001', modelId: 'a', modelVersion: 1, subject: '件名', body: '本文', chosenAt: '2026-11-27T01:00:00.000Z' });
 
-const ALLOWED_TABLES = ['cms_ai_refresh_log', 'cms_ai_scout_sends', 'cms_ai_scout_templates', 'cms_ai_scout_drafts', 'cms_ai_scout_draft_outcomes', 'cms_ai_dim_industry_group'];
+const ALLOWED_TABLES = ['cms_ai_refresh_log', 'cms_ai_scout_sends', 'cms_ai_scout_templates', 'cms_ai_scout_drafts', 'cms_ai_scout_draft_outcomes', 'cms_ai_dim_industry_group', 'cms_ai_jobs', 'cms_ai_member_profiles'];
 const queries: BuiltQuery[] = [
   aiScoutBenchmarkQuery({ companyId: '1001', industry: '人材紹介会社', industryGroup: 'hr', filters: filters({ ageGroups: ['25-34歳'] }), lang: 'ja' }),
   aiScoutOptionsQuery(),
   aiScoutOutcomesQuery(['d00000001']),
   aiScoutDraftsMergeQuery([draft(1)]),
+  aiScoutJobQuery('1001', '1001'),
+  aiScoutMemberQuery('20001'),
 ];
 
 describe('AI スカウトのマートの SQL（src/worker/sql/aiScout.ts）', () => {
@@ -44,7 +47,7 @@ describe('AI スカウトのマートの SQL（src/worker/sql/aiScout.ts）', ()
   it('SQL の本文を文字列連結・差し込みで組み立てていない（入力が違っても本文は同じ）', () => {
     const src = readFileSync(join(process.cwd(), 'src/worker/sql/aiScout.ts'), 'utf8');
     const sqlBlocks = Array.from(src.matchAll(/sql: `([\s\S]*?)`,\n/g)).map((m) => m[1]);
-    expect(sqlBlocks.length).toBe(4);
+    expect(sqlBlocks.length).toBe(6);
     for (const b of sqlBlocks) expect(b).not.toContain('${');
     expect(src).not.toMatch(/sql:\s*[^`\s]/);
     expect(src).not.toMatch(/\.sql\s*\+=|sql\s*\+\s*/);
@@ -245,6 +248,147 @@ describe('makeScoutDataSource（サンプルデータ = BQ_MOCK=1 でも同じ�
     expect(ScoutBasisSchema.parse(b!.basis)).toMatchObject({ threshold: 'topBelow10', scope: 'all', ratePct: 5, overallRatePct: 3 });
     expect(ScoutStatsSchema.parse(b!.stats).langs).toEqual([]);
     expect(b!.digest).toEqual([]);
+  });
+});
+
+describe('求人 ID・会員 ID からの作成（cms_ai_jobs / cms_ai_member_profiles）', () => {
+  const ds = makeScoutDataSource(baseEnv);
+  const val = (q: BuiltQuery, n: string) => q.params.find((x) => x.name === n)?.parameterValue.value;
+
+  it('求人のクエリは、企業と求人の両方で絞る（@param だけ。本文は先頭 JOB_TEXT_CHARS 文字）', () => {
+    const q = aiScoutJobQuery('1001', '555');
+    expect(q.label).toBe('ai_scout_job');
+    expect(q.sql).toContain('WHERE company_id = @company_id AND job_id = @job_id');
+    expect(q.sql).toContain('FROM `bq-hgt.dwh.cms_ai_jobs`');
+    expect(q.sql).toContain('SUBSTR(description, 1, @chars)');
+    expect(q.sql).toContain('SUBSTR(requirements, 1, @chars)');
+    expect(q.params.map((x) => x.name).sort()).toEqual(['chars', 'company_id', 'job_id']);
+    expect(q.params.every((x) => x.parameterType.type === 'INT64')).toBe(true);
+    expect(val(q, 'company_id')).toBe('1001');
+    expect(val(q, 'job_id')).toBe('555');
+    expect(val(q, 'chars')).toBe(String(JOB_TEXT_CHARS));
+    // 入力が違っても本文は同じ。数字でない ID は、どの行にも当たらない値になる
+    const bad = aiScoutJobQuery("1001 OR 1=1", "1; DROP TABLE x");
+    expect(bad.sql).toBe(q.sql);
+    expect(val(bad, 'company_id')).toBe('-1');
+    expect(val(bad, 'job_id')).toBe('-1');
+    expect(val(aiScoutJobQuery('1001', '99999999999999999999'), 'job_id')).toBe('-1');
+  });
+
+  it('会員のクエリは member_id だけで絞り、氏名・連絡先・自由記述の列を読まない', () => {
+    const q = aiScoutMemberQuery('20001');
+    expect(q.label).toBe('ai_scout_member');
+    expect(q.sql).toContain('FROM `bq-hgt.dwh.cms_ai_member_profiles`');
+    expect(q.sql).toContain('WHERE member_id = @member_id');
+    expect(q.params.map((x) => x.name)).toEqual(['member_id']);
+    expect(val(q, 'member_id')).toBe('20001');
+    expect(aiScoutMemberQuery("x' OR '1'='1").sql).toBe(q.sql);
+    expect(val(aiScoutMemberQuery('abc'), 'member_id')).toBe('-1');
+    expect(q.sql).not.toMatch(/name|mail|tel|phone|skill|work_experience|company/i);
+  });
+
+  it('マートの SQL: 2 表を作り、求人は社名などを置き換え、会員は退会を除き、氏名・連絡先・自由記述を入れない', () => {
+    const mart = readFileSync(join(process.cwd(), 'bq/ai/scout_marts.sql'), 'utf8');
+    const jobs = mart.split('CREATE OR REPLACE TABLE `bq-hgt.dwh.cms_ai_jobs`')[1]?.split('-- 11.')[0] ?? '';
+    const members = mart.split('CREATE OR REPLACE TABLE `bq-hgt.dwh.cms_ai_member_profiles`')[1]?.split('-- 12.')[0] ?? '';
+    expect(jobs).toContain('CLUSTER BY job_id');
+    for (const m of ['{{URL}}', '{{メールアドレス}}', '{{電話番号}}', '{{企業名}}', '{{社名}}']) expect(jobs).toContain(m);
+    expect(members).toContain('CLUSTER BY member_id');
+    expect(members).toContain('retired_on IS NULL');
+    expect(members).not.toMatch(/skill|work_experience|qualification|company_name|school_name|other_language_text/);
+    // 掲載中かどうかは、掲載の履歴（終了日なし）で決める
+    expect(mart).toContain('LOGICAL_OR(job_publish_end_date IS NULL) AS published');
+    // Worker が読む列は、マートにある
+    for (const c of ['title', 'occupation', 'industry', 'location', 'salary', 'japanese_level', 'english_level', 'description', 'requirements']) expect(jobs).toMatch(new RegExp(`AS ${c},`));
+    for (const c of ['age_group', 'nationality_category', 'japanese_level', 'english_level', 'residence', 'occupation_group', 'last_industry', 'career_level', 'experienced_occupations', 'desired_occupations', 'income_range', 'desired_income_range']) expect(members).toMatch(new RegExp(`AS ${c},`));
+  });
+
+  it('job: その企業の求人だけを返す（ほかの企業の求人・無い ID・数字でない ID は null）', async () => {
+    const j = await ds.job('1001', '1001');
+    expect(j).toMatchObject({ jobId: '1001', location: '東京都', salary: '600万円〜900万円', japaneseLevel: '流暢', englishLevel: 'ビジネス会話', published: true });
+    expect(j!.title.length).toBeGreaterThan(0);
+    expect(j!.description.length).toBeGreaterThan(0);
+    expect(j!.description.length).toBeLessThanOrEqual(JOB_TEXT_CHARS);
+    expect(j!.requirements.length).toBeLessThanOrEqual(JOB_TEXT_CHARS);
+    expect(`${j!.title}\n${j!.description}\n${j!.requirements}`).not.toMatch(/株式会社|https?:|@/);
+    expect((await ds.job('1002', '1002'))?.published).toBe(false);
+    // ほかの企業の求人
+    expect(await ds.job('1002', '1001')).toBeNull();
+    expect(await ds.job('1001', '1002')).toBeNull();
+    // 無い ID・数字でない ID
+    expect(await ds.job('1001', '999999')).toBeNull();
+    expect(await ds.job('1001', '')).toBeNull();
+    expect(await ds.job('abc', '1001')).toBeNull();
+    expect(await ds.job('1001', '1001 OR 1=1')).toBeNull();
+  });
+
+  it('member: 属性は選択肢と同じ値。未入力は null。無い ID は null', async () => {
+    const o = await ds.options();
+    const m = await ds.member('20001');
+    expect(m).toMatchObject({ memberId: '20001', ageGroup: '25-34歳', nationality: '日本国籍以外', residence: '東京都', occupation: 'IT関連', careerLevel: '3. シニアレベル', incomeRange: '501万円〜800万円', desiredIncomeRange: '801万円以上' });
+    expect(o.ageGroups).toContain(m!.ageGroup);
+    expect(o.nationalities).toContain(m!.nationality);
+    expect(o.japaneseLevels).toContain(m!.japaneseLevel);
+    expect(o.englishLevels).toContain(m!.englishLevel);
+    expect(o.residences).toContain(m!.residence);
+    expect(o.occupations).toContain(m!.occupation);
+    expect(m!.experiencedOccupations).toEqual(['IT関連（オープン・WEB系）', 'IT関連（その他）', 'コンサルティング']);
+    const m2 = await ds.member('20002');
+    expect(m2).toMatchObject({ careerLevel: null, incomeRange: null, desiredOccupations: [] });
+    expect(Object.keys(m!).sort()).toEqual(['ageGroup', 'careerLevel', 'desiredIncomeRange', 'desiredOccupations', 'englishLevel', 'experiencedOccupations', 'incomeRange', 'japaneseLevel', 'lastIndustry', 'memberId', 'nationality', 'occupation', 'residence'].sort());
+    expect(await ds.member('99999')).toBeNull();
+    expect(await ds.member('')).toBeNull();
+    expect(await ds.member('20001; --')).toBeNull();
+  });
+
+  it('行 → 契約の型: 値なし（(未入力)・未設定・空）は null、本文は切る、ID が違う行は使わない', () => {
+    const j = toJobInfo({ job_id: '7', title: ' T ', occupation: '', industry: null, location: '未設定', salary: null, japanese_level: '(未選択)', english_level: '流暢', published: null, description: 'あ'.repeat(JOB_TEXT_CHARS + 50), requirements: null }, '7');
+    expect(j).toEqual({ jobId: '7', title: 'T', occupation: null, industry: null, location: null, salary: null, japaneseLevel: null, englishLevel: '流暢', published: false, description: 'あ'.repeat(JOB_TEXT_CHARS), requirements: '' });
+    expect(toJobInfo({ job_id: '8' }, '7')).toBeNull();
+    expect(toJobInfo(undefined, '7')).toBeNull();
+    const m = toMemberInfo({ member_id: '5', age_group: '(未入力)', nationality_category: '日本国籍', residence: '日本（都道府県不明）', occupation_group: '(未入力)', experienced_json: '["営業","営業","(未入力)",""]', desired_json: 'not json' }, '5');
+    expect(m).toMatchObject({ memberId: '5', ageGroup: null, nationality: '日本国籍', residence: '日本（都道府県不明）', occupation: null, japaneseLevel: null, experiencedOccupations: ['営業'], desiredOccupations: [] });
+    // 選択肢に出さない値（OPTION_EXCLUDED）のうち、(未入力) は null にする。「日本（都道府県不明）」は事実なので残す（条件に使うかは生成の側で決める）
+    expect(OPTION_EXCLUDED).toContain('(未入力)');
+    expect(toMemberInfo({ member_id: '6' }, '5')).toBeNull();
+    expect(toMemberInfo(undefined, '5')).toBeNull();
+  });
+
+  it('表が無い・権限が無い・鍵が無いときは、例外にせず null。数字でない ID は照会しない', async () => {
+    let calls = 0;
+    const failing: BqClient = {
+      mock: false,
+      run: async () => {
+        calls++;
+        throw new BqError('Not found: Table bq-hgt:dwh.cms_ai_jobs', 'notFound', 404);
+      },
+      dryRun: async () => ({ bytesProcessed: 0 }),
+    };
+    const d = scoutDataSourceOf(failing);
+    expect(await d.job('1001', '1001')).toBeNull();
+    expect(await d.member('20001')).toBeNull();
+    expect(calls).toBe(2);
+    expect(await d.job('1001', 'x')).toBeNull();
+    expect(await d.member('x')).toBeNull();
+    expect(calls).toBe(2);
+    const noKey = makeScoutDataSource({ ...baseEnv, BQ_MOCK: undefined });
+    expect(await noKey.job('1001', '1001')).toBeNull();
+    expect(await noKey.member('20001')).toBeNull();
+  });
+
+  it('テスト用の偽物（scoutFake）: state の job / member を返し、呼び出しを記録する', async () => {
+    fakeScoutDs.reset();
+    expect(await fakeScoutDs.job('1001', '1001')).toBeNull();
+    expect(await fakeScoutDs.member('20001')).toBeNull();
+    fakeScoutDs.state.job = sampleJob();
+    fakeScoutDs.state.member = sampleMember({ residence: null });
+    expect((await fakeScoutDs.job('1001', '1001'))?.jobId).toBe('1001');
+    expect((await fakeScoutDs.member('20001'))?.residence).toBeNull();
+    expect(fakeScoutDs.calls.job).toEqual([{ companyId: '1001', jobId: '1001' }, { companyId: '1001', jobId: '1001' }]);
+    expect(fakeScoutDs.calls.member).toEqual(['20001', '20001']);
+    fakeScoutDs.reset();
+    expect(fakeScoutDs.state.job).toBeNull();
+    expect(fakeScoutDs.calls.job).toEqual([]);
   });
 });
 

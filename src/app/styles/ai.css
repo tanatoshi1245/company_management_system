@@ -175,8 +175,10 @@
 @container (min-width: 680px) {
   .ai-drafts[data-count='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-@container (min-width: 1100px) {
-  .ai-drafts[data-count='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@container (min-width: 1088px) {
+  .ai-drafts[data-count='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); }
+  .ai-drafts[data-count='3'] .ai-draft-card { padding: 8px; }
+  .ai-drafts[data-count='3'] .ai-draft-card .ai-draft-part .text { padding: 8px 6px; }
 }
 .ai-draft-card { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; padding: 10px; border: 1px solid var(--rule-strong); border-radius: var(--radius-lg); background: var(--surface); transition: border-color var(--motion), box-shadow var(--motion); }
 .ai-draft-card.selected { border-color: var(--dj-navy); box-shadow: 0 0 0 2px var(--dj-navy-tint-2); background: var(--dj-navy-tint); }
@@ -235,6 +237,7 @@
 /* ---- 何をもとに作るか（2026-11-27。最初に選ぶカード）と、求人 ID・会員 ID を確かめる ---- */
 /* 下の段（3 つの案）は、入力の列の下まで使う全幅 */
 .ai-layout > .ai-col-wide { grid-column: 1 / -1; min-width: 0; }
+.ai-col-wide > .ai-result-body > .card { padding-left: var(--s3); padding-right: var(--s3); }
 .ai-basis-cards { display: grid; gap: var(--s2); margin-top: var(--s1); }
 .ai-basis-card { display: flex; align-items: flex-start; gap: var(--s2); padding: 8px 10px; border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--surface); cursor: pointer; transition: border-color var(--motion), background-color var(--motion); }
 .ai-basis-card:hover { background: var(--surface-low); border-color: var(--dj-navy-soft); }
@@ -248,7 +251,7 @@
 .ai-group-note { margin: var(--s1) 0 var(--s3); }
 .ai-lookup { display: grid; gap: var(--s3); margin-top: var(--s1); }
 .ai-lookup-row { display: flex; gap: var(--s2); min-width: 0; }
-.ai-lookup-row input.ctl { flex: 1 1 120px; }
+.ai-lookup-row input.ctl { flex: 1 1 120px; text-align: left; }
 .ai-lookup-row .btn { flex: none; white-space: nowrap; }
 .ai-target-card { display: grid; gap: var(--s2); padding: 10px 12px; border: 1px solid var(--rule); border-left: 3px solid var(--dj-navy); border-radius: var(--radius); background: var(--surface-low); font-size: var(--fs-12); min-width: 0; }
 .ai-target-card > header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }

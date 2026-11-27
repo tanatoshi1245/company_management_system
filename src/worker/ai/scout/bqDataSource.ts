@@ -5,8 +5,8 @@ import type { BqClient } from '../../bq/client';
 import type { Row } from '../../bq/parseRows';
 import type { Env } from '../../env';
 import { makeClient } from '../../services/clients';
-import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery, EXPORT_MAX_ROWS, SCOUT_FEATURES } from '../../sql/aiScout';
-import { DIGEST_BODY_CHARS, DIGEST_MAX, type ScoutBenchmark, type ScoutBenchmarkQuery, type ScoutDataSource, type ScoutDigestTemplate, type ScoutDraftExport, type ScoutDraftOutcome } from './dataSource';
+import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutJobQuery, aiScoutMemberQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery, EXPORT_MAX_ROWS, SCOUT_FEATURES } from '../../sql/aiScout';
+import { DIGEST_BODY_CHARS, DIGEST_MAX, JOB_TEXT_CHARS, type ScoutBenchmark, type ScoutBenchmarkQuery, type ScoutDataSource, type ScoutDigestTemplate, type ScoutDraftExport, type ScoutDraftOutcome, type ScoutJobInfo, type ScoutMemberInfo } from './dataSource';
 
 /**
  * ② スカウト: 分析に使うデータの入口の実装（日次マート dwh.cms_ai_*。SQL は src/worker/sql/aiScout.ts）。
@@ -141,6 +141,66 @@ export function toOptions(rows: Row[]): ScoutOptionsResponse {
   return out;
 }
 
+/** マートの「値なし」の表し方（空・(未入力)・未設定・(未選択)）→ null */
+const UNSET = new Set(['', '(未入力)', '未設定', '(未選択)']);
+const text = (v: Row[string] | undefined): string | null => {
+  if (typeof v !== 'string') return null;
+  const t = v.trim();
+  return UNSET.has(t) ? null : t;
+};
+/** 数字だけの ID か（それ以外は、照会せずに「無い」として返す） */
+const isId = (v: string): boolean => /^\d{1,15}$/.test(v.trim());
+
+function parseStrings(json: Row[string] | undefined): string[] {
+  if (typeof json !== 'string' || !json) return [];
+  try {
+    const arr: unknown = JSON.parse(json);
+    if (!Array.isArray(arr)) return [];
+    return Array.from(new Set(arr.filter((x): x is string => typeof x === 'string').map((x) => x.trim()).filter((x) => !UNSET.has(x)))).slice(0, 12);
+  } catch {
+    return [];
+  }
+}
+
+/** マート cms_ai_jobs の 1 行 → 契約の型。行が無い・求人 ID が違うときは null */
+export function toJobInfo(row: Row | undefined, jobId: string): ScoutJobInfo | null {
+  if (!row || String(row.job_id ?? '') !== jobId.trim()) return null;
+  const body = (v: Row[string] | undefined): string => (typeof v === 'string' ? v.slice(0, JOB_TEXT_CHARS).trim() : '');
+  return {
+    jobId: String(row.job_id),
+    title: text(row.title) ?? '',
+    occupation: text(row.occupation),
+    industry: text(row.industry),
+    location: text(row.location),
+    salary: text(row.salary),
+    japaneseLevel: text(row.japanese_level),
+    englishLevel: text(row.english_level),
+    published: row.published === true,
+    description: body(row.description),
+    requirements: body(row.requirements),
+  };
+}
+
+/** マート cms_ai_member_profiles の 1 行 → 契約の型（未入力は null。値は cms_ai_scout_sends の属性と同じ）。行が無いときは null */
+export function toMemberInfo(row: Row | undefined, memberId: string): ScoutMemberInfo | null {
+  if (!row || String(row.member_id ?? '') !== memberId.trim()) return null;
+  return {
+    memberId: String(row.member_id),
+    ageGroup: text(row.age_group),
+    nationality: text(row.nationality_category),
+    japaneseLevel: text(row.japanese_level),
+    englishLevel: text(row.english_level),
+    residence: text(row.residence),
+    occupation: text(row.occupation_group),
+    lastIndustry: text(row.last_industry),
+    careerLevel: text(row.career_level),
+    experiencedOccupations: parseStrings(row.experienced_json),
+    desiredOccupations: parseStrings(row.desired_json),
+    incomeRange: text(row.income_range),
+    desiredIncomeRange: text(row.desired_income_range),
+  };
+}
+
 class BqScoutDataSource implements ScoutDataSource {
   constructor(private readonly client: () => BqClient) {}
 
@@ -164,6 +224,29 @@ class BqScoutDataSource implements ScoutDataSource {
       return await toBenchmark(res.rows[0], { ...q, industry }, groupId);
     } catch (e) {
       logError('benchmark（マートが無い・権限が無いときは、分析なしで返す）', e);
+      return null;
+    }
+  }
+
+  async job(companyId: string, jobId: string): Promise<ScoutJobInfo | null> {
+    // 企業と求人の両方で絞る（SQL の WHERE）。数字でない ID は照会しない
+    if (!isId(companyId) || !isId(jobId)) return null;
+    try {
+      const res = await this.client().run(aiScoutJobQuery(companyId, jobId));
+      return toJobInfo(res.rows[0], jobId);
+    } catch (e) {
+      logError('job（マートが無い・権限が無いときは、求人なしで返す）', e);
+      return null;
+    }
+  }
+
+  async member(memberId: string): Promise<ScoutMemberInfo | null> {
+    if (!isId(memberId)) return null;
+    try {
+      const res = await this.client().run(aiScoutMemberQuery(memberId));
+      return toMemberInfo(res.rows[0], memberId);
+    } catch (e) {
+      logError('member（マートが無い・権限が無いときは、候補者なしで返す）', e);
       return null;
     }
   }

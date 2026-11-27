@@ -11,7 +11,7 @@ import { companyMonthlyQuery } from '../src/worker/sql/companyMonthly';
 import { companyLoginQuery } from '../src/worker/sql/companyLogin';
 import { industryBenchmarkQuery } from '../src/worker/sql/industryBenchmark';
 import { applicationCohortQuery, benchSeriesQuery, companyLoginByIdQuery, companyMasterByIdQuery, companyMonthlyByIdQuery, dailyUsageQuery, memberAttributesQuery, scoutCohortQuery } from '../src/worker/sql/companyDetail';
-import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery } from '../src/worker/sql/aiScout';
+import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutJobQuery, aiScoutMemberQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery } from '../src/worker/sql/aiScout';
 import { EMPTY_SCOUT_FILTERS } from '../src/shared/ai/scout';
 import { addDays, addMonths, monthOf, todayJst } from '../src/shared/calendar/periods';
 
@@ -42,6 +42,9 @@ const queries = [
   aiScoutBenchmarkQuery({ companyId: sampleId, industry: 'ITコンサルティング', industryGroup: 'it', filters: { ...EMPTY_SCOUT_FILTERS, ageGroups: ['25-34歳'] }, lang: 'ja' }),
   aiScoutOptionsQuery(),
   aiScoutOutcomesQuery(['dryrun0001']),
+  // 求人 ID・会員 ID からの作成（1 行を引く。推定は表全体 = クラスタリング前の量で、実行は数 MB）
+  aiScoutJobQuery(sampleId, '1'),
+  aiScoutMemberQuery('1'),
   aiScoutDraftsMergeQuery([{ draftId: 'dryrun0001', jobId: 'dryrun', companyId: sampleId, modelId: 'a', modelVersion: 1, subject: 'dry run', body: 'dry run', chosenAt: new Date().toISOString() }]),
 ];
 const BUDGET = 10 * 1024 ** 2;

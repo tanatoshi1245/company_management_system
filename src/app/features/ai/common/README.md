@@ -14,7 +14,7 @@ AI 機能の画面が共用する、API の呼び出し・入力の部品・状�
 
 | ファイル | 内容 |
 |---|---|
-| `aiApi.ts` | API（`useAiConfig`・`useAiCompanies`・`useAiCompanyDefaults`・`useAiHistory`・`useAiJob`・`createAiJob` ほか）。② スカウト用に `useScoutOptions`・`putScoutChoice`・`putScoutUsage`・`useScoutModels`・`runScoutTune`・`rollbackScoutModel` |
+| `aiApi.ts` | API（`useAiConfig`・`useAiCompanies`・`useAiCompanyDefaults`・`useAiHistory`・`useAiJob`・`createAiJob` ほか）。② スカウト用に `useScoutOptions`・`fetchScoutJob`・`fetchScoutMember`（求人・候補者を確かめる。AI は動かない）・`putScoutChoice`・`putScoutUsage`・`useScoutModels`・`runScoutTune`・`rollbackScoutModel` |
 | `Combobox.tsx` | テキストの予測変換 + プルダウン（WAI-ARIA の combobox）。`Combobox`（文字の一覧）と、その本体 `ComboboxCore`（キー・ラベル・小さな説明つき） |
 | `TagCombobox.tsx` | 複数を選ぶ（チップ・× で外す・上限つき。自由入力は `allowFree`（既定 = 可）。② の条件は一覧から選ぶだけ） |
 | `CompanyCombobox.tsx` | 既存企業の選択（一覧にある企業だけ。同名は業界・種別で見分ける） |

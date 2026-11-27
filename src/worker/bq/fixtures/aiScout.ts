@@ -148,3 +148,89 @@ export function mockAiScoutOptions(): Row[] {
 export function mockAiScoutOutcomes(): Row[] {
   return [];
 }
+
+/** 作り物の求人（2 件。求人 1001 は企業 1001、求人 1002 は企業 1002 のもの。社名は差し込みの記号だけ） */
+const JOBS: Record<string, { company_id: string; row: Row }> = {
+  '1001': {
+    company_id: '1001',
+    row: {
+      job_id: '1001',
+      title: 'バイリンガルのプロジェクトマネージャー（海外拠点との開発プロジェクト）',
+      occupation: 'IT関連（オープン・WEB系） - プロジェクトマネージャー',
+      industry: 'ITコンサルティング',
+      location: '東京都',
+      salary: '600万円〜900万円',
+      japanese_level: '流暢',
+      english_level: 'ビジネス会話',
+      published: true,
+      description:
+        '{{企業名}}の受託開発プロジェクトで、海外拠点のエンジニアと日本のお客様の間に立つプロジェクトマネージャーを募集します。\n\n【仕事内容】\n・要件の整理と、開発計画の作成\n・海外拠点（英語）との進行管理、品質の確認\n・お客様への報告と、追加のご提案\n\n【働き方】\n・週 2 日までリモート可、フレックスタイム\n・チームは 6〜10 名',
+      requirements:
+        '【必須】\n・システム開発のプロジェクトマネジメントのご経験 3 年以上\n・英語での会議、メールのご経験\n・日本語: 流暢\n\n【歓迎】\n・オフショア開発のご経験\n・クラウドの基礎知識',
+    },
+  },
+  '1002': {
+    company_id: '1002',
+    row: {
+      job_id: '1002',
+      title: '海外営業（東南アジア担当）',
+      occupation: '営業 - 海外担当営業',
+      industry: '機械メーカー',
+      location: '大阪府',
+      salary: '500万円〜750万円',
+      japanese_level: 'ビジネス会話',
+      english_level: '流暢',
+      published: false,
+      description: '東南アジアの代理店への、産業用機器の提案営業です。\n・既存の代理店への販売支援\n・新しい代理店の開拓\n・年 4 回ほどの海外出張',
+      requirements: '・法人営業のご経験 2 年以上\n・英語での商談のご経験',
+    },
+  },
+};
+
+/** ai_scout_job: 企業と求人の両方が合う 1 行だけ（ほかの企業の ID では 0 行。SQL の WHERE と同じ） */
+export function mockAiScoutJob(q: BuiltQuery): Row[] {
+  const j = JOBS[str(q, 'job_id')];
+  if (!j || j.company_id !== str(q, 'company_id')) return [];
+  const chars = Number(str(q, 'chars')) || 1500;
+  return [{ ...j.row, description: String(j.row.description).slice(0, chars), requirements: String(j.row.requirements).slice(0, chars) }];
+}
+
+/** 作り物の候補者（2 人。値は選択肢（OPTIONS）と同じ形。氏名・連絡先は無い） */
+const MEMBERS: Record<string, Row> = {
+  '20001': {
+    member_id: '20001',
+    age_group: '25-34歳',
+    nationality_category: '日本国籍以外',
+    japanese_level: '5. 流暢',
+    english_level: '6. ネイティヴ',
+    residence: '東京都',
+    occupation_group: 'IT関連',
+    last_industry: 'IT関連',
+    career_level: '3. シニアレベル',
+    income_range: '501万円〜800万円',
+    desired_income_range: '801万円以上',
+    experienced_json: JSON.stringify(['IT関連（オープン・WEB系）', 'IT関連（その他）', 'コンサルティング']),
+    desired_json: JSON.stringify(['IT関連（オープン・WEB系）', 'エグゼクティブ/経営']),
+  },
+  '20002': {
+    member_id: '20002',
+    age_group: '35-44歳',
+    nationality_category: '日本国籍',
+    japanese_level: '6. ネイティヴ',
+    english_level: '4. ビジネス会話',
+    residence: '大阪府',
+    occupation_group: '営業',
+    last_industry: '製造業',
+    career_level: '(未入力)',
+    income_range: '(未入力)',
+    desired_income_range: '501万円〜800万円',
+    experienced_json: JSON.stringify(['営業', '企画/マーケティング/PR']),
+    desired_json: JSON.stringify([]),
+  },
+};
+
+/** ai_scout_member: 作り物の 2 人だけ（ほかの ID は 0 行） */
+export function mockAiScoutMember(q: BuiltQuery): Row[] {
+  const m = MEMBERS[str(q, 'member_id')];
+  return m ? [{ ...m }] : [];
+}
