@@ -43,8 +43,6 @@ export async function authenticate(c: Ctx, next: Next): Promise<Response | void>
   const mode = authModeOf(c.env);
   c.set('authMode', mode);
   if (c.req.path.startsWith('/auth/')) return next();
-  // AI 機能のセッションの入口（src/worker/ai/hook.ts）。ログインの代わりに、ジョブごとの合言葉を hook の側で確かめる
-  if (c.req.path.startsWith('/hook/')) return next();
 
   const isApi = c.req.path.startsWith('/api/');
   const allowed = parseAllowList(c.env.ALLOWED_EMAILS, c.env.ALLOWED_EMAIL_DOMAINS);

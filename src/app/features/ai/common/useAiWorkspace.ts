@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AiCompanyOption, AiConfigResponse, AiJobDetail, AiKind } from '../../../../shared/ai/common';
 import { ApiError } from '../../../lib/api';
-import { clearAiEdited, createAiJob, deleteAiJob, refireAiJob, saveAiEdited, useAiCompanies, useAiConfig, useAiJob } from './aiApi';
+import { clearAiEdited, createAiJob, deleteAiJob, saveAiEdited, useAiCompanies, useAiConfig, useAiJob } from './aiApi';
 
 /** API の誤りを、画面に出す 1 つの文にする（項目ごとの理由があれば添える） */
 export function aiErrorMessage(e: unknown): string {
@@ -21,12 +21,15 @@ export interface AiWorkspace {
   jobLoading: boolean;
   polling: boolean;
   fireMessage: string | null;
-  /** 実行・立ち上げ直しの最中 */
+  /** 実行の最中（② スカウトは、この間に Worker が分析と作成をしている） */
   busy: boolean;
+  /** 実行を始めた時刻（ミリ秒。busy の間だけ） */
+  busySince: number | null;
   error: string | null;
-  /** 依頼を作ってセッションを立ち上げる。成功したら true */
+  /** 依頼を作る。応答のジョブを開く（作れなかったとき = fire: failed も、失敗のジョブとして開く）。応答が返ったら true */
   run: (input: unknown) => Promise<boolean>;
-  refire: () => Promise<void>;
+  /** 開いているジョブを差し替える（選択・利用の記録の応答をそのまま入れる） */
+  replace: (job: AiJobDetail) => void;
   /** 画面で直した版を保存する（結果と同じ形）。失敗したら例外 */
   saveEdited: (result: unknown) => Promise<void>;
   clearEdited: () => Promise<void>;
@@ -38,7 +41,8 @@ export interface AiWorkspace {
 }
 
 /**
- * ②③ の画面で共通の動き: 設定・企業の一覧・ジョブ 1 件（結果待ちのポーリング）・実行・立ち上げ直し・直した版の保存・履歴からの削除。
+ * AI 機能の画面で共通の動き: 設定・企業の一覧・ジョブ 1 件・実行・直した版の保存・履歴からの削除。
+ * 失敗した依頼は、同じ入力で run をもう一度呼ぶ（= 新しい依頼。立ち上げ直しの API は 2026-11-27 に無くなった）。
  * 企業とジョブ ID は画面が URL に持ち、ここへ渡す。
  * サンプルデータの見本（保存されないことがある）は URL に入れず、手元に持つ。
  */
@@ -49,7 +53,8 @@ export function useAiWorkspace(opts: { kind: AiKind; companyId: string | null; j
   const remote = useAiJob(jobId);
   const [local, setLocal] = useState<AiJobDetail | null>(null);
   const [fireMessage, setFireMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busySince, setBusySince] = useState<number | null>(null);
+  const busy = busySince !== null;
   const [error, setError] = useState<string | null>(null);
 
   const job = local ?? (jobId ? remote.job : null);
@@ -81,7 +86,7 @@ export function useAiWorkspace(opts: { kind: AiKind; companyId: string | null; j
   const run = useCallback(
     async (input: unknown): Promise<boolean> => {
       if (!companyId) return false;
-      setBusy(true);
+      setBusySince(Date.now());
       setError(null);
       setFireMessage(null);
       try {
@@ -93,26 +98,11 @@ export function useAiWorkspace(opts: { kind: AiKind; companyId: string | null; j
         setError(aiErrorMessage(e));
         return false;
       } finally {
-        setBusy(false);
+        setBusySince(null);
       }
     },
     [companyId, kind, show],
   );
-
-  const refire = useCallback(async () => {
-    if (!job) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await refireAiJob(job.id);
-      setFireMessage(res.fireMessage);
-      show(res.job);
-    } catch (e) {
-      setError(aiErrorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }, [job, show]);
 
   const put = useCallback(
     (j: AiJobDetail) => {
@@ -187,9 +177,10 @@ export function useAiWorkspace(opts: { kind: AiKind; companyId: string | null; j
     polling: !local && remote.polling,
     fireMessage,
     busy,
+    busySince,
     error: error ?? (jobId && !local && remote.error ? aiErrorMessage(remote.error) : null),
     run,
-    refire,
+    replace: put,
     saveEdited,
     clearEdited,
     remove,

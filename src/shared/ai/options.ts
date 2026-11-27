@@ -53,18 +53,17 @@ export const AI_CONDITION_LABEL: Record<TargetConditionKey, string> = {
   note: '補足',
 };
 
-export const AI_STATUS_LABEL: Record<AiStatus, string> = { queued: '未起動', running: '作成中', done: '完了', failed: '失敗' };
+export const AI_STATUS_LABEL: Record<AiStatus, string> = { queued: '未作成', running: '作成中', done: '完了', failed: '失敗' };
 
 /** 画面の文言（3 機能で共通） */
 export const AI_TEXT = {
-  sampleMode: 'サンプルデータのため、セッションは立ち上げず見本を表示します',
+  sampleMode: 'サンプルデータのため、Vertex AI は呼ばず見本を表示します',
   readOnly: '閲覧のみ（Google ログインが必要）',
-  fireMissing: 'セッションを立ち上げる設定がまだありません（docs/AI機能.md）',
+  fireMissing: 'Vertex AI を呼ぶ設定がまだありません（docs/AI機能.md）',
   storeMissing: '結果の保存先がまだありません（docs/AI機能.md）',
-  running: 'Claude Code のセッションで作成中です（数分かかります。このページを開いたままお待ちください。離れても、履歴から開けます）',
-  queued: 'セッションを立ち上げられませんでした',
-  failed: '作成に失敗しました',
-  refire: 'もう一度立ち上げる',
+  running: '作成中です（このページを開いたままお待ちください）',
+  failed: '作成できませんでした',
+  retry: 'もう一度作る',
   sample: 'サンプル（見本）',
   openSession: 'セッションを開く',
   historyNoCompany: '企業を選ぶと、これまでの結果が出ます',
@@ -79,9 +78,24 @@ export const AI_TEXT = {
   copyFailed: 'コピーできませんでした',
 } as const;
 
+/** ② スカウトの画面の文言 */
+export const SCOUT_TEXT = {
+  generating: '分析して 3 つの案を作っています（10〜30 秒）',
+  filtersLegend: '送る相手の条件（指定すると、その条件の送信実績で分析します）',
+  noMart: '分析用のデータがまだありません',
+  choose: 'この案を選ぶ',
+  chosen: '選択中',
+  chooseNone: 'どれも使わない',
+  commentHint: 'モデルの改善に使います',
+  usageQuestion: '企業が使いましたか？',
+  placeholders: '{{企業名}} {{候補者名}} などの差し込みは、送る前に置き換えてください',
+  tuneNow: '今すぐ検証・チューニング',
+  rollback: 'この版に戻す',
+} as const;
+
 export const AI_KIND_DESCRIPTION = {
   report: '企業ページで見ている期間・企業の利用状況を分析し、企業への提案までをスライドにまとめます',
-  scout: '同じ業界で返信率の高い企業のスカウト文面の構成・特徴をふまえて、文面を添削する / テンプレートを作ります',
+  scout: '類似業界の直近 1 年で返信率の高いスカウト文面を分析し、件名・構成・文章量・特徴をもとに、3 つのモデルが文面の案を作ります',
   job: '同じ業界・職種で「閲覧 → 応募」の率が高い求人の構成・特徴をふまえて、求人を添削する / 求人票を作ります',
 } as const;
 

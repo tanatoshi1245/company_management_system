@@ -250,6 +250,11 @@ export const ScoutResultSchema = z
     /** 分析を使い回したか（true = 保存済みの分析を使った） */
     insightCached: z.boolean().default(false),
     drafts: z.array(ScoutDraftSchema).min(1).max(3),
+    /**
+     * この依頼での CS の判断（読み出しのときに Worker が付ける。保存する結果の本体には入れない）。
+     * judged = 判断済み（どれかを選んだ / どれも使わない）、none = 「どれも使わない」、comment = 送ったコメント
+     */
+    choice: z.object({ judged: z.boolean(), none: z.boolean(), comment: z.string().max(300) }).strict().nullable().default(null),
     /** 作れなかったモデルがあれば、その理由（画面に注意として出す） */
     warnings: z.array(z.string().max(200)).max(4).default([]),
     /** かかった時間（ミリ秒）と、使ったトークン数（入力 + 出力。目安） */

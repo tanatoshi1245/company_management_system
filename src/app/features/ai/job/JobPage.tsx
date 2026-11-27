@@ -154,7 +154,7 @@ export default function JobPage(_props: PageProps) {
                   <h2>{job.title}</h2>
                   <span className="lead">{job.companyName}</span>
                 </div>
-                <AiJobStatus job={job} polling={ws.polling} fireMessage={ws.fireMessage} onRefire={ws.canWrite ? () => void ws.refire() : undefined} busy={ws.busy} />
+                <AiJobStatus job={job} polling={ws.polling} fireMessage={ws.fireMessage} />
               </section>
               {job.status === 'done' && read.result ? (
                 <JobResultView result={read.result} edited={read.edited} canEdit={ws.canWrite} onSave={ws.saveEdited} onClearEdited={ws.clearEdited} />

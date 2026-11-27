@@ -14,34 +14,38 @@ import { actorOf, clientOf, requireDb } from '../services/writeContext';
 import { CompanyIdSchema } from '../../shared/schema/common';
 import { AiJobIdSchema, AiKindSchema, type AiConfigResponse, type AiCreateResponse, type AiJobDetail, type AiJobListResponse } from '../../shared/ai/common';
 import { AiJobsRepo, type AiJobRow } from './repo';
-import { aiFireConfigured } from './fire';
 import { aiCompanies, aiCompanyDefaults } from './defaults';
-import { AiCreateBodySchema, assertResultSize, companyBrief, createAiJob, isAiAdmin, launchAiJob, parseAiResult, readAiJob, toDetail, toSummary, withExpiry, type AiDeps } from './service';
+import { AI_FEATURES, AiCreateBodySchema, assertResultSize, companyBrief, isAiAdmin, parseAiResult, toDetail, toSummary, withExpiry } from './service';
+import { vertexConfigured } from './vertex';
+import { makeScoutDataSource } from './scout/bqDataSource';
+import { createScoutJob, mergeScoutEdited, withScoutFeedback } from './scout/service';
+import { ScoutRepo } from './scout/repo';
+import { scoutRoutes } from './scout/routes';
 
-/** AI 機能の API（/api の下。docs/AI機能.md の表）。認証と同一オリジンの確認は index.ts で先頭に掛けてある */
+/** AI 機能の API（/api の下。docs/AI機能.md の表）。認証と同一オリジンの確認は index.ts で先頭に掛けてある。② スカウトのフィードバック・モデルは scout/routes.ts */
 export const aiRoutes = new Hono<AppEnv>();
 
 const NO_STORE = { 'cache-control': 'private, no-store' } as const;
 const dbOf = (c: Ctx): D1Like | null => (c.env.CMS_DB ? asD1(c.env.CMS_DB) : null);
-const depsOf = (c: Ctx): AiDeps => ({ env: c.env, client: clientOf(c), db: dbOf(c), identity: c.get('identity'), requestId: c.get('requestId'), hookBase: new URL(c.req.url).origin, now: new Date(), ctx: c.executionCtx });
 
 /** ジョブ 1 件（ID の形 → D1。無ければ 404）。企業はここで引いた行からだけ決める */
 async function jobOf(c: Ctx, db: D1Like | null): Promise<AiJobRow> {
   const id = parseParam(c.req.param('jobId'), AiJobIdSchema);
-  const row = db ? await readAiJob(db, id, c.get('requestId')) : null;
+  const row = db ? await new AiJobsRepo(db).get(id) : null;
   if (!row) throw new AppError('notFound', 404, '依頼が見つかりません（削除された可能性があります）');
-  return row;
+  return withExpiry(row, new Date());
 }
 
 async function detailOf(c: Ctx, row: AiJobRow): Promise<AiJobDetail> {
   const brief = await companyBrief(clientOf(c), String(row.company_id), c.executionCtx).catch(() => null);
-  return toDetail(row, brief?.name ?? '', isAiAdmin(c.env, c.get('identity')));
+  return withScoutFeedback(dbOf(c), row, toDetail(row, brief?.name ?? ''));
 }
 
 /** 設定の有無（真偽値だけ。Secret の値・名前は出さない） */
 aiRoutes.get('/ai/config', (c) => {
   const id = c.get('identity');
-  const body: AiConfigResponse = { fireConfigured: aiFireConfigured(c.env), storeConfigured: Boolean(c.env.CMS_DB), sampleMode: isMock(c.env), canWrite: Boolean(id?.verified), admin: isAiAdmin(c.env, id) };
+  // fireConfigured = Vertex AI を呼べる設定があるか（以前は、セッションを立ち上げる設定の有無）
+  const body: AiConfigResponse = { fireConfigured: vertexConfigured(c.env), storeConfigured: Boolean(c.env.CMS_DB), sampleMode: isMock(c.env), canWrite: Boolean(id?.verified), admin: isAiAdmin(c.env, id), features: AI_FEATURES };
   return c.json(body, 200, NO_STORE);
 });
 
@@ -84,54 +88,52 @@ aiRoutes.get('/ai/jobs', async (c) => {
   return c.json(body, 200, NO_STORE);
 });
 
-/** 1 件の全体（入力・結果・直した版）。画面のポーリング先 */
+/** 1 件の全体（入力・結果・直した版）。② は、各案にフィードバックと実績が付く */
 aiRoutes.get('/ai/jobs/:jobId', async (c) => {
   const row = await jobOf(c, dbOf(c));
   return c.json(await detailOf(c, row), 200, NO_STORE);
 });
 
 /**
- * 依頼を作ってセッションを立ち上げる。企業は URL からだけ。
+ * 依頼を作る。企業は URL からだけ。② スカウトは、その場で文面を作って返す（scout/service.ts）。③ 求人・① 分析レポートは準備中（409）。
  * ここだけは requireVerified を付けない: サンプルデータ（BQ_MOCK=1。PR プレビュー・ローカル）では、仮の利用者でも
- * 見本の結果で画面を確かめられるようにするため（そのときは D1 に保存せず、セッションも立ち上げない）。
- * サンプルデータ以外では、createAiJob の先頭で Google ログイン済み（verified）を必ず確かめる。同一オリジンの確認は /api/* に掛かっている
+ * 見本の結果で画面を確かめられるようにするため（そのときは D1 に保存せず、Vertex AI も呼ばない）。
+ * サンプルデータ以外では、ここと createScoutJob の先頭で Google ログイン済み（verified）を必ず確かめる。同一オリジンの確認は /api/* に掛かっている
  */
 aiRoutes.post('/companies/:id/ai/jobs', async (c) => {
   const id = parseParam(c.req.param('id'), CompanyIdSchema);
   if (!isMock(c.env) && !c.get('identity')?.verified) throw new AppError('readOnly', 403, '書き込みには Google ログインが必要です');
   const body = await parseJson(c, AiCreateBodySchema);
-  const res: AiCreateResponse = await createAiJob(depsOf(c), id, body);
+  if (!AI_FEATURES[body.kind] || body.kind !== 'scout') throw new AppError('notReady', 409, 'この機能は準備中です');
+  const res: AiCreateResponse = await createScoutJob({ env: c.env, client: clientOf(c), db: dbOf(c), identity: c.get('identity'), requestId: c.get('requestId'), now: new Date(), ctx: c.executionCtx, ds: makeScoutDataSource(c.env) }, id, body.input);
   return c.json(res, 201, NO_STORE);
-});
-
-/** 未起動・失敗のジョブをもう一度立ち上げる */
-aiRoutes.post('/ai/jobs/:jobId/fire', requireVerified, async (c) => {
-  const db = requireDb(c);
-  const actor = actorOf(c);
-  const row = await jobOf(c, db);
-  if (row.sample === 1) throw new AppError('conflict', 409, '見本の結果は、立ち上げ直せません');
-  if (row.status !== 'queued' && row.status !== 'failed') throw new AppError('conflict', 409, row.status === 'running' ? 'すでに立ち上げ済みです（結果を待っています）' : 'すでに結果を受け取っています');
-  const launched = await launchAiJob(depsOf(c), db, row, actor.email);
-  const after = (await new AiJobsRepo(db).get(row.id)) ?? row;
-  const res: AiCreateResponse = { job: await detailOf(c, after), ...launched };
-  return c.json(res, 200, NO_STORE);
 });
 
 const EditedBodySchema = z.object({ result: z.unknown() }).strict();
 
-/** 画面で直した版の保存（結果と同じ形で検証）。done のジョブだけ */
+/** 画面で直した版の保存（結果と同じ形で検証。② は件名と本文だけ）。done のジョブだけ */
 aiRoutes.put('/ai/jobs/:jobId/edited', requireVerified, async (c) => {
   const db = requireDb(c);
   const actor = actorOf(c);
   const row = await jobOf(c, db);
   if (row.status !== 'done') throw new AppError('conflict', 409, '結果を受け取ってから保存してください');
   const body = await parseJson(c, EditedBodySchema);
-  const parsed = parseAiResult(row.kind, body.result);
-  if (!parsed.ok) throw new AppError('badRequest', 400, '入力が不正です', parsed.details.map((d) => ({ path: d.path === '(root)' ? 'result' : `result.${d.path}`, message: d.message })));
-  assertResultSize(parsed.data);
+  let data: unknown;
+  if (row.kind === 'scout') {
+    // ② で直せるのは、各案の件名と本文だけ（ほかは元の結果のまま）
+    const brief = await companyBrief(clientOf(c), String(row.company_id), c.executionCtx).catch(() => null);
+    data = mergeScoutEdited(row, body.result, { name: brief?.name ?? '', internalName: brief?.internalName ?? null });
+  } else {
+    const parsed = parseAiResult(row.kind, body.result);
+    if (!parsed.ok) throw new AppError('badRequest', 400, '入力が不正です', parsed.details.map((d) => ({ path: d.path === '(root)' ? 'result' : `result.${d.path}`, message: d.message })));
+    data = parsed.data;
+  }
+  assertResultSize(data);
   const at = new Date().toISOString();
   await db.batch([
-    new AiJobsRepo(db).setEditedStmt(row.id, JSON.stringify(parsed.data), at),
+    new AiJobsRepo(db).setEditedStmt(row.id, JSON.stringify(data), at),
+    // 選ばれた案を直したときは、BigQuery へ写し直す（送信実績との照合は、直した版で行う）
+    ...(row.kind === 'scout' ? [new ScoutRepo(db).resetSyncStmt(row.id)] : []),
     new AuditRepo(db).insertStmt({ at, actor: actor.email, action: 'update', entity: 'ai_jobs', entityId: row.id, companyId: row.company_id, before: { edited: row.edited_json !== null }, after: { edited: true }, requestId: actor.requestId }),
   ]);
   logEvent('ai.edited', { reqId: actor.requestId, actor: actor.email, jobId: row.id, action: 'save' });
@@ -147,6 +149,7 @@ aiRoutes.delete('/ai/jobs/:jobId/edited', requireVerified, async (c) => {
   if (row.edited_json !== null) {
     await db.batch([
       new AiJobsRepo(db).setEditedStmt(row.id, null, at),
+      ...(row.kind === 'scout' ? [new ScoutRepo(db).resetSyncStmt(row.id)] : []),
       new AuditRepo(db).insertStmt({ at, actor: actor.email, action: 'update', entity: 'ai_jobs', entityId: row.id, companyId: row.company_id, before: { edited: true }, after: { edited: false }, requestId: actor.requestId }),
     ]);
     logEvent('ai.edited', { reqId: actor.requestId, actor: actor.email, jobId: row.id, action: 'clear' });
@@ -154,7 +157,7 @@ aiRoutes.delete('/ai/jobs/:jobId/edited', requireVerified, async (c) => {
   return c.json(await detailOf(c, (await new AiJobsRepo(db).get(row.id)) ?? row), 200, NO_STORE);
 });
 
-/** 履歴から消す（D1 は deleted_at を立てる。合言葉も失効） */
+/** 履歴から消す（D1 は deleted_at を立てる） */
 aiRoutes.delete('/ai/jobs/:jobId', requireVerified, async (c) => {
   const db = requireDb(c);
   const actor = actorOf(c);
@@ -167,3 +170,5 @@ aiRoutes.delete('/ai/jobs/:jobId', requireVerified, async (c) => {
   logEvent('ai.delete', { reqId: actor.requestId, actor: actor.email, jobId: row.id });
   return c.body(null, 204);
 });
+
+aiRoutes.route('/', scoutRoutes);

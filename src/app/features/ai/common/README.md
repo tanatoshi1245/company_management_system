@@ -10,18 +10,18 @@ status: active
 # features/ai/common — AI 機能の 3 画面が共用する部品
 
 ## 役割
-`/ai/report`・`/ai/scout`・`/ai/job` が共用する、API の呼び出し・入力の部品・状態と履歴の表示。設計は [docs/AI機能.md](../../../../../docs/AI機能.md)。
+AI 機能の画面が共用する、API の呼び出し・入力の部品・状態と履歴の表示。**2026-11-27 からメニューとルートに出ているのは `/ai/scout` だけ**（`/ai/report`・`/ai/job` は後の段階。画面のコードとテストは残してあり、同じ部品を使う）。設計は [docs/AI機能.md](../../../../../docs/AI機能.md)。
 
 | ファイル | 内容 |
 |---|---|
-| `aiApi.ts` | API とポーリング（`useAiConfig`・`useAiCompanies`・`useAiCompanyDefaults`・`useAiHistory`・`useAiJob`・`createAiJob` ほか） |
+| `aiApi.ts` | API（`useAiConfig`・`useAiCompanies`・`useAiCompanyDefaults`・`useAiHistory`・`useAiJob`・`createAiJob` ほか）。② スカウト用に `useScoutOptions`・`putScoutChoice`・`putScoutUsage`・`useScoutModels`・`runScoutTune`・`rollbackScoutModel` |
 | `Combobox.tsx` | テキストの予測変換 + プルダウン（WAI-ARIA の combobox）。`Combobox`（文字の一覧）と、その本体 `ComboboxCore`（キー・ラベル・小さな説明つき） |
-| `TagCombobox.tsx` | 複数を選ぶ（チップ・× で外す・自由入力も可・上限つき） |
+| `TagCombobox.tsx` | 複数を選ぶ（チップ・× で外す・上限つき。自由入力は `allowFree`（既定 = 可）。② の条件は一覧から選ぶだけ） |
 | `CompanyCombobox.tsx` | 既存企業の選択（一覧にある企業だけ。同名は業界・種別で見分ける） |
 | `TargetConditionFields.tsx` | ②③ 共通の条件（業界・掲載職種・ポジション名・年齢層・国籍・言語力・勤務地・補足） |
 | `useCompanyAutofill.ts` | 企業を選んだら業界と掲載職種（上位 3 つ）を入れる。入力者が直した項目は上書きしない。企業を選び直すと入れ直す |
-| `useAiWorkspace.ts` | ②③ の画面の動き（設定・企業・ジョブ 1 件・実行・立ち上げ直し・直した版の保存・履歴からの削除） |
-| `AiPageHeader.tsx`・`AiJobStatus.tsx`・`AiHistory.tsx` | 見出しと知らせ / 状態（作成中・未起動・失敗・見本）/ 履歴 |
+| `useAiWorkspace.ts` | 画面の動き（設定・企業・ジョブ 1 件・実行（`busy`・`busySince`）・開いているジョブの差し替え（`replace`）・直した版の保存・履歴からの削除）。立ち上げ直し（`refire`）は 2026-11-27 に無くなった。失敗した依頼は、同じ入力で `run` をもう一度呼ぶ |
+| `AiPageHeader.tsx`・`AiJobStatus.tsx`・`AiHistory.tsx` | 見出しと知らせ / 状態（失敗の理由と「もう一度作る」・作成中・見本。実行中の表示は `AiBusy`）/ 履歴 |
 | `PiiNotice.tsx`・`formModel.ts` | 社名・個人情報の知らせ（block = 赤・warn = 黄）/ 欄ごとの確認と、zod の誤りを項目ごとにする道具 |
 | `ResultParts.tsx`・`DraftEditor.tsx`・`CopyButton.tsx`・`Field.tsx` | 結果の共通部分（母集団・特徴・指摘）/ 案の表示と手直し / コピー / 入力欄の枠 |
 
@@ -32,7 +32,7 @@ status: active
 | 企業の選択肢 | `GET /api/ai/companies` | ボードに出ている企業（`cms_company_master`） |
 | 業界・掲載職種の自動入力と候補、直近の掲載求人 | `GET /api/ai/companies/:id/defaults` | `cms_company_master`・`cms_company_job_monthly` |
 | 履歴 / 1 件 | `GET /api/ai/jobs?company=&kind=`・`GET /api/ai/jobs/:jobId` | D1 `ai_jobs` |
-| 実行・立ち上げ直し・直した版・削除 | `POST /api/companies/:id/ai/jobs`・`POST /api/ai/jobs/:jobId/fire`・`PUT / DELETE /api/ai/jobs/:jobId/edited`・`DELETE /api/ai/jobs/:jobId` | D1 `ai_jobs` + `audit_log` |
+| 実行・直した版・削除 | `POST /api/companies/:id/ai/jobs`・`PUT / DELETE /api/ai/jobs/:jobId/edited`・`DELETE /api/ai/jobs/:jobId` | D1 `ai_jobs` + `audit_log` |
 
 年齢層・国籍・言語力・勤務地・年収の候補と、画面の文言は `src/shared/ai/options.ts`。入力と結果の型は `src/shared/ai/{common,scout,job}.ts`、社名・個人情報の確認は `src/shared/ai/pii.ts`。
 

@@ -11,6 +11,8 @@ import { companyMonthlyQuery } from '../src/worker/sql/companyMonthly';
 import { companyLoginQuery } from '../src/worker/sql/companyLogin';
 import { industryBenchmarkQuery } from '../src/worker/sql/industryBenchmark';
 import { applicationCohortQuery, benchSeriesQuery, companyLoginByIdQuery, companyMasterByIdQuery, companyMonthlyByIdQuery, dailyUsageQuery, memberAttributesQuery, scoutCohortQuery } from '../src/worker/sql/companyDetail';
+import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery } from '../src/worker/sql/aiScout';
+import { EMPTY_SCOUT_FILTERS } from '../src/shared/ai/scout';
 import { addDays, addMonths, monthOf, todayJst } from '../src/shared/calendar/periods';
 
 const key = process.env.BQ_SA_KEY ?? (process.env.BQ_SA_KEY_FILE ? readFileSync(process.env.BQ_SA_KEY_FILE, 'utf8') : '');
@@ -36,6 +38,11 @@ const queries = [
   memberAttributesQuery(sampleId, `${addMonths(month, -2)}-01`, `${month}-01`, null),
   benchSeriesQuery('IT・通信', 'DA'),
   companyLoginByIdQuery(sampleId),
+  // ② スカウト文面の AI 作成（日次マート cms_ai_*。各クエリが maxBytes を持つ。書き込みの MERGE は dry run だけ）
+  aiScoutBenchmarkQuery({ companyId: sampleId, industry: 'ITコンサルティング', industryGroup: 'it', filters: { ...EMPTY_SCOUT_FILTERS, ageGroups: ['25-34歳'] }, lang: 'ja' }),
+  aiScoutOptionsQuery(),
+  aiScoutOutcomesQuery(['dryrun0001']),
+  aiScoutDraftsMergeQuery([{ draftId: 'dryrun0001', jobId: 'dryrun', companyId: sampleId, modelId: 'a', modelVersion: 1, subject: 'dry run', body: 'dry run', chosenAt: new Date().toISOString() }]),
 ];
 const BUDGET = 10 * 1024 ** 2;
 let bad = 0;

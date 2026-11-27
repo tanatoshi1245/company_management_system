@@ -1,10 +1,10 @@
 import { lazy, useSyncExternalStore, type ComponentType, type LazyExoticComponent, type MouseEvent, type ReactNode } from 'react';
 
 /**
- * 小さなルータ（History API）。ルートは 10 個だけなのでライブラリは入れない。
+ * 小さなルータ（History API）。ルートは 8 個だけなのでライブラリは入れない。
  * 画面は React.lazy で分割（ルートごとに 1 チャンク）。
  */
-export type RouteKey = 'home' | 'company' | 'targets' | 'targetForm' | 'scoutUnused' | 'settings' | 'help' | 'aiReport' | 'aiScout' | 'aiJob';
+export type RouteKey = 'home' | 'company' | 'targets' | 'targetForm' | 'scoutUnused' | 'settings' | 'help' | 'aiScout';
 
 export interface PageProps {
   params: Record<string, string>;
@@ -25,7 +25,7 @@ function def(key: RouteKey, path: string): RouteDef {
   return { key, pattern: new RegExp(`^${re}/?$`), names };
 }
 
-export const ROUTES: RouteDef[] = [def('home', '/'), def('company', '/companies/:id'), def('targets', '/targets'), def('targetForm', '/targets/:id'), def('scoutUnused', '/scout-unused'), def('settings', '/settings'), def('help', '/help'), def('aiReport', '/ai/report'), def('aiScout', '/ai/scout'), def('aiJob', '/ai/job')];
+export const ROUTES: RouteDef[] = [def('home', '/'), def('company', '/companies/:id'), def('targets', '/targets'), def('targetForm', '/targets/:id'), def('scoutUnused', '/scout-unused'), def('settings', '/settings'), def('help', '/help'), def('aiScout', '/ai/scout')];
 
 export const PAGES: Record<RouteKey, LazyExoticComponent<ComponentType<PageProps>>> = {
   home: lazy(() => import('./features/home/HomePage')),
@@ -35,10 +35,8 @@ export const PAGES: Record<RouteKey, LazyExoticComponent<ComponentType<PageProps
   scoutUnused: lazy(() => import('./features/scoutUnused/ScoutUnusedPage')),
   settings: lazy(() => import('./features/settings/SettingsPage')),
   help: lazy(() => import('./features/settings/HelpPage')),
-  // AI 機能（docs/AI機能.md）。1 機能 = 1 ページ = 1 チャンク
-  aiReport: lazy(() => import('./features/ai/report/ReportPage')),
+  // AI 機能（docs/AI機能.md）。2026-11-27: まずスカウトだけを出す（/ai/report・/ai/job は後の段階。画面のコードは features/ai/{report,job} に残してある）
   aiScout: lazy(() => import('./features/ai/scout/ScoutPage')),
-  aiJob: lazy(() => import('./features/ai/job/JobPage')),
 };
 
 export function matchRoute(pathname: string): { key: RouteKey; params: Record<string, string> } | null {

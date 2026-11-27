@@ -6,7 +6,7 @@ import { Combobox } from '../../src/app/features/ai/common/Combobox';
 import { TagCombobox } from '../../src/app/features/ai/common/TagCombobox';
 import { CompanyCombobox } from '../../src/app/features/ai/common/CompanyCombobox';
 import { AiPageHeader } from '../../src/app/features/ai/common/AiPageHeader';
-import { AiJobStatus, elapsedLabel } from '../../src/app/features/ai/common/AiJobStatus';
+import { AiBusy, AiJobStatus, elapsedLabel } from '../../src/app/features/ai/common/AiJobStatus';
 import { AiHistory } from '../../src/app/features/ai/common/AiHistory';
 import { PiiNotice } from '../../src/app/features/ai/common/PiiNotice';
 import { CopyButton } from '../../src/app/features/ai/common/CopyButton';
@@ -229,7 +229,7 @@ describe('AiPageHeader・AiJobStatus・PiiNotice・CopyButton', () => {
     cleanup();
     vi.useRealTimers();
   });
-  const cfg = { fireConfigured: true, storeConfigured: true, sampleMode: false, canWrite: true, admin: false };
+  const cfg = { fireConfigured: true, storeConfigured: true, sampleMode: false, canWrite: true, admin: false, features: { scout: true, job: false, report: false } };
 
   it('見出しと、見本モード / 閲覧のみ / 設定なし の知らせ', () => {
     const { rerender } = render(<AiPageHeader kind="scout" config={null} />);
@@ -249,12 +249,12 @@ describe('AiPageHeader・AiJobStatus・PiiNotice・CopyButton', () => {
     expect(screen.getByText(AI_TEXT.fireMissing)).toBeTruthy();
   });
 
-  it('running = 作成中の文と経過時間、queued / failed = 理由と「もう一度立ち上げる」、done の見本 = 印、セッションの URL = リンク', () => {
+  it('running = 作成中の文と経過時間、failed（と queued）= 理由と「もう一度作る」、done の見本 = 印、セッションの URL = リンク。AiBusy = 実行中の文と経過', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-25T01:03:12.000Z'));
-    const onRefire = vi.fn();
+    const onRetry = vi.fn();
     const base = makeJob({ id: 'a'.repeat(16), kind: 'scout', companyId: '101' });
-    const { rerender } = render(<AiJobStatus job={null} polling={false} />);
+    const { rerender } = render(<AiJobStatus job={null} />);
     expect(document.querySelector('.ai-status')).toBeNull();
     rerender(<AiJobStatus job={{ ...base, status: 'running', completedAt: null, sessionUrl: 'https://claude.ai/code/session_x' }} polling />);
     expect(screen.getByText(AI_TEXT.running)).toBeTruthy();
@@ -262,22 +262,27 @@ describe('AiPageHeader・AiJobStatus・PiiNotice・CopyButton', () => {
     act(() => void vi.advanceTimersByTime(3000));
     expect(screen.getByText('経過 3 分 15 秒')).toBeTruthy();
     expect((screen.getByRole('link', { name: AI_TEXT.openSession }) as HTMLAnchorElement).href).toBe('https://claude.ai/code/session_x');
-    expect(screen.queryByRole('button', { name: AI_TEXT.refire })).toBeNull();
-    rerender(<AiJobStatus job={{ ...base, status: 'queued', completedAt: null }} polling={false} fireMessage="発火の設定がありません" onRefire={onRefire} />);
-    expect(screen.getByText(AI_TEXT.queued)).toBeTruthy();
-    expect(screen.getByText('発火の設定がありません')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: AI_TEXT.retry })).toBeNull();
+    rerender(<AiJobStatus job={{ ...base, status: 'queued', completedAt: null }} fireMessage="Vertex AI を呼ぶ設定がありません" onRetry={onRetry} />);
+    expect(screen.getByText(AI_TEXT.failed)).toBeTruthy();
+    expect(screen.getByText('Vertex AI を呼ぶ設定がありません')).toBeTruthy();
     expect(screen.queryByRole('link', { name: AI_TEXT.openSession })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: AI_TEXT.refire }));
-    expect(onRefire).toHaveBeenCalledTimes(1);
-    rerender(<AiJobStatus job={{ ...base, status: 'failed', error: '期限切れ（60 分以内に結果が返りませんでした）' }} polling={false} onRefire={onRefire} />);
-    expect(screen.getByText('期限切れ（60 分以内に結果が返りませんでした）')).toBeTruthy();
-    expect(screen.getByRole('button', { name: AI_TEXT.refire })).toBeTruthy();
-    rerender(<AiJobStatus job={{ ...base, sample: true }} polling={false} />);
+    fireEvent.click(screen.getByRole('button', { name: AI_TEXT.retry }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    rerender(<AiJobStatus job={{ ...base, status: 'failed', error: '分析できる文面がありませんでした' }} onRetry={onRetry} />);
+    expect(screen.getByText('分析できる文面がありませんでした')).toBeTruthy();
+    expect(screen.getByRole('button', { name: AI_TEXT.retry })).toBeTruthy();
+    // onRetry を渡さなければ（後の段階の画面）、ボタンは出さない
+    rerender(<AiJobStatus job={{ ...base, status: 'failed', error: '失敗' }} />);
+    expect(screen.queryByRole('button', { name: AI_TEXT.retry })).toBeNull();
+    rerender(<AiJobStatus job={{ ...base, sample: true }} />);
     expect(screen.getByText(AI_TEXT.sample)).toBeTruthy();
-    rerender(<AiJobStatus job={base} polling={false} />);
+    rerender(<AiJobStatus job={base} />);
     expect(screen.queryByText(AI_TEXT.sample)).toBeNull();
     expect(elapsedLabel('2026-11-25T01:03:00.000Z', Date.parse('2026-11-25T01:03:12.000Z'))).toBe('12 秒');
     expect(elapsedLabel('x', 0)).toBeNull();
+    rerender(<AiBusy message="分析しています" since={Date.now() - 4000} />);
+    expect(screen.getByRole('status').textContent).toBe('分析しています経過 4 秒');
   });
 
   it('PiiNotice: block は赤（alert）、warn は黄。空なら何も出さない', () => {
@@ -465,10 +470,10 @@ describe('TargetConditionFields・useCompanyAutofill', () => {
 
 describe('formModel', () => {
   it('fieldErrors: zod の誤りを項目ごとの最初の文にする（上限は日本語で）', () => {
-    const r = ScoutInputSchema.safeParse({ purpose: 'review', subject: '', body: '', industry: '', occupations: ['a', 'b', 'c', 'd', 'e', 'f'], positionName: 'x'.repeat(81) });
+    const r = ScoutInputSchema.safeParse({ purpose: 'review', subject: '', body: '', industry: '', jobOccupations: ['a', 'b', 'c', 'd', 'e', 'f'], positionName: 'x'.repeat(81) });
     expect(r.success).toBe(false);
     if (r.success) return;
-    expect(fieldErrors(r.error)).toEqual({ industry: '業界を入れてください', occupations: '5 個までです', positionName: '80 文字までです', subject: '添削する件名を入れてください', body: '添削する本文を入れてください' });
+    expect(fieldErrors(r.error)).toEqual({ industry: '業界を入れてください', jobOccupations: '5 個までです', positionName: '80 文字までです', subject: '添削する件名を入れてください', body: '添削する本文を入れてください' });
   });
   it('piiByField: どの欄かを頭に付け、block を先に並べる', () => {
     const f = piiByField(

@@ -2,9 +2,9 @@ import { AppError } from './errors';
 
 /**
  * サーバ側 fetch の宛先をホスト名の許可リストで固定する（SSRF 対策。セキュリティ要件 §2.2）。
- * 利用者入力の URL を fetch する機能は無い。BigQuery・Google ログイン・AI 機能のセッションの発火（api.anthropic.com。docs/AI機能.md）以外には出ていかない。
+ * 利用者入力の URL を fetch する機能は無い。BigQuery・Google ログイン・AI 機能の生成（Vertex AI = aiplatform.googleapis.com。docs/AI機能.md）以外には出ていかない。
  */
-export const ALLOWED_HOSTS: ReadonlySet<string> = new Set(['bigquery.googleapis.com', 'oauth2.googleapis.com', 'www.googleapis.com', 'accounts.google.com', 'api.anthropic.com']);
+export const ALLOWED_HOSTS: ReadonlySet<string> = new Set(['bigquery.googleapis.com', 'oauth2.googleapis.com', 'www.googleapis.com', 'accounts.google.com', 'aiplatform.googleapis.com']);
 
 export function assertAllowedUrl(input: RequestInfo | URL): URL {
   const u = new URL(typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url);

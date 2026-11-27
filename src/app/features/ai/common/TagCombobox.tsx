@@ -12,13 +12,15 @@ export interface TagComboboxProps {
   disabled?: boolean;
   ariaLabel?: string;
   invalid?: boolean;
+  /** 一覧に無い文字も足せるか（既定 = 足せる）。false のときは、一覧から選ぶだけ */
+  allowFree?: boolean;
 }
 
 /**
  * 複数を選ぶ「テキストの予測変換 + プルダウン」（掲載職種を 1〜5 個など）。
  * 選んだものはチップで並び、× で外す。一覧に無い文字も、Enter か欄の外へ出たときに足される。
  */
-export function TagCombobox({ id, values, onChange, options, max, placeholder, disabled, ariaLabel, invalid }: TagComboboxProps) {
+export function TagCombobox({ id, values, onChange, options, max, placeholder, disabled, ariaLabel, invalid, allowFree = true }: TagComboboxProps) {
   const [text, setText] = useState('');
   const items = useMemo(() => {
     const taken = new Set(values.map(normalizeOption));
@@ -54,12 +56,12 @@ export function TagCombobox({ id, values, onChange, options, max, placeholder, d
         onText={setText}
         items={items}
         onPick={(it) => add(it.label)}
-        onEnterFree={add}
-        onBlur={() => add(text)}
+        onEnterFree={allowFree ? add : undefined}
+        onBlur={() => (allowFree ? add(text) : setText(''))}
         onBackspaceEmpty={() => (values.length ? onChange(values.slice(0, -1)) : undefined)}
         placeholder={full ? `${max} 個まで` : placeholder}
         disabled={disabled || full}
-        allowFree
+        allowFree={allowFree}
         ariaLabel={ariaLabel ? `${ariaLabel}を足す` : undefined}
         invalid={invalid}
       />

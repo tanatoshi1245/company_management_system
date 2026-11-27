@@ -2,6 +2,7 @@ import type { BuiltQuery } from '../params';
 import type { Row } from '../parseRows';
 import { todayJst } from '../../../shared/calendar/periods';
 import { mockCompanyLogin, mockCompanyMaster, mockCompanyMonthly, mockIndustryBenchmark } from './board';
+import { mockAiScoutBenchmark, mockAiScoutOptions, mockAiScoutOutcomes } from './aiScout';
 import { JOB_OCCUPATIONS, mockApplicationCohort, mockBenchSeries, mockCompanyAccountMonthlyOne, mockCompanyJobMonthlyOne, mockCompanyJobs, mockCompanyLoginOne, mockCompanyMasterOne, mockCompanyMonthlyOne, mockDailyUsage, mockMemberAttributes, mockScoutCohort } from './company';
 
 export function paramValue(q: BuiltQuery, name: string): string | null {
@@ -54,6 +55,13 @@ export function mockRows(q: BuiltQuery): Row[] {
     case 'ai_occupation_options':
       // AI 機能の職種の選択肢（求人のフィクスチャにある職種）
       return JOB_OCCUPATIONS.map((o) => ({ job_occupation: o }));
+    // ② スカウト文面の AI 作成（日次マート cms_ai_*。src/worker/sql/aiScout.ts）
+    case 'ai_scout_benchmark':
+      return mockAiScoutBenchmark(q);
+    case 'ai_scout_options':
+      return mockAiScoutOptions();
+    case 'ai_scout_outcomes':
+      return mockAiScoutOutcomes();
     default:
       return [];
   }

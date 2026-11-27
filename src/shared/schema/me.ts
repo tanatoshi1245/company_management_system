@@ -63,7 +63,7 @@ export interface HealthResponse {
   allowedDomains: string[];
   allowedEmailsCount: number;
   dataVersion: number;
-  /** AI 機能（docs/AI機能.md）の設定の診断。fire = セッションを立ち上げる設定（無い / 形が想定と違う / 良い）、store = 保存先（D1）、admins = 管理者の人数。値は出さない */
-  ai: { fire: 'ok' | 'missing' | 'unexpectedFormat'; store: boolean; admins: number };
+  /** AI 機能（docs/AI機能.md）の設定の診断。vertex = Vertex AI を呼べる設定（鍵・生成モデルの ID）があるか、store = 保存先（D1）、admins = 管理者の人数。値は出さない */
+  ai: { vertex: boolean; store: boolean; admins: number };
 }
 type AuthMode = z.infer<typeof AuthModeSchema>;

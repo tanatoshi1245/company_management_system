@@ -3,6 +3,7 @@ import { isoToJstDisplay } from '../../../shared/calendar/periods';
 import { Link, navigate, useLocation, type RouteKey } from '../../router';
 import { Icon, type IconName } from './Icon';
 import { fmtYmd } from '../../lib/format';
+import { AI_KIND_LABEL } from '../../../shared/ai/common';
 import { getCompanyView, type CompanyView } from '../../lib/companyView';
 
 const NAV: { key: RouteKey[]; to: string; label: string; icon: IconName }[] = [
@@ -11,12 +12,11 @@ const NAV: { key: RouteKey[]; to: string; label: string; icon: IconName }[] = [
   { key: ['scoutUnused'], to: '/scout-unused', label: 'スカウト未利用', icon: 'edit' },
 ];
 
-/** AI メニュー（docs/AI機能.md。2026-11-25 ユーザー指示: 左のレールにサブメニューを設ける） */
-const AI_NAV: { key: RouteKey; to: string; label: string; icon: IconName }[] = [
-  { key: 'aiReport', to: '/ai/report', label: 'AI 分析とレポート生成', icon: 'slides' },
-  { key: 'aiScout', to: '/ai/scout', label: 'スカウト文面の AI 添削', icon: 'mail' },
-  { key: 'aiJob', to: '/ai/job', label: '求人の AI 添削', icon: 'doc' },
-];
+/**
+ * AI メニュー（docs/AI機能.md。2026-11-25 ユーザー指示: 左のレールにサブメニューを設ける）。
+ * 2026-11-27: まずスカウトだけを出す（「AI 分析とレポート生成」「求人の AI 添削」は後の段階。下の aiNavTarget の /ai/report 用の引き継ぎは、そのときに使う）
+ */
+const AI_NAV: { key: RouteKey; to: string; label: string; icon: IconName }[] = [{ key: 'aiScout', to: '/ai/scout', label: AI_KIND_LABEL.scout, icon: 'mail' }];
 
 /**
  * AI メニューのリンク先。企業ページ（/companies/:id）を開いているときは、その企業を引き継ぐ。

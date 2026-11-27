@@ -6,7 +6,7 @@ import { join } from 'node:path';
  * 機能ごとのディレクトリには README.md（タグ付きフロントマター）を必ず置く（claude_analysis/00_セマンティックレイヤー/タグ体系.md）。
  * 後から見る人が「どのデータに依存しているか」をたどれるようにするため
  */
-const REQUIRED = ['src/app/features/home', 'src/app/features/company', 'src/app/features/targets', 'src/app/features/settings', 'src/app/components/charts', 'src/worker/routes', 'src/worker/sql', 'src/shared', 'd1', 'bq', 'ai', 'ai/report', 'ai/scout', 'ai/job', 'scripts/ai', 'src/worker/ai', 'src/worker/ai/report', 'src/worker/ai/scout', 'src/worker/ai/job', 'src/app/features/ai/common', 'src/app/features/ai/report', 'src/app/features/ai/report/slides', 'src/app/features/ai/report/pdf', 'src/app/features/ai/scout', 'src/app/features/ai/job'];
+const REQUIRED = ['src/app/features/home', 'src/app/features/company', 'src/app/features/targets', 'src/app/features/settings', 'src/app/components/charts', 'src/worker/routes', 'src/worker/sql', 'src/shared', 'd1', 'bq', 'src/worker/ai', 'src/worker/ai/report', 'src/worker/ai/scout', 'src/worker/ai/job', 'src/app/features/ai/common', 'src/app/features/ai/report', 'src/app/features/ai/report/slides', 'src/app/features/ai/report/pdf', 'src/app/features/ai/scout', 'src/app/features/ai/job'];
 
 function martDirs(): string[] {
   const root = join(process.cwd(), 'bq/marts');

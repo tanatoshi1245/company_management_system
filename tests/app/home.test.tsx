@@ -80,8 +80,8 @@ describe('ホーム（ボード）', () => {
     expect(screen.queryByRole('link', { name: /指標の定義/ })).toBeNull();
     // 目標・設定もメニューに出さない（ページは URL 直打ちで開ける）
     expect(Array.from(document.querySelectorAll('.rail-nav:not(.rail-sub) a')).map((a) => a.textContent?.trim())).toEqual(['ボード', 'スカウト未利用']);
-    // AI メニュー（docs/AI機能.md。2026-11-25）は別のまとまりで出す
-    expect(Array.from(document.querySelectorAll('.rail-sub a')).map((a) => a.textContent?.trim())).toEqual(['AI 分析とレポート生成', 'スカウト文面の AI 添削', '求人の AI 添削']);
+    // AI メニュー（docs/AI機能.md。2026-11-25）は別のまとまりで出す。2026-11-27 からは、まずスカウトだけ
+    expect(Array.from(document.querySelectorAll('.rail-sub a')).map((a) => a.textContent?.trim())).toEqual(['スカウト文面の AI 作成']);
     expect(document.querySelector('.page-header')?.textContent ?? '').not.toContain('マート更新');
     expect(screen.queryByLabelText('並べ替え')).toBeNull();
     expect(screen.queryByLabelText('期間')).toBeNull();

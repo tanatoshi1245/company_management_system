@@ -16,9 +16,21 @@ import {
   type AiJobListResponse,
   type AiKind,
 } from '../../../../shared/ai/common';
+import {
+  ScoutModelsResponseSchema,
+  ScoutOptionsResponseSchema,
+  ScoutTuneResponseSchema,
+  type ScoutChoiceInput,
+  type ScoutModelId,
+  type ScoutModelsResponse,
+  type ScoutOptionsResponse,
+  type ScoutTuneResponse,
+  type ScoutUsageInput,
+} from '../../../../shared/ai/scout';
 
 /**
- * AI 機能（docs/AI機能.md）の API 呼び出しと、結果待ちのポーリング。3 機能の画面が共用する。
+ * AI 機能（docs/AI機能.md）の API 呼び出し。3 機能の画面が共用する。
+ * ② スカウトは、作成の応答（POST）に結果が入っている（十数秒。ポーリングは要らない）。useAiJob のポーリングは、作成中のまま残ったジョブを開いたときのためのもの。
  * 企業は URL のパスに入れる（本文に入れない）。
  */
 
@@ -31,7 +43,7 @@ export const useAiCompanyDefaults = (companyId: string | null): Resource<AiCompa
   useResource(companyId ? `/api/ai/companies/${enc(companyId)}/defaults` : null, AiCompanyDefaultsResponseSchema, { ttlMs: 10 * 60_000 });
 export const useAiHistory = (companyId: string | null, kind: AiKind): Resource<AiJobListResponse> => useResource(companyId ? historyUrl(companyId, kind) : null, AiJobListResponseSchema, { ttlMs: 15_000 });
 
-/** 依頼を作ってセッションを立ち上げる。input は機能ごとの入力（src/shared/ai/{report,scout,job}.ts） */
+/** 依頼を作る（② スカウトは、応答に結果が入っている）。input は機能ごとの入力（src/shared/ai/{report,scout,job}.ts） */
 export async function createAiJob(companyId: string, kind: AiKind, input: unknown): Promise<AiCreateResponse> {
   const res = await apiSend<AiCreateResponse>('POST', `/api/companies/${enc(companyId)}/ai/jobs`, { kind, input }, AiCreateResponseSchema);
   invalidate('/api/ai/jobs?');
@@ -39,13 +51,6 @@ export async function createAiJob(companyId: string, kind: AiKind, input: unknow
 }
 
 export const fetchAiJob = (jobId: string, signal?: AbortSignal): Promise<AiJobDetail> => apiGet(`/api/ai/jobs/${enc(jobId)}`, AiJobDetailSchema, signal);
-
-/** 未起動・失敗のジョブをもう一度立ち上げる */
-export async function refireAiJob(jobId: string): Promise<AiCreateResponse> {
-  const res = await apiSend<AiCreateResponse>('POST', `/api/ai/jobs/${enc(jobId)}/fire`, {}, AiCreateResponseSchema);
-  invalidate('/api/ai/jobs?');
-  return res;
-}
 
 /** 画面で直した版を保存する（result は結果と同じ形） */
 export async function saveAiEdited(jobId: string, result: unknown): Promise<AiJobDetail> {
@@ -64,6 +69,44 @@ export async function clearAiEdited(jobId: string): Promise<AiJobDetail> {
 export async function deleteAiJob(jobId: string): Promise<void> {
   await apiSend<{ ok: true }>('DELETE', `/api/ai/jobs/${enc(jobId)}`);
   invalidate('/api/ai/jobs?');
+}
+
+/* ---------- ② スカウト: 条件の選択肢・選択と利用の記録・モデルの成績 ---------- */
+
+const SCOUT_MODELS_URL = '/api/ai/scout/models';
+
+/** 受け取る人の条件の選択肢（マートにある値） */
+export const useScoutOptions = (): Resource<ScoutOptionsResponse> => useResource('/api/ai/scout/options', ScoutOptionsResponseSchema, { ttlMs: 30 * 60_000 });
+
+/** どの案を選んだか（draftId = null は「どれも使わない」） */
+export async function putScoutChoice(jobId: string, input: ScoutChoiceInput): Promise<AiJobDetail> {
+  const res = await apiSend<AiJobDetail>('PUT', `/api/ai/jobs/${enc(jobId)}/scout/choice`, input, AiJobDetailSchema);
+  invalidate(SCOUT_MODELS_URL);
+  return res;
+}
+
+/** 選んだ案を企業が使ったか */
+export async function putScoutUsage(jobId: string, input: ScoutUsageInput): Promise<AiJobDetail> {
+  const res = await apiSend<AiJobDetail>('PUT', `/api/ai/jobs/${enc(jobId)}/scout/usage`, input, AiJobDetailSchema);
+  invalidate(SCOUT_MODELS_URL);
+  return res;
+}
+
+/** モデルの成績と版の履歴 */
+export const useScoutModels = (enabled = true): Resource<ScoutModelsResponse> => useResource(enabled ? SCOUT_MODELS_URL : null, ScoutModelsResponseSchema, { ttlMs: 60_000 });
+
+/** 検証・チューニングを今すぐ実行する（管理者） */
+export async function runScoutTune(): Promise<ScoutTuneResponse> {
+  const res = await apiSend<ScoutTuneResponse>('POST', '/api/ai/scout/tune', {}, ScoutTuneResponseSchema);
+  invalidate(SCOUT_MODELS_URL);
+  return res;
+}
+
+/** モデルを前の版に戻す（管理者） */
+export async function rollbackScoutModel(modelId: ScoutModelId, version: number): Promise<ScoutModelsResponse> {
+  const res = await apiSend<ScoutModelsResponse>('POST', `${SCOUT_MODELS_URL}/${enc(modelId)}/rollback`, { version }, ScoutModelsResponseSchema);
+  invalidate(SCOUT_MODELS_URL);
+  return res;
 }
 
 /** 結果待ちの間に見に行く間隔（ミリ秒） */

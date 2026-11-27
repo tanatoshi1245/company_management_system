@@ -18,10 +18,7 @@
     "d1:migrate:local": "wrangler d1 migrations apply CMS_DB --local",
     "d1:migrate:remote": "wrangler d1 migrations apply CMS_DB --remote",
     "seed:local": "wrangler d1 execute CMS_DB --local --file d1/seed.local.sql",
-    "holidays:update": "tsx scripts/update-holidays.ts",
-    "ai:sql": "tsx scripts/ai/sql.ts",
-    "ai:context": "tsx scripts/ai/context.ts",
-    "ai:submit": "tsx scripts/ai/submit.ts"
+    "holidays:update": "tsx scripts/update-holidays.ts"
   },
   "dependencies": {
     "@fontsource/hanken-grotesk": "^5.3.0",

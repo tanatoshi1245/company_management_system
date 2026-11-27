@@ -17,7 +17,7 @@ export const AiKindSchema = z.enum(AI_KINDS);
 
 export const AI_KIND_LABEL: Record<AiKind, string> = {
   report: 'AI 分析とレポート生成',
-  scout: 'スカウト文面の AI 添削',
+  scout: 'スカウト文面の AI 作成',
   job: '求人の AI 添削',
 };
 
@@ -101,7 +101,7 @@ export type AiCreateResponse = z.infer<typeof AiCreateResponseSchema>;
 
 /** GET /api/ai/config */
 export const AiConfigResponseSchema = z.object({
-  /** セッションを立ち上げる設定（Secret）があるか */
+  /** Vertex AI を呼べる設定（鍵・生成モデルの ID）があるか（名前は、以前のセッション方式のまま） */
   fireConfigured: z.boolean(),
   /** 保存先（D1）があるか */
   storeConfigured: z.boolean(),
@@ -110,6 +110,8 @@ export const AiConfigResponseSchema = z.object({
   /** 書き込める人か（Google ログイン済み） */
   canWrite: z.boolean(),
   admin: z.boolean(),
+  /** 機能ごとに、いま使えるか（false = 準備中。依頼は 409 notReady） */
+  features: z.object({ scout: z.boolean(), job: z.boolean(), report: z.boolean() }).default({ scout: true, job: false, report: false }),
 });
 export type AiConfigResponse = z.infer<typeof AiConfigResponseSchema>;
 

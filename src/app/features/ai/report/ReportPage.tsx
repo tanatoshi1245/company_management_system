@@ -207,7 +207,7 @@ export default function ReportPage(_props: PageProps) {
                 <h2>{job.title}</h2>
                 <span className="lead">{job.companyName}</span>
               </div>
-              <AiJobStatus job={job} polling={ws.polling} fireMessage={ws.fireMessage} onRefire={ws.canWrite ? () => void ws.refire() : undefined} busy={ws.busy} />
+              <AiJobStatus job={job} polling={ws.polling} fireMessage={ws.fireMessage} />
               {job.status === 'done' && read ? <p className="air-summary">{read.result.summary}</p> : null}
             </section>
             {job.status === 'done' && read ? (

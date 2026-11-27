@@ -16,31 +16,45 @@ export function elapsedLabel(fromIso: string, now: number): string | null {
   return m > 0 ? `${m} 分 ${sec % 60} 秒` : `${sec} 秒`;
 }
 
-function Elapsed({ from }: { from: string }) {
+/** 1 秒ごとに進む経過時間（from = ISO の日時か、ミリ秒） */
+export function Elapsed({ from }: { from: string | number }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
-  const label = elapsedLabel(from, now);
+  const label = elapsedLabel(typeof from === 'number' ? new Date(from).toISOString() : from, now);
   return label ? <span className="num muted">経過 {label}</span> : null;
 }
 
+/** 実行中（応答を待っている間）の表示。② スカウトは、この間に Worker が分析と作成をしている */
+export function AiBusy({ message, since }: { message: string; since: number | null }) {
+  return (
+    <div className="ai-status running" role="status" aria-live="polite" data-status="busy">
+      <span className="ai-spinner on" aria-hidden="true" />
+      <div className="msg">
+        <b>{message}</b>
+        {since !== null ? (
+          <div className="small">
+            <Elapsed from={since} />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 /**
- * ジョブの状態（作成中 / 未起動 / 失敗 / 完了）。
- * running = セッションで作成中 + 経過時間、queued = 立ち上げられなかった理由 + もう一度立ち上げる、failed = 失敗の理由 + もう一度立ち上げる、done = サンプルなら印。
+ * ジョブの状態。
+ * failed（と、作れないまま残った queued）= 理由 + 「もう一度作る」（onRetry。同じ入力で新しく依頼する）、
+ * running = 作成中のまま残っているジョブ（経過時間）、done = 日時と作成した人（見本・直した版の印）。
  */
-export function AiJobStatus({ job, polling, fireMessage, onRefire, busy }: { job: AiJobDetail | null; polling: boolean; fireMessage?: string | null; onRefire?: () => void; busy?: boolean }) {
+export function AiJobStatus({ job, polling = false, fireMessage, onRetry, busy }: { job: AiJobDetail | null; polling?: boolean; fireMessage?: string | null; onRetry?: () => void; busy?: boolean }) {
   if (!job) return null;
   const session = job.sessionUrl ? (
     <a className="btn sm" href={job.sessionUrl} target="_blank" rel="noreferrer">
       <Icon name="external" size={14} /> {AI_TEXT.openSession}
     </a>
-  ) : null;
-  const refire = onRefire ? (
-    <Button size="sm" variant="primary" loading={busy} onClick={onRefire}>
-      <Icon name="refresh" size={14} /> {AI_TEXT.refire}
-    </Button>
   ) : null;
   if (job.status === 'running') {
     return (
@@ -56,24 +70,9 @@ export function AiJobStatus({ job, polling, fireMessage, onRefire, busy }: { job
       </div>
     );
   }
-  if (job.status === 'queued') {
+  if (job.status === 'failed' || job.status === 'queued') {
     return (
-      <div className="ai-status queued" role="alert" data-status="queued">
-        <Icon name="warning" />
-        <div className="msg">
-          <b>{AI_TEXT.queued}</b>
-          {fireMessage ?? job.error ? <div className="small">{fireMessage ?? job.error}</div> : null}
-        </div>
-        <div className="acts">
-          {session}
-          {refire}
-        </div>
-      </div>
-    );
-  }
-  if (job.status === 'failed') {
-    return (
-      <div className="ai-status failed" role="alert" data-status="failed">
+      <div className="ai-status failed" role="alert" data-status={job.status}>
         <Icon name="warning" />
         <div className="msg">
           <b>{AI_TEXT.failed}</b>
@@ -81,7 +80,11 @@ export function AiJobStatus({ job, polling, fireMessage, onRefire, busy }: { job
         </div>
         <div className="acts">
           {session}
-          {refire}
+          {onRetry ? (
+            <Button size="sm" variant="primary" loading={busy} onClick={onRetry}>
+              <Icon name="refresh" size={14} /> {AI_TEXT.retry}
+            </Button>
+          ) : null}
         </div>
       </div>
     );
