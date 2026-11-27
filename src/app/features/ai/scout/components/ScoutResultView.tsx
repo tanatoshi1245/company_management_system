@@ -96,10 +96,11 @@ export function ScoutResultView({
   onUsage: (usedState: ScoutUsedState) => Promise<void>;
 }) {
   const chosen = chosenDraft(result);
-  const [comment, setComment] = useState('');
+  // 記録済みの判断（「どれも使わない」・コメント）は、読み出しの結果（result.choice）から戻す
+  const [comment, setComment] = useState(result.choice?.comment ?? '');
   /** 送った後のコメント（同じ内容を送り直さない） */
-  const [sentComment, setSentComment] = useState<string | null>(null);
-  const [noneChosen, setNoneChosen] = useState(false);
+  const [sentComment, setSentComment] = useState<string | null>(result.choice?.comment ? result.choice.comment : null);
+  const [noneChosen, setNoneChosen] = useState(Boolean(result.choice?.none));
   /** 記録の最中（draftId / 'none' / 'comment' / 'usage'） */
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

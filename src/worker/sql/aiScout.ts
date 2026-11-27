@@ -89,12 +89,12 @@ t AS (
   FROM s
   GROUP BY 1
 ),
+-- 対象範囲: 類似業界（業界のまとまり）→ 全業界 の順（2026-11-27 ユーザー指示「類似業界内で」。同じ業界だけに絞る段（level 1・4）は使わない）。
+-- 条件つきで足りないときは、条件を外して同じ順（level 5・6）
 lv AS (
   SELECT CASE
-           WHEN COUNTIF(same_ind AND n_f >= @min_sends) >= @min_templates THEN 1
            WHEN COUNTIF(same_grp AND n_f >= @min_sends) >= @min_templates THEN 2
            WHEN COUNTIF(n_f >= @min_sends) >= @min_templates THEN 3
-           WHEN COUNTIF(same_ind AND n_all >= @min_sends) >= @min_templates THEN 4
            WHEN COUNTIF(same_grp AND n_all >= @min_sends) >= @min_templates THEN 5
            ELSE 6
          END AS level

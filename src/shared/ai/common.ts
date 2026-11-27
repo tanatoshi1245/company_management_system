@@ -2,13 +2,13 @@ import { z } from 'zod';
 import { MonthSchema } from '../schema/common';
 
 /**
- * AI 機能（docs/AI機能.md）で 3 機能が共有する型。
- *   report … AI 分析とレポート生成（企業ページの期間・企業の利用状況 → 編集できるスライド）
- *   scout  … スカウト文面の AI 添削 / テンプレート生成
- *   job    … 求人の AI 添削 / 求人票の作成
- * 流れ: 画面 → Worker（D1 ai_jobs に保存）→ Claude Code のセッションを発火 → セッションが BigQuery を読んで作成 →
- *       セッションが結果を Worker（/hook/ai/jobs/:id/result）へ返す → 画面がポーリングで受け取る。
- * 機能ごとの入力・結果は report.ts / scout.ts / job.ts（1 機能 = 1 ファイル）。
+ * AI 機能（docs/AI機能.md）で共有する型。
+ *   scout  … スカウト文面の AI 作成 / 添削（実装済み。Worker が Vertex AI を呼び、その場で結果を返す）
+ *   job    … 求人の AI 添削（未着手。メニューから外してある）
+ *   report … AI 分析とレポート生成（未着手。同上）
+ * 流れ: 画面 → Worker（BigQuery の分析用マートを読む → Vertex AI）→ D1 ai_jobs に結果を保存 → 画面。
+ * 依頼のたびに Claude Code のセッションを立ち上げる方式（2026-11-25）は、2026-11-27 にやめた。
+ * 機能ごとの入力・結果は scout.ts / job.ts / report.ts（1 機能 = 1 ファイル）。
  */
 
 export const AI_KINDS = ['report', 'scout', 'job'] as const;
@@ -66,7 +66,7 @@ export const AiJobSummarySchema = z.object({
   completedAt: z.string().nullable(),
   /** 画面で直した後の保存があるか（report のスライド・文面の手直し） */
   edited: z.boolean(),
-  /** サンプル（セッションを立ち上げずに作った見本）か */
+  /** サンプル（Vertex AI を呼ばずに返した見本）か */
   sample: z.boolean(),
 });
 export type AiJobSummary = z.infer<typeof AiJobSummarySchema>;
@@ -105,7 +105,7 @@ export const AiConfigResponseSchema = z.object({
   fireConfigured: z.boolean(),
   /** 保存先（D1）があるか */
   storeConfigured: z.boolean(),
-  /** 見本で動くか（サンプルデータ中 = BQ_MOCK=1）。true の間はセッションを立ち上げず、決まった見本を返す（仮の利用者でも実行できる） */
+  /** 見本で動くか（サンプルデータ中 = BQ_MOCK=1）。true の間は Vertex AI を呼ばず、決まった見本を返す（仮の利用者でも実行できる） */
   sampleMode: z.boolean(),
   /** 書き込める人か（Google ログイン済み） */
   canWrite: z.boolean(),

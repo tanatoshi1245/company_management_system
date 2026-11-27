@@ -131,6 +131,7 @@ export const SCOUT_RESULT: ScoutResult = {
   warnings: [],
   elapsedMs: 14200,
   tokens: 18350,
+  choice: null,
 };
 
 /** 添削の結果（変更点つき）と、注意つきの結果 */

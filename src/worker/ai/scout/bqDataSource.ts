@@ -158,8 +158,8 @@ class BqScoutDataSource implements ScoutDataSource {
     try {
       const industry = q.industry.trim();
       const group = industryGroupOf(industry);
-      // まとまりに業界が 1 つしか無いときは「類似業界」= 同じ業界なので、その段を飛ばす（同じ業界 → 全業界）
-      const groupId = group && group.industries.length > 1 ? group.id : '';
+      // 対象範囲は 類似業界（業界のまとまり）→ 全業界 の順（まとまりに業界が 1 つだけのときは、類似業界 = その業界）
+      const groupId = group?.id ?? '';
       const res = await this.client().run(aiScoutBenchmarkQuery({ companyId: q.companyId, industry, industryGroup: groupId, filters: q.filters, lang: q.lang }));
       return await toBenchmark(res.rows[0], { ...q, industry }, groupId);
     } catch (e) {

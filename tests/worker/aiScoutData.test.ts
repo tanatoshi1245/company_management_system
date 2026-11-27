@@ -179,14 +179,14 @@ describe('makeScoutDataSource（サンプルデータ = BQ_MOCK=1 でも同じ�
     expect(b3!.basis).toMatchObject({ scope: 'all', scopeLabel: '全業界' });
   });
 
-  it('まとまりに業界が 1 つだけのときは、類似業界の段を飛ばす（@industry_group を空で渡す）', async () => {
+  it('まとまりに業界が 1 つだけでも、類似業界（= その業界）として @industry_group を渡す', async () => {
     const seen: BuiltQuery[] = [];
     const client: BqClient = { mock: true, run: async (q) => (seen.push(q), { rows: [], bytesProcessed: 0, cacheHit: false, jobId: null }), dryRun: async () => ({ bytesProcessed: 0 }) };
     const d = scoutDataSourceOf(client);
     expect(await d.benchmark({ companyId: '1', industry: 'マスコミ・広告・出版・印刷・放送', filters: filters(), lang: 'ja' })).toBeNull();
     expect(await d.benchmark({ companyId: '1', industry: ' 派遣会社 ', filters: filters(), lang: 'ja' })).toBeNull();
     const grp = (q: BuiltQuery) => q.params.find((x) => x.name === 'industry_group')!.parameterValue.value;
-    expect(grp(seen[0])).toBe('');
+    expect(grp(seen[0])).toBe('media');
     expect(grp(seen[1])).toBe('hr');
     expect(seen[1].params.find((x) => x.name === 'industry')!.parameterValue.value).toBe('派遣会社');
   });

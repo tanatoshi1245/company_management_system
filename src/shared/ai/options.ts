@@ -88,7 +88,7 @@ export const SCOUT_TEXT = {
   chooseNone: 'どれも使わない',
   commentHint: 'モデルの改善に使います',
   usageQuestion: '企業が使いましたか？',
-  placeholders: '{{企業名}} {{候補者名}} などの差し込みは、送る前に置き換えてください',
+  placeholders: '{{企業名}} {{候補者名}} などの差し込みは、送る前に置き換えてください。AI が、依頼に無い内容（業務の説明・待遇など）を書くことがあります。企業へ渡す前に、事実と合っているかを確かめてください',
   tuneNow: '今すぐ検証・チューニング',
   rollback: 'この版に戻す',
 } as const;
