@@ -65,6 +65,42 @@ export interface ScoutDraftExport {
   chosenAt: string;
 }
 
+/** 求人の内容（マート dwh.cms_ai_jobs。企業名は {{企業名}} に置き換え済み。本文は長いものは先頭だけ） */
+export interface ScoutJobInfo {
+  jobId: string;
+  title: string;
+  occupation: string | null;
+  industry: string | null;
+  location: string | null;
+  /** 年収の表示（例: 500万円〜800万円）。無ければ null */
+  salary: string | null;
+  japaneseLevel: string | null;
+  englishLevel: string | null;
+  published: boolean;
+  /** 仕事内容・応募条件（先頭 JOB_TEXT_CHARS 文字） */
+  description: string;
+  requirements: string;
+}
+
+/** 候補者の属性（マート dwh.cms_ai_member_profiles。氏名・連絡先・レジュメの本文は無い） */
+export interface ScoutMemberInfo {
+  memberId: string;
+  ageGroup: string | null;
+  nationality: string | null;
+  japaneseLevel: string | null;
+  englishLevel: string | null;
+  residence: string | null;
+  occupation: string | null;
+  lastIndustry: string | null;
+  careerLevel: string | null;
+  experiencedOccupations: string[];
+  desiredOccupations: string[];
+  incomeRange: string | null;
+  desiredIncomeRange: string | null;
+}
+
+export const JOB_TEXT_CHARS = 1500;
+
 export const DIGEST_MAX = 24;
 export const DIGEST_BODY_CHARS = 900;
 
@@ -73,6 +109,10 @@ export interface ScoutDataSource {
   options(): Promise<ScoutOptionsResponse>;
   /** 分析対象（上位 1000 件）の数値と、要点の材料。マートが無い・対象が 0 件のときは null */
   benchmark(q: ScoutBenchmarkQuery): Promise<ScoutBenchmark | null>;
+  /** 求人の内容。**その企業の求人でなければ null**（ほかの企業の求人を読ませない）。無い ID も null */
+  job(companyId: string, jobId: string): Promise<ScoutJobInfo | null>;
+  /** 候補者の属性。無い ID は null */
+  member(memberId: string): Promise<ScoutMemberInfo | null>;
   /** 選ばれた案を BigQuery へ写す（MERGE）。書き込めないとき（権限なし・サンプルデータ）は false */
   exportDrafts(rows: ScoutDraftExport[]): Promise<boolean>;
   /** 写した案の照合結果を読む */

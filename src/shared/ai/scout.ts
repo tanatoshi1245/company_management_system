@@ -81,6 +81,34 @@ export const SCOUT_FILTER_LABEL: Record<ScoutFilterKey, string> = {
 export const EMPTY_SCOUT_FILTERS: ScoutFilters = { ageGroups: [], nationalities: [], japaneseLevels: [], englishLevels: [], residences: [], occupations: [] };
 export const hasScoutFilters = (f: ScoutFilters): boolean => SCOUT_FILTER_KEYS.some((k) => f[k].length > 0);
 
+/**
+ * 何をもとに作るか（2026-11-27 ユーザー指示。**使う人が最初に選ぶ**。選んで、内容を確かめてから、実行ボタンで AI を動かす）。
+ *   conditions … 条件を自分で入れる（ポジション名・送る相手の条件）
+ *   job        … 求人 ID（その求人の内容に沿って作る。ポジション名・職種・勤務地・仕事内容・応募条件は求人から取る）
+ *   member     … 会員 ID（その候補者の情報に沿って作る。求人の内容は自分で入れる）
+ *   jobMember  … 求人 ID + 会員 ID（その求人を、その候補者向けに合わせて作る）
+ * 求人は、選んだ企業の求人だけ（Worker が確かめる）。会員の情報は、BigQuery にある属性だけ（氏名・連絡先は無い）。
+ */
+export const SCOUT_BASES = ['conditions', 'job', 'member', 'jobMember'] as const;
+export type ScoutBasisKind = (typeof SCOUT_BASES)[number];
+export const SCOUT_BASIS_LABEL: Record<ScoutBasisKind, string> = {
+  conditions: '条件を指定して作る',
+  job: '求人 ID から作る',
+  member: '会員 ID から作る',
+  jobMember: '求人 ID + 会員 ID から作る',
+};
+export const SCOUT_BASIS_DESCRIPTION: Record<ScoutBasisKind, string> = {
+  conditions: 'ポジション名と、送る相手の条件を自分で入れます',
+  job: '求人の内容（仕事内容・応募条件・勤務地・年収など）に沿った文面を作ります',
+  member: '候補者の情報（経験職種・語学力など）に沿った文面を作ります。求人の内容は自分で入れます',
+  jobMember: '求人の内容をもとに、その候補者向けに合わせた文面を作ります',
+};
+export const scoutBasisUsesJob = (b: ScoutBasisKind): boolean => b === 'job' || b === 'jobMember';
+export const scoutBasisUsesMember = (b: ScoutBasisKind): boolean => b === 'member' || b === 'jobMember';
+/** 求人 ID（jobs の ID。求人ページの URL の数字）・会員 ID。数字だけ */
+export const ScoutJobIdSchema = z.string().regex(/^\d{1,12}$/, '求人 ID は数字で入れてください');
+export const ScoutMemberIdSchema = z.string().regex(/^\d{1,12}$/, '会員 ID は数字で入れてください');
+
 export const SCOUT_LANGS = ['ja', 'en'] as const;
 export type ScoutLang = (typeof SCOUT_LANGS)[number];
 export const SCOUT_LANG_LABEL: Record<ScoutLang, string> = { ja: '日本語', en: '英語' };
@@ -89,13 +117,17 @@ export const SCOUT_LANG_LABEL: Record<ScoutLang, string> = { ja: '日本語', en
 export const ScoutInputSchema = z
   .object({
     purpose: z.enum(SCOUT_PURPOSES),
+    /** 何をもとに作るか。求人 ID / 会員 ID は、basis に応じて必須 */
+    basis: z.enum(SCOUT_BASES).default('conditions'),
+    jobId: ScoutJobIdSchema.nullable().default(null),
+    memberId: ScoutMemberIdSchema.nullable().default(null),
     /** 添削する文面（purpose = review のとき必須） */
     subject: z.string().trim().max(SCOUT_SUBJECT_MAX).default(''),
     body: z.string().trim().max(SCOUT_BODY_MAX).default(''),
     /** 業界（企業を選ぶと自動で入る。直せる。分析対象の「類似業界」はこの値から決める） */
     industry: shortText(60).min(1, '業界を入れてください'),
-    /** ポジション名 */
-    positionName: shortText(80).min(1, 'ポジション名を入れてください'),
+    /** ポジション名（basis が job / jobMember のときは求人から取るので、空でよい。Worker が求人の値で置き換える） */
+    positionName: shortText(80).default(''),
     /** 掲載職種（企業を選ぶと自動で入る。直せる。文面の中身に使う。0〜5 個） */
     jobOccupations: z.array(shortText(60).min(1)).max(AI_OCCUPATIONS_MAX).default([]),
     /** 勤務地（求人の勤務地。文面の中身に使う） */
@@ -109,6 +141,13 @@ export const ScoutInputSchema = z
   })
   .strict()
   .superRefine((v, ctx) => {
+    const usesJob = v.basis === 'job' || v.basis === 'jobMember';
+    const usesMember = v.basis === 'member' || v.basis === 'jobMember';
+    if (usesJob && !v.jobId) ctx.addIssue({ code: 'custom', path: ['jobId'], message: '求人 ID を入れてください' });
+    if (!usesJob && v.jobId) ctx.addIssue({ code: 'custom', path: ['jobId'], message: 'この作り方では、求人 ID を指定しません' });
+    if (usesMember && !v.memberId) ctx.addIssue({ code: 'custom', path: ['memberId'], message: '会員 ID を入れてください' });
+    if (!usesMember && v.memberId) ctx.addIssue({ code: 'custom', path: ['memberId'], message: 'この作り方では、会員 ID を指定しません' });
+    if (!usesJob && !v.positionName) ctx.addIssue({ code: 'custom', path: ['positionName'], message: 'ポジション名を入れてください' });
     if (v.purpose === 'review') {
       if (!v.subject) ctx.addIssue({ code: 'custom', path: ['subject'], message: '添削する件名を入れてください' });
       if (!v.body) ctx.addIssue({ code: 'custom', path: ['body'], message: '添削する本文を入れてください' });
@@ -194,6 +233,57 @@ export const ScoutInsightSchema = z
   .strict();
 export type ScoutInsight = z.infer<typeof ScoutInsightSchema>;
 
+/**
+ * 求人の内容（画面で確かめる用 + 結果に残す用）。GET /api/companies/:id/ai/scout/jobs/:jobId。
+ * 仕事内容・応募条件の全文は返さない（先頭だけ）。企業名は {{企業名}} に置き換え済み。
+ */
+export const ScoutJobSummarySchema = z.object({
+  jobId: z.string(),
+  title: z.string(),
+  occupation: z.string().nullable(),
+  location: z.string().nullable(),
+  salary: z.string().nullable(),
+  japaneseLevel: z.string().nullable(),
+  englishLevel: z.string().nullable(),
+  /** 掲載中か（掲載が終わった求人でも作れるが、画面に注意を出す） */
+  published: z.boolean(),
+  /** 仕事内容・応募条件の先頭（確かめる用。各 200 字まで） */
+  descriptionHead: z.string(),
+  requirementsHead: z.string(),
+});
+export type ScoutJobSummary = z.infer<typeof ScoutJobSummarySchema>;
+
+/**
+ * 候補者の情報（画面で確かめる用 + 結果に残す用）。GET /api/ai/scout/members/:memberId。
+ * BigQuery にある属性だけ（氏名・連絡先・レジュメの本文は無い）。属性は現在のプロフィール。
+ */
+export const ScoutMemberSummarySchema = z.object({
+  memberId: z.string(),
+  ageGroup: z.string().nullable(),
+  nationality: z.string().nullable(),
+  japaneseLevel: z.string().nullable(),
+  englishLevel: z.string().nullable(),
+  residence: z.string().nullable(),
+  /** 最終経験職種（大分類）・最終経験業種・最終の役職レベル */
+  occupation: z.string().nullable(),
+  lastIndustry: z.string().nullable(),
+  careerLevel: z.string().nullable(),
+  /** 経験職種（複数）・希望職種（複数） */
+  experiencedOccupations: z.array(z.string()).max(12),
+  desiredOccupations: z.array(z.string()).max(12),
+  incomeRange: z.string().nullable(),
+  desiredIncomeRange: z.string().nullable(),
+  /** 分析対象の絞り込みに使った条件（Worker が候補者の属性から決める。年齢層・経験職種） */
+  filters: ScoutFiltersSchema,
+});
+export type ScoutMemberSummary = z.infer<typeof ScoutMemberSummarySchema>;
+
+/** 何をもとに作ったか（結果に残す。画面の見出しと履歴に出す） */
+export const ScoutTargetSchema = z
+  .object({ basis: z.enum(SCOUT_BASES), job: ScoutJobSummarySchema.nullable().default(null), member: ScoutMemberSummarySchema.nullable().default(null) })
+  .strict();
+export type ScoutTarget = z.infer<typeof ScoutTargetSchema>;
+
 /** 文面を作る 3 つのモデル（作り方の違う 3 通り。ID は固定。中身 = 使う生成モデルとプレイブックは D1 で版を持つ） */
 export const SCOUT_MODEL_IDS = ['a', 'b', 'c'] as const;
 export type ScoutModelId = (typeof SCOUT_MODEL_IDS)[number];
@@ -247,6 +337,8 @@ export const ScoutResultSchema = z
     basis: ScoutBasisSchema,
     stats: ScoutStatsSchema,
     insight: ScoutInsightSchema,
+    /** 何をもとに作ったか（求人・候補者の情報の要約）。以前の結果には無い（null = 条件を指定） */
+    target: ScoutTargetSchema.nullable().default(null),
     /** 分析を使い回したか（true = 保存済みの分析を使った） */
     insightCached: z.boolean().default(false),
     drafts: z.array(ScoutDraftSchema).min(1).max(3),
