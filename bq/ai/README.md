@@ -1,5 +1,5 @@
 ---
-tags: [domain/scout, domain/company-behavior, layer/engineering, type/data-mart-spec, source/bq-internal, table/messages, table/scouts, table/scout_histories, table/cms_company_master]
+tags: [domain/scout, domain/company-behavior, layer/engineering, type/data-mart-spec, source/bq-internal, table/messages, table/scouts, table/scout_histories, table/cms_company_master, table/jobs_all, table/member_details]
 related:
   - "[[bq/README]]"
   - "[[docs/AI機能]]"
@@ -16,7 +16,7 @@ status: active
 - 分析の決まり（返信率 10% 超の上位 1000 件・直近 12 か月・最小 5 通・最小 20 件）は [`src/shared/ai/scout.ts`](../../src/shared/ai/scout.ts) の定数。マートは 13 か月 + 当月を持ち、絞るのは Worker の SQL
 
 ## 依存するデータ（元テーブル）
-`cms_company_master`（企業・業界・プロファイル・社名。**07:45 JST の cms_marts 日次更新の後に走らせる**）/ `scouts` / `scout_histories` / `messages`（subject・body。スカウトの最初の 1 通 = `scout_id IS NOT NULL AND is_from_company = 1` を scout_id ごとに `created_at` の最も早いもの）/ `member_profile_latest`（年齢層・国籍の区分・語学・最終経験職種の大分類）/ `member_details`（現住所。最新のスナップショット）。ビジネス定義（RA 4928 / 14508・RDS 7080 の除外、興味あり返信 = `質問する / 開封のみ → 興味あり`、スナップショットの重複排除）は claude_analysis の `CLAUDE.md`。
+`cms_company_master`（企業・業界・プロファイル・社名。**07:45 JST の cms_marts 日次更新の後に走らせる**）/ `scouts` / `scout_histories` / `messages`（subject・body。スカウトの最初の 1 通 = `scout_id IS NOT NULL AND is_from_company = 1` を scout_id ごとに `created_at` の最も早いもの）/ `member_profile_latest`（年齢層・国籍の区分・語学・最終経験職種の大分類）/ `member_details`（現住所・経験職種・希望職種・希望年収・退会日。最新のスナップショット）/ `jobs_all`（求人の内容。本文 2 列を含む）/ `job_publish_history`（掲載の期間）。ビジネス定義（RA 4928 / 14508・RDS 7080 の除外、興味あり返信 = `質問する / 開封のみ → 興味あり`、スナップショットの重複排除）は claude_analysis の `CLAUDE.md`。
 
 | 表 | 粒度 | 更新 | Worker |
 |---|---|---|---|
@@ -25,6 +25,8 @@ status: active
 | `cms_ai_scout_sends` | スカウト 1 通 | 全件差し替え（送信月でパーティション） | 読む |
 | `cms_ai_scout_drafts` | CS が選んだ案 | **アプリが MERGE で書く**（スクリプトは枠を作るだけ） | 書く |
 | `cms_ai_scout_draft_outcomes` | 案 | 全件差し替え | 読む |
+| `cms_ai_jobs` | 求人（マートに居る企業の、直近 13 か月 + 当月に掲載があった求人） | 全件差し替え（求人 ID の 2,000 番ごとにパーティション） | 読む（求人 ID からの作成） |
+| `cms_ai_member_profiles` | 会員（退会を除く） | 全件差し替え（会員 ID の 2,000 番ごとにパーティション） | 読む（会員 ID からの作成） |
 | `cms_ai_refresh_log` | 実行記録 | 追記（`step = 'scout_marts'`） | 読む（更新日 = 最新の `ok` の `run_date`） |
 
 ## 更新スケジュール（登録済み）
@@ -37,20 +39,25 @@ status: active
 | SQL | `scout_marts.sql`（スクリプト。宛先テーブルなし） |
 | 実行者 | `id-69-213@bq-hgt.iam.gserviceaccount.com`（cms_marts と同じ） |
 | 登録日 | 2026-11-27（Data Transfer API で登録。登録直後の実行 ok） |
+| SQL の差し替え | 2026-11-27（`cms_ai_jobs`・`cms_ai_member_profiles` を足した版。`bq update --transfer_config --params` で差し替え、登録された SQL がファイルと 1 文字も違わないことを確認） |
 
-**SQL を変えたとき**: BigQuery Studio → スケジュールドクエリ → 上の設定 ID を開き、`scout_marts.sql` の全文に差し替えて保存する（または Data Transfer API の `PATCH transferConfigs/<設定 ID>?updateMask=params`）。列を変えたら `src/worker/sql/aiScout.ts`・`src/shared/ai/scout.ts`・フィクスチャ（`src/worker/bq/fixtures/aiScout.ts`）を合わせる。
+**SQL を変えたとき**: BigQuery Studio → スケジュールドクエリ → 上の設定 ID を開き、`scout_marts.sql` の全文に差し替えて保存する（または Data Transfer API の `PATCH transferConfigs/<設定 ID>?updateMask=params`。`bq` なら `bq update --transfer_config --params='{"query": "<全文>"}' projects/89568037526/locations/asia-northeast1/transferConfigs/<設定 ID>`）。**表のパーティション・クラスタの決め方を変えたときは、先にその表を DROP する**（`CREATE OR REPLACE` は、分け方の違う表を置き換えられず、スクリプト全体が失敗する）。列を変えたら `src/worker/sql/aiScout.ts`・`src/shared/ai/scout.ts`・フィクスチャ（`src/worker/bq/fixtures/aiScout.ts`）を合わせる。
 
 ## スキャン量と所要時間（2026-11-27 実測）
 
 | 何 | スキャン | 時間 |
 |---|---|---|
-| `scout_marts.sql`（日次。`messages` の subject・body を **1 回の実行で 1 回**だけ読む = 約 18.4 GB。`messages` はパーティションもクラスタリングも無いので、期間で絞っても量は変わらない） | 20.1 GB | 34〜40 秒 |
+| `scout_marts.sql`（日次。`messages` の subject・body を **1 回の実行で 1 回**だけ読む = 約 18.4 GB。`messages` はパーティションもクラスタリングも無いので、期間で絞っても量は変わらない。`jobs_all` = 約 1.9 GB（本文 2 列が 1.3 GB）） | 24.2 GB（求人・会員の 2 表を足す前は 20.1 GB） | 79〜94 秒（足す前は 34〜40 秒。増えた分は、求人の本文の置き換え = 約 28 秒が主） |
 | Worker: `ai_scout_benchmark`（分析対象の数値 + 要点の材料。1 回の SELECT） | dry run 93 MB・実行 69〜85 MB（条件が多いほど列が増える） | 1.4〜2.0 秒（同じ日の同じ条件は BigQuery のキャッシュで 0.6 秒・0 MB） |
 | Worker: `ai_scout_options`（条件の選択肢） | 26 MB | 0.5〜0.6 秒 |
 | Worker: `ai_scout_outcomes`（照合結果） | 0 MB（表が小さい） | 0.4 秒 |
 | Worker: `ai_scout_drafts_merge`（選ばれた案の書き込み。1 回 50 行まで） | 0 MB | 1.7 秒 |
+| Worker: `ai_scout_job`（求人 1 件。`company_id = @company_id AND job_id = @job_id`） | 1.6〜2.3 MB（dry run も同じ。パーティションを分ける前は 1 件でも表全体 = 93 MB） | 0.4〜0.5 秒 |
+| Worker: `ai_scout_member`（会員 1 人） | 0.3〜0.4 MB（分ける前は 189 MB） | 0.4〜0.55 秒 |
 
 初回の中身: 文面 23,400（送信 5 通以上 4,296）・送信 269,616 通（興味あり返信 21,052・採用 87・自動 47,803）・本文のメッセージが無いスカウト 9,095 通（表に入らない）・`cms_ai_scout_templates` 49.8 MB・`cms_ai_scout_sends` 48.0 MB。直近 12 か月で、送信 5 通以上の文面 3,670 のうち返信率 10% 超は 1,216。
+
+求人・会員の中身（2026-11-27）: `cms_ai_jobs` 42,738 件（754 社。いま掲載中 7,930・応募条件が空 15,804・年収の表示なし 6,890）・97.8 MB・276 パーティション。`cms_ai_member_profiles` 832,665 人（退会 13,171 人を除く）・204.7 MB・498 パーティション。
 
 ## 表の定義
 
@@ -159,24 +166,63 @@ status: active
 
 照合: **同じ企業**が、選んだ日（JST）以降に**初めて**送った文面のうち、案の本文の「意味のある行」（空白を除いて 15 文字以上。差し込み `{{…}}` を含む行は除く）の **50% 以上**を、空白を除いた本文（置き換え前）の中にそのまま含むもの。2026-11-27 に試しの 3 行で確認（本文そのまま = 一致・送信数が文面と同じ / 行の半分超を書き換え = 不一致 / 無関係 = 不一致。試しの行は削除済み）。
 
+### cms_ai_jobs（求人 = 1 行。求人 ID からの作成用）
+`PARTITION BY RANGE_BUCKET(job_id, GENERATE_ARRAY(0, 4000000, 2000))`、`CLUSTER BY job_id`。対象 = `cms_company_master` に居る企業の求人（求人のプロファイル `jobs_all.profile_id` → 企業。RA / RDS のプロファイルは入らない）のうち、`job_publish_history` で直近 13 か月 + 当月に掲載の期間が掛かるもの。**Worker は `company_id` と `job_id` の両方で絞る**（ほかの企業の求人は読めない）。
+
+| 列 | 型 | 説明 |
+|---|---|---|
+| job_id | INT64 | 求人 ID（`jobs_all.job_id`。日英セットの `set_id` ではない） |
+| company_id | INT64 | 企業 |
+| title | STRING | 求人のタイトル（`position_name`。置き換え済み。無ければ空文字） |
+| occupation | STRING | 職種（`jobs_all.occupation` = 「大分類 - 小分類」。既存マート `cms_company_job_monthly.job_occupation` と同じ値。未設定は NULL） |
+| industry | STRING | 求人の業界（`jobs_all.industry`。未設定は NULL） |
+| location | STRING | 勤務地（勤務地 1。国が 日本 なら都道府県、無ければエリア → `日本`。日本以外は国名。`job_location` と同じ決め方。未設定は NULL） |
+| salary | STRING | 年収の表示。日本・円 = 下限・上限（円）から `500万円〜800万円` / `500万円以上` / `〜800万円` / `500万円`。円以外の通貨 = 元の表記（例 `US・ドル 5万ドル 〜 7万ドル`）。「経験と能力に基づく」・未選択・1 万円に満たない金額（時給など）は NULL |
+| japanese_level / english_level | STRING | 求人の語学の条件（`なし` 〜 `ネイティヴ`。**番号は付かない**（会員の `4. ビジネス会話` とは形が違う）。`(未選択)` は NULL） |
+| published | BOOL | いま掲載中か = `job_publish_history` に終了日の無い期間がある。**`jobs_all.publish_status` は使わない**（差分更新のため、掲載が終わった求人にも「掲載」が残る。2026-11-27 実測: 「掲載」59,382 件のうち、いま掲載中は 19,052 件 = `active_jobs` の最新日と一致） |
+| description / requirements | STRING | 仕事内容（`job_description`）・応募条件（`application_condition`）。置き換え済み。先頭 3,000 文字（Worker は先頭 1,500 文字 = `JOB_TEXT_CHARS`）。無ければ空文字 |
+| updated_on | DATE | 求人の更新日（`recruitment_updated_at`。無ければ `recorded_on`） |
+| refreshed_at | TIMESTAMP | 作成日時 |
+
+置き換えはスカウトの文面と同じ正規表現（URL・メールアドレス・アカウント名・電話番号 → 記号、その企業の社名 → `{{企業名}}`（社名の一覧に、求人のプロファイル名も足した）、法人格の前後の語 → `{{社名}}`、「担当: 〇〇」→ `{{担当者名}}`）。加えて、**求人元の社名（`client_company_name`）→ `{{社名}}`**（その企業の社名として先に置き換わったものを除く）。「〇〇と申します」「My name is 〇〇」の置き換えは、求人の文章では誤って当たるので使わない。
+
+置き換えの残り（2026-11-27。42,738 件のタイトル + 仕事内容 + 応募条件）: 「株式会社」0、`http(s):` 0、`www.` 0、電話番号の形 0、英数字 @ 英数字 3（「A @ B」の形の表記が主で、アドレスではない）、「http」の文字 82（技術の名前としての HTTP）。**`://` の無いドメインだけの表記は残る**（`.com` `.jp` などで終わる語 229 件。多くは技術・サービスの名前）。法人格の付かない社名（求人元・取引先・サービス名）と、英語の法人格（Inc. など 329 件に残る）も残りうるので、生成の側は本文をそのまま写さない。置き換えが入った求人: `{{電話番号}}` 17,205 件（人材紹介会社の求人の連絡先が主）・`{{企業名}}` 1,433 件・`{{社名}}` 721 件・`{{URL}}` 288 件。
+
+### cms_ai_member_profiles（会員 = 1 行。会員 ID からの作成用）
+`PARTITION BY RANGE_BUCKET(member_id, GENERATE_ARRAY(0, 4000000, 2000))`、`CLUSTER BY member_id`。対象 = `member_profile_latest` の全会員のうち、退会していない（`member_details` の最新のスナップショットで `retired_on IS NULL`）会員。**氏名・連絡先は BigQuery に無く、自由記述（職務経歴・スキル・資格・会社名・学校名）は入れない。**
+
+| 列 | 型 | 説明 |
+|---|---|---|
+| member_id | INT64 | 会員 ID |
+| age_group / nationality_category / japanese_level / english_level / residence / occupation_group | STRING | **`cms_ai_scout_sends` の同じ名前の列と同じ値・同じ決め方**（未入力は `(未入力)`）。候補者の属性から、分析対象の条件を作れる |
+| last_industry | STRING | 最終経験業種（`member_profile_latest.last_industry`。20 区分 + (未入力) / 不明） |
+| career_level | STRING | 最終キャリアレベル（`1. エントリーレベル` 〜 `5. エグゼクティブレベル` / (未入力)） |
+| experienced_occupations / desired_occupations | ARRAY\<STRING\> | 経験職種・希望職種の大分類（`member_details` の「大分類 - 小分類」をカンマでつないだ列の、大分類だけ。入力の順・重複なし・12 個まで。無ければ空の配列。`cms_scout_member_attributes_monthly` の `experienced_occupation` と同じ切り方）。**最終経験職種の 12 区分（occupation_group）とは別の分類**（例 `IT関連（オープン・WEB系）`） |
+| income_range | STRING | 最終年収帯（`member_profile_latest.annual_income_range`。300万円以下 / 301万円〜500万円 / 501万円〜800万円 / 801万円以上 / (未入力)） |
+| desired_income_range | STRING | 希望年収帯（`desired_annual_income_yen` を同じ 4 帯に。`cms_scout_member_attributes_monthly` と同じ） |
+| refreshed_at | TIMESTAMP | 作成日時 |
+
+`cms_ai_scout_sends` との突き合わせ（2026-11-27）: 送信 269,616 通のうち、受け取った会員がこの表に居る 259,062 通で、6 つの属性がすべて一致（違い 0）。残り 10,554 通は退会した会員。未入力: 現住所 257,605 人・経験職種なし 322,041 人・希望職種なし 288,115 人・希望年収 339,811 人。Worker（`bqDataSource.ts`）は `(未入力)` を null にして返す。
+
 ## Worker の SA に付ける権限（表単位）
 ```bash
 SA=serviceAccount:cms-bq-reader@bq-hgt.iam.gserviceaccount.com
-for t in cms_ai_refresh_log cms_ai_scout_templates cms_ai_scout_sends cms_ai_scout_draft_outcomes; do
+for t in cms_ai_refresh_log cms_ai_scout_templates cms_ai_scout_sends cms_ai_scout_draft_outcomes cms_ai_jobs cms_ai_member_profiles; do
   bq add-iam-policy-binding --member=$SA --role=roles/bigquery.dataViewer bq-hgt:dwh.$t
 done
 bq add-iam-policy-binding --member=$SA --role=roles/bigquery.dataEditor bq-hgt:dwh.cms_ai_scout_drafts
 ```
-付ける前は、Worker は例外にせず「データなし」で返す（選択肢は空・分析は null・書き込みは false。ログに理由）。
+付ける前は、Worker は例外にせず「データなし」で返す（選択肢は空・分析は null・求人と候補者は null・書き込みは false。ログに理由）。`cms_ai_jobs`・`cms_ai_member_profiles` は 2026-11-27 に作った表で、**この 2 表の dataViewer は、まだ付けていない**（付けるのは上のコマンド。表を DROP して作り直したときは、付け直す）。
 
 ## 編集の入口
 - 業界のまとまり → `scout_marts.sql` の対応表と `src/shared/ai/industryGroups.ts`
 - 置き換え・特徴のフラグ → `scout_marts.sql` ステップ 05・07（この README の表も直す）
+- 求人・会員の列、求人の置き換え → `scout_marts.sql` ステップ 03b・10・11（この README の表、`src/worker/sql/aiScout.ts` の `aiScoutJobQuery`・`aiScoutMemberQuery`、`bqDataSource.ts` の `toJobInfo`・`toMemberInfo`、フィクスチャも直す）
 - 分析対象の決め方（範囲の広げ方・上位の取り方）→ `src/worker/sql/aiScout.ts` の `aiScoutBenchmarkQuery`
-- 手元での実行: `bq --project_id=bq-hgt --location=asia-northeast1 query --use_legacy_sql=false --maximum_bytes_billed=30000000000 < bq/ai/scout_marts.sql`（1 回 約 20 GB）。実行記録は `SELECT * FROM dwh.cms_ai_refresh_log ORDER BY finished_at DESC LIMIT 5`
+- 手元での実行: `bq --project_id=bq-hgt --location=asia-northeast1 query --use_legacy_sql=false --maximum_bytes_billed=40000000000 < bq/ai/scout_marts.sql`（1 回 約 24 GB）。実行記録は `SELECT * FROM dwh.cms_ai_refresh_log ORDER BY finished_at DESC LIMIT 5`
 
 ## 失敗時
 `BEGIN … EXCEPTION` で `cms_ai_refresh_log` に `error` 行（`message` に理由）を残し、前日の表がそのまま残る。再実行は冪等（全件差し替え。`cms_ai_scout_drafts` は変えない）。
 
 ## テスト
-`tests/worker/aiScoutData.test.ts`（SQL が `cms_ai_*` と `@param` だけ・業界の対応表が SQL と定数で一致・フィクスチャで契約の型を通る）。スキャン量は `npm run dryrun`（`scripts/bq-dryrun.ts`）。
+`tests/worker/aiScoutData.test.ts`（SQL が `cms_ai_*` と `@param` だけ・業界の対応表が SQL と定数で一致・フィクスチャで契約の型を通る・求人は企業と求人の両方で絞る・ほかの企業の求人と無い ID は null）。スキャン量は `npm run dryrun`（`scripts/bq-dryrun.ts`）。
