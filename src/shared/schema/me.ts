@@ -47,6 +47,8 @@ export const MetaResponseSchema = z.object({
   holidaysVersion: z.string(),
   dataSchemaVersion: z.number(),
   mock: z.boolean(),
+  /** どの環境か（wrangler.jsonc の APP_ENV）: production / staging（docs/テスト環境.md）/ preview */
+  stage: z.string().default('production'),
 });
 export type MetaResponse = z.infer<typeof MetaResponseSchema>;
 
@@ -61,5 +63,7 @@ export interface HealthResponse {
   allowedDomains: string[];
   allowedEmailsCount: number;
   dataVersion: number;
+  /** AI 機能（docs/AI機能.md）の設定の診断。vertex = Vertex AI を呼べる設定（鍵・生成モデルの ID）があるか、store = 保存先（D1）、admins = 管理者の人数。値は出さない */
+  ai: { vertex: boolean; store: boolean; admins: number };
 }
 type AuthMode = z.infer<typeof AuthModeSchema>;

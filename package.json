@@ -9,6 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "wrangler deploy",
+    "build:staging": "CLOUDFLARE_ENV=staging vite build",
+    "deploy:staging": "npm run build:staging && wrangler deploy && (wrangler d1 migrations apply CMS_DB --remote || echo '[deploy:staging] D1 のマイグレーションを自動で適用できませんでした。docs/テスト環境.md の手順 3 で適用してください')",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
     "test": "vitest run",
     "dryrun": "tsx scripts/bq-dryrun.ts",
@@ -19,9 +21,12 @@
     "holidays:update": "tsx scripts/update-holidays.ts"
   },
   "dependencies": {
+    "@fontsource/hanken-grotesk": "^5.3.0",
     "@fontsource/inter": "^5.2.0",
     "@fontsource/noto-sans-jp": "^5.2.0",
     "hono": "^4.13.8",
+    "html-to-image": "^1.11.13",
+    "jspdf": "^4.2.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "zod": "^3.25.76"

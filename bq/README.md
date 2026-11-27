@@ -99,3 +99,44 @@ bq query --use_legacy_sql=false 'SELECT * FROM `bq-hgt.dwh.cms_refresh_log` ORDE
 ## 失敗時
 - スクリプトは `BEGIN … EXCEPTION` で `cms_refresh_log` に `error` 行を残す。Worker は前日の `dataVersion` で配信を続け、画面の左レールに「今朝の更新に失敗」と出る
 - 再実行は冪等（全件差し替え / 当日分の DELETE → INSERT）。同じ日に何度実行してもよい
+
+## AI 機能の日次マート cms_ai_*（2026-11-27〜。Worker が読む）
+
+② スカウト文面の AI 作成（[docs/AI機能.md](../docs/AI機能.md)）の材料。以前の「セッションが `ai/<機能>/sql/` の SQL で生テーブルを読む」方式は 2026-11-27 にやめた（Worker が Vertex AI を直接呼び、マートだけを読む）。SQL・列定義・置き換えと特徴の正規表現は [`ai/README.md`](./ai/README.md)。
+
+| 項目 | 値 |
+|---|---|
+| スケジュールドクエリ名 | `cms_ai スカウト文面マート 日次更新（契約企業マネジメントシステム AI / 毎日JST08:10）` |
+| 設定 ID | `6b16fcc5-0000-23e6-bf43-b8db38fbb212` |
+| スケジュール | 毎日 23:10 UTC（= JST 08:10。上の cms_marts 日次更新 07:45 JST の後。`cms_company_master` を読む） |
+| SQL | `ai/scout_marts.sql`（スクリプト。宛先テーブルなし） |
+| 実行者 | `id-69-213@bq-hgt.iam.gserviceaccount.com` |
+| 登録日 | 2026-11-27（Data Transfer API で登録。登録直後の実行 ok） |
+| SQL の差し替え | 2026-11-27（求人・会員の 2 表を足した版に差し替え）→ 同日、**`dwh_restricted.cms_ai_member_resumes`（候補者の職務経歴・自己PR）を足した版に差し替え**。どちらも、登録された SQL が `ai/scout_marts.sql` と一致することを確認（38,294 文字）。次の実行は 2026-11-28 JST 08:10。実行者 `id-69-213@` は `dwh_restricted` の OWNER（同じ鍵で、スクリプトの全体を手元で実行して ok） |
+
+| 表 | 粒度 | 行数（2026-11-27） |
+|---|---|---|
+| cms_ai_dim_industry_group | 業界 → 類似業界のまとまり（48 → 12） | 48 |
+| cms_ai_scout_templates | 文面（企業 × 本文。社名・URL などは置き換え済み） | 23,400（49.8 MB） |
+| cms_ai_scout_sends | スカウト 1 通（返信・採用・受け取った人の属性） | 269,616（48.0 MB） |
+| cms_ai_scout_drafts | CS が選んだ案（アプリが MERGE で書く） | 0 |
+| cms_ai_scout_draft_outcomes | 案と送信実績の照合 | 0 |
+| cms_ai_jobs | 求人の内容（求人 ID からの作成用。社名・URL などは置き換え済み。求人 ID の 2,000 番ごとにパーティション） | 42,738（97.8 MB） |
+| cms_ai_member_profiles | 候補者の属性（会員 ID からの作成用。退会を除く。会員 ID の 2,000 番ごとにパーティション） | 832,665（204.7 MB） |
+| **`dwh_restricted`**.cms_ai_member_resumes | 候補者の職務経歴・自己PR のテキスト（会員 × 言語。会員 ID からの作成用。**この 1 表だけ、閲覧制限付きのデータセット `dwh_restricted` に置く** = 本文を `dwh` へ写さない。勤務先の社名は持たない。会員 ID の 2,000 番ごとにパーティション） | 166,403（102,223 人。302.4 MB） |
+| cms_ai_refresh_log | 実行記録（`step = 'scout_marts'`） | 追記 |
+
+| SQL | 読む表 | スキャン（2026-11-27 実測） | 上限 | 時間 |
+|---|---|---|---|---|
+| `ai/scout_marts.sql`（日次） | cms_company_master / scouts / scout_histories / **messages**（subject・body。1 回の実行で 1 回）/ member_profile_latest / member_details / **jobs_all**（本文 2 列を含む。約 1.9 GB）/ job_publish_history | 24.6 GB（レジュメの表を足す前は 24.2 GB = 足した分は `dwh_restricted.member_work_histories`・`member_resumes` の 0.43 GB。求人・会員の 2 表を足す前は 20.1 GB） | —（手動実行は `--maximum_bytes_billed=40000000000`） | 96 秒（レジュメの表を足す前は 79〜94 秒、求人・会員を足す前は 34〜40 秒） |
+| Worker `ai_scout_benchmark` | cms_ai_scout_sends / cms_ai_scout_templates / cms_ai_refresh_log | dry run 93 MB（実行 69〜85 MB） | 400 MB | 1.4〜2.0 秒（キャッシュ 0.6 秒） |
+| Worker `ai_scout_options` | cms_ai_scout_sends / cms_ai_refresh_log | 26 MB | 200 MB | 0.5〜0.6 秒 |
+| Worker `ai_scout_outcomes` | cms_ai_scout_draft_outcomes | 0 MB | 50 MB | 0.4 秒 |
+| Worker `ai_scout_drafts_merge`（書き込み） | cms_ai_scout_drafts | 0 MB | 200 MB | 1.7 秒 |
+| Worker `ai_scout_job`（求人 1 件） | cms_ai_jobs | 1.6〜2.3 MB | 200 MB | 0.4〜0.5 秒 |
+| Worker `ai_scout_member`（会員 1 人） | cms_ai_member_profiles | 0.3〜0.4 MB | 400 MB | 0.4〜0.55 秒 |
+| Worker `ai_scout_member_resume`（会員 1 人の職務経歴・自己PR。属性の照会と並行） | **dwh_restricted**.cms_ai_member_resumes | 0.02〜1.24 MB | 400 MB | 0.45〜0.55 秒（属性と合わせた `member()` の全体も 0.46〜0.58 秒） |
+
+- `messages` はパーティションもクラスタリングも無く、件名と本文を読むと期間によらず毎回 約 18.4 GB。日次の 1 回だけにして、依頼ごとには読まない（以前は依頼 1 件につき 1 回 18.4 GB）
+- Worker 用 SA（`cms-bq-reader@bq-hgt`）に、読む 6 表（`cms_ai_jobs`・`cms_ai_member_profiles` を含む。この 2 表は 2026-11-27 時点でまだ付けていない）の dataViewer と、`cms_ai_scout_drafts` の dataEditor を表単位で付ける（コマンドは [`ai/README.md`](./ai/README.md)）。`dwh_restricted.cms_ai_member_resumes` の dataViewer も表単位（データセットの ACL は変えない。まだ付けていない。付けるまでは、候補者は属性だけで返る）
+- スキャン量は `npm run dryrun` で測り直す（AI の 7 つの照会も入っている）

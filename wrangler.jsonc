@@ -17,7 +17,7 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": true
   },
-  // ダッシュボードで設定した Secret（BQ_SA_KEY / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / SESSION_SECRET）をデプロイで消さない
+  // ダッシュボードで設定した Secret（BQ_SA_KEY / VERTEX_SA_KEY / GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / SESSION_SECRET）をデプロイで消さない
   "keep_vars": true,
   "vars": {
     "BQ_PROJECT": "bq-hgt",
@@ -29,6 +29,11 @@
     // CS 担当の既定の出所（マートの owner_source と同じ値）: sales_staff（企業管理ツール）/ sf_account_owner / sf_contract_owner
     "OWNER_SOURCE": "sales_staff",
     "BENCH_MIN_N": "5",
+    // AI 機能（docs/AI機能.md）: Vertex AI の宛先と、使う生成モデルの ID。② スカウトの 3 つのモデル（a / b / c）と、分析の要点・チューニング用
+    "VERTEX_PROJECT": "bq-hgt",
+    "VERTEX_LOCATION": "global",
+    "AI_SCOUT_ENGINES": "a=gemini-3.5-flash-lite,b=gemini-3.8-flash,c=gemini-3.5-flash",
+    "AI_INSIGHT_ENGINE": "gemini-3.8-flash",
     "APP_ENV": "production"
   },
   // 非本番ブランチ（PR）の Workers Builds は `wrangler preview` で動き、この previews ブロックが無いと失敗する。
@@ -42,6 +47,10 @@
       "ALLOWED_EMAIL_DOMAINS": "daijob.com,athuman.com",
       "OWNER_SOURCE": "sales_staff",
       "BENCH_MIN_N": "5",
+      "VERTEX_PROJECT": "bq-hgt",
+      "VERTEX_LOCATION": "global",
+      "AI_SCOUT_ENGINES": "a=gemini-3.5-flash-lite,b=gemini-3.8-flash,c=gemini-3.5-flash",
+      "AI_INSIGHT_ENGINE": "gemini-3.8-flash",
       "APP_ENV": "preview"
     },
     "d1_databases": [
@@ -49,5 +58,35 @@
       { "binding": "CMS_DB", "database_name": "company-management-system", "database_id": "4674c6c0-ec7d-487a-a0fc-24b374d818de", "migrations_dir": "d1/migrations" }
     ]
   },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // 週次の cron（UTC。日曜 20:00 = 月曜 05:00 JST）: ② スカウトのモデルの検証・チューニング（src/worker/index.ts の scheduled）
+  "triggers": { "crons": ["0 20 * * 0"] },
+  // テスト環境（docs/テスト環境.md）。別の Worker `company-management-system-staging` として、`staging` ブランチから出す
+  // （Deploy command: npm run deploy:staging。`--env staging` では切り替わらない =
+  // Vite の Cloudflare プラグインがビルドのときに環境を決めるため）。本番の Worker 名・URL・D1 は変えない。
+  // 数値は本番と同じマート（読み取りだけ）、保存先（D1）は別。ログインは本番と同じ（Secret が無い間は 503）。
+  // vars と d1_databases は env へ引き継がれないので、ここに全部書く。
+  // D1 は database_id を書かずに置く: 初回のデプロイで wrangler が作って結び付ける。作られなかったときは、
+  // ダッシュボードで作って database_id をここに書く（docs/テスト環境.md「うまくいかないとき」）
+  "env": {
+    "staging": {
+      "name": "company-management-system-staging",
+      "vars": {
+        "BQ_PROJECT": "bq-hgt",
+        "BQ_LOCATION": "asia-northeast1",
+        "BQ_MOCK": "0",
+        "CACHE_TTL_SEC": "0",
+        "ALLOWED_EMAIL_DOMAINS": "daijob.com,athuman.com",
+        "OWNER_SOURCE": "sales_staff",
+        "BENCH_MIN_N": "5",
+        "VERTEX_PROJECT": "bq-hgt",
+        "VERTEX_LOCATION": "global",
+        "AI_SCOUT_ENGINES": "a=gemini-3.5-flash-lite,b=gemini-3.8-flash,c=gemini-3.5-flash",
+        "AI_INSIGHT_ENGINE": "gemini-3.8-flash",
+        "APP_ENV": "staging"
+      },
+      "triggers": { "crons": ["0 20 * * 0"] },
+      "d1_databases": [{ "binding": "CMS_DB", "database_name": "company-management-system-staging", "migrations_dir": "d1/migrations" }]
+    }
+  }
 }

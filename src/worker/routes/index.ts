@@ -9,6 +9,7 @@ import { targetRoutes } from './targets';
 import { settingsRoutes } from './settings';
 import { adminRoutes } from './admin';
 import { scoutUnusedRoutes } from './scoutUnused';
+import { aiRoutes } from '../ai/routes';
 
 /** /api 配下。認証ミドルウェアは index.ts で先頭に掛けてあるので、ここに来るリクエストはすべてログイン済み */
 export const api = new Hono<AppEnv>();
@@ -21,4 +22,5 @@ api.route('/', targetRoutes);
 api.route('/', settingsRoutes);
 api.route('/', scoutUnusedRoutes);
 api.route('/', adminRoutes);
+api.route('/', aiRoutes);
 api.all('*', (c) => c.json({ error: 'not found', code: 'notFound' }, 404));

@@ -7,6 +7,9 @@ import { sameOriginGuard } from './auth/csrf';
 import { requestLog } from './lib/log';
 import { authRoutes } from './auth/routes';
 import { api } from './routes';
+import type { Env } from './env';
+import { makeScoutDataSource } from './ai/scout/bqDataSource';
+import { scheduledScoutTuning } from './ai/scout/service';
 import { errorResponse } from './lib/errors';
 
 const app = new Hono<AppEnv>();
@@ -18,8 +21,20 @@ app.use('/api/*', sameOriginGuard);
 app.use('/api/*', requestLog);
 app.route('/auth', authRoutes);
 app.route('/api', api);
+// 以前の AI 機能のセッション用の入口（/hook/ai/*）は無くした。ログインの外の入口は /auth/ だけ。/hook/ は、ログイン済みでも 404（静的アセットへ落とさない）
+app.all('/hook/*', (c) => c.json({ error: 'not found', code: 'notFound' }, 404));
 app.onError(errorResponse);
 // それ以外は静的アセット（SPA）
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
-export default app;
+/**
+ * fetch = 画面と API、scheduled = 週次の cron（wrangler.jsonc の triggers。月曜 05:00 JST）: ② スカウトのモデルの検証・チューニング（docs/AI機能.md）。
+ * app.fetch / app.request は、テストがそのまま呼べるように残す
+ */
+export default {
+  fetch: app.fetch,
+  request: app.request,
+  scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): void {
+    ctx.waitUntil(scheduledScoutTuning(env, makeScoutDataSource));
+  },
+};

@@ -6,6 +6,7 @@ import { parseAllowList } from '../auth/allowlist';
 import { todayJst } from '../../shared/calendar/periods';
 import { DATA_VERSION } from '../../shared/schema/common';
 import type { HealthResponse } from '../../shared/schema/me';
+import { vertexConfigured } from '../ai/vertex';
 
 export const healthRoutes = new Hono<AppEnv>();
 
@@ -23,6 +24,7 @@ healthRoutes.get('/health', (c) => {
     allowedDomains: Array.from(allow.domains),
     allowedEmailsCount: allow.emails.size,
     dataVersion: DATA_VERSION,
+    ai: { vertex: vertexConfigured(c.env), store: Boolean(c.env.CMS_DB), admins: parseAllowList(c.env.AI_ADMIN_EMAILS).emails.size },
   };
   return c.json(body);
 });

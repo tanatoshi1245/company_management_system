@@ -4,6 +4,7 @@ import type { PageProps } from '../../router';
 import { useSession } from '../../lib/session';
 import { useResource } from '../../lib/useResource';
 import { useUrlState } from '../../lib/urlState';
+import { setCompanyView } from '../../lib/companyView';
 import { navigate } from '../../router';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { Notice } from '../../components/ui/Notice';
@@ -46,6 +47,11 @@ export default function CompanyPage({ params }: PageProps) {
   const tab = (url.tab || 'jobs') as CompanyTab;
   const res = useResource(to && /^\d{1,12}$/.test(id) ? `/api/companies/${id}?month=${to}` : null, CompanyDetailResponseSchema, { ttlMs: 5 * 60_000 });
   const sel = useMemo(() => (res.data ? resolvePeriod(res.data, url) : null), [res.data, url]);
+  // 表示中の期間・アカウント種別を、左のレールの AI メニューへ引き継ぐ（離れたら消す）
+  useEffect(() => {
+    setCompanyView(sel ? { companyId: id, from: sel.from, to: sel.to, account: sel.account } : null);
+    return () => setCompanyView(null);
+  }, [id, sel]);
   const base = sel ? `from=${sel.from}&to=${sel.to}${sel.account ? `&account=${encodeURIComponent(sel.account)}` : ''}` : null;
   const jobs = useResource(base ? `/api/companies/${id}/jobs?${base}${sel?.job ? `&job=${sel.job}` : ''}` : null, JobsResponseSchema, { ttlMs: 5 * 60_000 });
   const model = useCompanyModel(res.data, sel, jobs.data);

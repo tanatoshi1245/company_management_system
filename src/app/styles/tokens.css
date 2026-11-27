@@ -1,25 +1,34 @@
-/* 複製元: sales_dashboard_IS-FS_ver2 の src/app/styles/tokens.css（Daijob ブランドトークン）。変更点: 間隔・文字サイズ・動き・ヒートマップ／順序ランプのトークンを追加。ダークは v1 では使わない */
+/*
+ * デザイントークン。2026-11-25 に画面のデザインを更新（ユーザー指示。slide_creator のアプリ画面と同じ考え方）:
+ *   コーポレートカラーのネイビー #000066 とイエロー #FFB81C を軸に、面・文字・罫線は青みのグレーでそろえる。
+ *   面（Background）・文字（Text）・罫線（Border）・角丸（Radius 100 / 200 / 400 / Full）・影（Drop Shadow 100 / 200 / 400）の段階は、
+ *   Figma の Simple Design System（Figma の MCP で変数・部品の構成を参照）に合わせている。
+ *   チャートの色（--accent・--seq-*・--heat-*・--cat-*）は検証済みの値のまま変えていない（components/charts/README.md）。
+ * 元は sales_dashboard_IS-FS_ver2 の tokens.css。ダークは使わない
+ */
 :root {
   color-scheme: light;
   /* ブランド（Daijob Design System） */
   --dj-navy: #000066;
-  --dj-navy-deep: #000044;
-  --dj-navy-soft: #333399;
-  --dj-gold: #D4AF37;
-  --dj-gold-deep: #735C00;
-  --dj-gold-pale: #FFF3C4;
+  --dj-navy-deep: #00004a;
+  --dj-navy-soft: #3f43b0;
+  --dj-navy-tint: #eef0fa;
+  --dj-navy-tint-2: #dfe3f6;
+  --dj-gold: #ffb81c;
+  --dj-gold-deep: #8a5a00;
+  --dj-gold-pale: #fff6dd;
 
-  /* 面・文字（暖色グレー） */
-  --page: #F6F3F2;
+  /* 面・文字（青みのグレー） */
+  --page: #f5f6fa;
   --surface: #FFFFFF;
-  --surface-low: #FCF9F8;
-  --surface-sunken: #EFECEA;
-  --ink: #1B1C1C;
-  --ink-soft: #4D4635;
-  --muted: #7F7663;
-  --rule: #E0E0E0;
-  --rule-strong: #C8C8C8;
-  --hairline: rgba(27, 28, 28, 0.1);
+  --surface-low: #f8f9fc;
+  --surface-sunken: #eef0f6;
+  --ink: #15182d;
+  --ink-soft: #4b5068;
+  --muted: #6f7590;
+  --rule: #e2e5ee;
+  --rule-strong: #c9cedc;
+  --hairline: rgba(21, 24, 45, 0.1);
   --heading: var(--dj-navy);
   --link: var(--dj-navy);
 
@@ -47,9 +56,9 @@
   --good: #006300;
   --warn: #8A5A00;
   --bad: #BA1A1A;
-  --good-bg: #E6F4E6;
-  --warn-bg: #FFF3C4;
-  --bad-bg: #FDECEC;
+  --good-bg: #e6f5ed;
+  --warn-bg: #fff6dd;
+  --bad-bg: #fdeceb;
 
   /* チャートの地 */
   --grid: #E9E8E4;
@@ -59,7 +68,7 @@
   /* 2 系列の折れ線（識別色。validate_palette.js で検証済み: charts/README.md） */
   --cat-1: #414AB2;
   --cat-2: #B8860B;
-  --tooltip-bg: #1B1C1C;
+  --tooltip-bg: #15182d;
   --tooltip-ink: #FFFFFF;
 
   /* 文字 */
@@ -83,16 +92,24 @@
   --s5: 24px;
   --s6: 32px;
   --s7: 48px;
-  --radius: 3px;
+  /* 角丸（Simple Design System の Radius 100 / 200 / 400 / Full に当たる段階） */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
   --row-h: 36px;
   --cell-gap: 2px;
-  --rail-w: 232px;
+  --rail-w: 248px;
 
   /* 動き・フォーカス */
   --motion: 150ms cubic-bezier(0.2, 0, 0, 1);
   --motion-slow: 250ms cubic-bezier(0.2, 0, 0, 1);
-  --focus: 2px solid var(--dj-gold);
-  --shadow-pop: 0 8px 24px rgba(0, 0, 102, 0.1);
+  --focus: 2px solid var(--dj-navy-soft);
+  --ring: 0 0 0 3px rgba(0, 0, 102, 0.16);
+  /* 影（Drop Shadow 100 / 200 / 400 に当たる段階） */
+  --shadow-100: 0 1px 2px rgba(16, 24, 64, 0.06);
+  --shadow-200: 0 1px 3px rgba(16, 24, 64, 0.06), 0 4px 12px -2px rgba(16, 24, 64, 0.06);
+  --shadow-pop: 0 4px 6px -4px rgba(16, 24, 64, 0.08), 0 16px 32px -6px rgba(16, 24, 64, 0.16);
 }
 @media (prefers-reduced-motion: reduce) {
   :root {

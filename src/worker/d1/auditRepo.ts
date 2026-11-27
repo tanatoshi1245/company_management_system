@@ -1,7 +1,7 @@
 import type { D1Like, D1StmtLike } from './db';
 import type { AuditEntry } from '../../shared/schema/targets';
 
-export type AuditEntity = 'company_targets' | 'company_settings' | 'plan_target_defaults' | 'app_meta' | 'scout_unused_entries';
+export type AuditEntity = 'company_targets' | 'company_settings' | 'plan_target_defaults' | 'app_meta' | 'scout_unused_entries' | 'ai_jobs' | 'ai_scout_drafts' | 'ai_scout_models';
 
 export interface AuditInput {
   at: string;

@@ -1,8 +1,10 @@
 import type { MeResponse, MetaResponse } from '../../../shared/schema/me';
 import { isoToJstDisplay } from '../../../shared/calendar/periods';
-import { Link, type RouteKey } from '../../router';
+import { Link, navigate, useLocation, type RouteKey } from '../../router';
 import { Icon, type IconName } from './Icon';
 import { fmtYmd } from '../../lib/format';
+import { AI_KIND_LABEL } from '../../../shared/ai/common';
+import { getCompanyView, type CompanyView } from '../../lib/companyView';
 
 const NAV: { key: RouteKey[]; to: string; label: string; icon: IconName }[] = [
   { key: ['home', 'company'], to: '/', label: 'ボード', icon: 'home' },
@@ -10,8 +12,35 @@ const NAV: { key: RouteKey[]; to: string; label: string; icon: IconName }[] = [
   { key: ['scoutUnused'], to: '/scout-unused', label: 'スカウト未利用', icon: 'edit' },
 ];
 
-/** 左の固定レール: ブランド・ナビ・データの鮮度・ログイン者 */
+/**
+ * AI メニュー（docs/AI機能.md。2026-11-25 ユーザー指示: 左のレールにサブメニューを設ける）。
+ * 2026-11-27: まずスカウトだけを出す（「AI 分析とレポート生成」「求人の AI 添削」は後の段階。下の aiNavTarget の /ai/report 用の引き継ぎは、そのときに使う）
+ */
+const AI_NAV: { key: RouteKey; to: string; label: string; icon: IconName }[] = [{ key: 'aiScout', to: '/ai/scout', label: AI_KIND_LABEL.scout, icon: 'mail' }];
+
+/**
+ * AI メニューのリンク先。企業ページ（/companies/:id）を開いているときは、その企業を引き継ぐ。
+ * 「AI 分析とレポート生成」には、表示している期間・アカウント種別も引き継ぐ（表示中の内容でレポートを作るため）
+ */
+export function aiNavTarget(to: string, pathname: string, search: string, view: CompanyView | null = null): string {
+  const m = /^\/companies\/(\d{1,12})\/?$/.exec(pathname);
+  if (!m) return to;
+  const cur = new URLSearchParams(search);
+  const q = new URLSearchParams({ company: m[1] });
+  if (to === '/ai/report') {
+    // 企業ページが解決した期間（URL に無い既定の期間を含む）を優先し、無ければ URL の値
+    const shown = view && view.companyId === m[1] ? view : null;
+    for (const k of ['from', 'to', 'account'] as const) {
+      const v = shown ? shown[k] : cur.get(k);
+      if (v) q.set(k, v);
+    }
+  }
+  return `${to}?${q.toString()}`;
+}
+
+/** 左の固定レール: ブランド・ナビ・AI メニュー・データの鮮度・ログイン者 */
 export function LeftRail({ me, meta, active }: { me: MeResponse | null; meta: MetaResponse | null; active: RouteKey | null }) {
+  const { pathname, search } = useLocation();
   return (
     <>
       <div className="rail-brand">
@@ -29,9 +58,33 @@ export function LeftRail({ me, meta, active }: { me: MeResponse | null; meta: Me
           </Link>
         ))}
       </nav>
+      <nav className="rail-nav rail-sub" aria-label="AI メニュー">
+        <div className="rail-sub-title">AI メニュー</div>
+        {AI_NAV.map((n) => (
+          <Link
+            key={n.to}
+            to={aiNavTarget(n.to, pathname, search, getCompanyView())}
+            aria-current={active === n.key ? 'page' : undefined}
+            onClick={(e) => {
+              // 表示中の期間は企業ページの描画の後に決まるので、押した時点の内容で行き先を決め直す
+              if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              e.preventDefault();
+              navigate(aiNavTarget(n.to, window.location.pathname, window.location.search, getCompanyView()));
+            }}
+          >
+            <Icon name={n.icon} />
+            {n.label}
+          </Link>
+        ))}
+      </nav>
       {meta?.mock ? (
         <div>
           <span className="ribbon">サンプルデータ</span>
+        </div>
+      ) : null}
+      {meta?.stage === 'staging' ? (
+        <div>
+          <span className="ribbon warn">テスト環境</span>
         </div>
       ) : null}
       {meta ? (

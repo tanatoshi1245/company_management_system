@@ -6,7 +6,8 @@ export const CSP = [
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
-  "font-src 'self'",
+  // data: は PDF の作成（スライドを画像にするとき、使う文字だけのフォントを埋め込む。features/ai/report/pdf）のため。外部の CDN は許可しない
+  "font-src 'self' data:",
   "connect-src 'self'",
   "frame-ancestors 'none'",
   "base-uri 'self'",

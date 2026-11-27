@@ -29,6 +29,17 @@ export interface Env {
   /** モック時のログイン者メール（担当=自分 の確認用） */
   DEV_USER_EMAIL?: string;
   APP_ENV?: string;
+  /** AI 機能（docs/AI機能.md）: Vertex AI のプロジェクトと location（wrangler.jsonc の vars。`bq-hgt`・`global`） */
+  VERTEX_PROJECT?: string;
+  VERTEX_LOCATION?: string;
+  /** AI 機能: Vertex AI を呼ぶ SA の鍵 JSON（Secret。無ければ BQ_SA_KEY を使う。/api/health・/api/ai/config に値を出さない） */
+  VERTEX_SA_KEY?: string;
+  /** AI 機能 ② スカウト: 3 つのモデルが使う生成モデルの ID（`a=…,b=…,c=…`。vars） */
+  AI_SCOUT_ENGINES?: string;
+  /** AI 機能: 分析の要点とチューニングに使う生成モデルの ID（vars） */
+  AI_INSIGHT_ENGINE?: string;
+  /** AI 機能: 管理者のメール（カンマ区切り）。モデルの作り方（プレイブック）を見て、検証・チューニングを実行できる人。未設定なら誰も管理者にならない */
+  AI_ADMIN_EMAILS?: string;
 }
 
 export function isMock(env: Env): boolean {

@@ -1,6 +1,8 @@
 ---
 tags: [domain/company-behavior, domain/scout, domain/application, domain/sales, layer/application, type/app-spec, table/cms_company_master, table/cms_company_monthly]
 related:
+  - "[[docs/AI機能]]"
+  - "[[docs/テスト環境]]"
   - "[[docs/指標定義]]"
   - "[[docs/データ紐付け]]"
   - "[[docs/数値の出所]]"
@@ -44,6 +46,7 @@ CS（カスタマーサクセス）向けの社内 Web アプリ。契約中企�
 | `/` | 契約企業ボード | KPI タイル（契約企業数・求人枠消化率・ペース遅れ・ログインなし・契約終了間近）→ 注目レーン → `担当=自分` などの絞り込み → **マトリクス・ヒートマップ**（利用状況 / 反応 / 選考 / 接点 × 企業）。右上で **業界比 | 目標比** を切替（再取得なし） |
 | `/companies/:id` | 企業詳細 | **期間（開始月〜終了月）とアカウント種別（全体 / 直接 / 紹介 / 派遣。複数アカウント企業のみ）の切替**、契約期間・残日数・最終ログインのカード、その下に **3 タブ**（2026-10-30〜）: **求人の実績**（掲載求人数 / 閲覧件数 / 応募件数 / 採用（応募経由）、閲覧と応募の推移（1 軸）、誰が求人を見ているか（閲覧 / 応募）、**求人ごとの実績の表と求人フィルタ**（求人を選ぶとカード・推移・円グラフ・選考状況がその求人の分に）、その右に **掲載した求人の条件**（日本語レベル / 英語レベル / 勤務地 / 職種 / 年収幅 の円グラフ。試作））/ **スカウトの実績**（送信 / 興味あり返信 / 選考中 / 採用、送信と興味あり返信の推移、誰にスカウトを送っているか（送信 / 興味あり）、スカウト未利用状況）/ **選考状況**（面接調整中 → 採用 の 6 枚。期間中に応募 / 興味あり返信した人の今のステータス別人数） |
 | `/scout-unused` | スカウト未利用の理由 | 前月（固定）に「1 日でも求人を掲載・スカウト送信 0 件・今日時点で契約中・DA / RPO / NW 以外」の企業（枠数では絞らない）を 種別 / CS 担当 / 企業名 / 理由 / 補足 / 登録 の列で並べ（広告掲載の企業は企業名を黄色で強調。担当 = 自分 / CS 担当 / 登録状況 / 企業種別 / 契約種別 / 検索で絞り込み。選択肢は互いに連動）、理由（プルダウン 8 件）と補足（500 文字）を登録。D1 に保存 → BigQuery `scout_unused_companies_monthly` に `match_method = 'app'` の行として MERGE → 翌朝のマートで企業ページに統合（即時には D1 を重ねて表示） |
+| `/ai/scout` | **スカウト文面の AI 作成**（左のレールの AI メニュー。2026-11-27〜。[AI 機能](./docs/AI機能.md)） | 類似業界 × 直近 1 年で返信率 10% 超の文面（上位 1000 件）を分析し、件名・構成・文章量・特徴をもとに、3 つのモデルが 1 案ずつ作る（Vertex AI。十数秒）。送る相手の条件（年齢層・語学力など）を指定すると、その条件の送信実績で分析し直す。CS が案を選び、企業が使ったか・返信・採用とあわせて、モデルごとに検証・チューニングが回る（週次）。求人の AI 添削・AI 分析とレポート生成は、この後に順に作る |
 | `/targets`, `/targets/:id` | 契約時の目標（メニューには出さない。URL 直打ちで開ける） | 一覧（達成率バー・未設定のみ・プラン既定値で一括登録）、企業別 12 か月グリッド（前月からコピー・既定値の適用・差分だけ保存・変更履歴）、企業の設定（担当上書き・枠の期間 / 上書き・メモ） |
 | `/settings`, `/help` | 設定・ヘルプ（メニューには出さない。URL 直打ちで開ける） | データの鮮度、Worker 設定の有無、プラン別の既定目標、担当上書き一覧、キャッシュ破棄、指標の定義一覧 |
 
@@ -72,7 +75,8 @@ CS（カスタマーサクセス）向けの社内 Web アプリ。契約中企�
 ## ディレクトリ
 
 ```
-docs/                 指標定義 / データ紐付け / 画面設計 / デプロイ手順 / Google_Cloud認証情報の発行手順 / ドメイン認証 / セキュリティチェックリスト
+bq/ai/                AI 機能の分析用マート（cms_ai_*。日次の別スクリプト。スカウトの文面・送信・選ばれた案の照合）
+docs/                 AI機能 / テスト環境 / 指標定義 / データ紐付け / 画面設計 / デプロイ手順 / Google_Cloud認証情報の発行手順 / ドメイン認証 / セキュリティチェックリスト
 bq/marts/             日次マート cms_* の SQL（init.sql / scheduled_query.sql / steps）と各マートの README
 d1/migrations/        D1 スキーマ（0001_init / 0002_plan_defaults）、seed.local.sql
 scripts/              bq-dryrun.ts（各クエリのスキャン量）/ bq-smoke.ts（疎通）/ update-holidays.ts / put-secret.sh
@@ -103,6 +107,8 @@ tests/                vitest（worker / shared / app / repo）。helpers/fakeD1.
 | GET /api/scout-unused?month= | session | その月の登録（D1）とシート取込の記録 |
 | PUT / DELETE /api/scout-unused/:companyId/:month、POST /api/scout-unused/sync | verified + 同一オリジン | スカウト未利用の理由・補足の登録・削除（D1 + 監査ログを 1 batch → BigQuery MERGE）、未反映の再同期 |
 | POST /api/admin/cache/bump | verified | Worker キャッシュの破棄（cache_epoch +1） |
+| GET /api/ai/config・/api/ai/companies・/api/ai/companies/:id/defaults・/api/ai/scout/options・/api/ai/jobs・/api/ai/jobs/:jobId・/api/ai/scout/models | session | AI 機能: 設定の有無・企業の選択肢・自動で入れる値・送る相手の条件の選択肢・履歴・1 件の全体・モデルの成績（[AI 機能](./docs/AI機能.md) の API の表） |
+| POST /api/companies/:id/ai/jobs、PUT / DELETE /api/ai/jobs/:jobId/edited、PUT /api/ai/jobs/:jobId/scout/choice・…/scout/usage、DELETE /api/ai/jobs/:jobId、POST /api/ai/scout/tune・/api/ai/scout/models/:id/rollback（管理者） | verified + 同一オリジン | AI 機能: 文面を作る（その場で返す）・手直しの保存・どの案を選んだか・企業が使ったか・履歴から消す・検証とチューニング・版を戻す |
 
 エラーは `{error, code, details?}`（code: noSession / notAllowed / authConfig / readOnly / csrf / badRequest / notFound / bq / noCredentials / storage / internal）。詳細は `src/worker/routes/README.md`。
 
@@ -112,7 +118,8 @@ tests/                vitest（worker / shared / app / repo）。helpers/fakeD1.
 - **認可の前提（v1）**: ログインした社内の人は全企業を閲覧でき、どの企業の目標・設定も編集できる（CS は互いに代理）。企業 ID は形式検証 + マスタ存在確認、`company_id` は URL からだけ、書き込みは Google で確かめた人だけ、すべて監査ログに残る。担当だけに編集を限るのは将来の変更点
 - **入力**: zod の strict スキーマ（未知キー拒否・上限）、BigQuery は `@param`、D1 は `prepare().bind()`、`sort` 等は許可リスト、書き込みは同一オリジンのみ
 - **外部通信**: `safeFetch` のホスト許可リスト。ユーザー入力の URL を fetch しない。`eval` 不使用
-- **認証情報**: Workers Secret のみ（`BQ_SA_KEY` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `SESSION_SECRET`）。専用 SA `cms-bq-reader@bq-hgt`（読み取り専用）と専用 OAuth クライアント。**SA 鍵 JSON を Secret に置くのはセキュリティ要件 §3.1 の例外**（Workers は SA をアタッチできない。90 日ローテーション）
+- **AI 機能**: Worker が Vertex AI を直接呼ぶ（宛先は許可リストの `aiplatform.googleapis.com`）。ログインの外の入口は無い。入力・作られた文面の社名と個人情報は保存の前に確かめ、Vertex AI へ企業名を渡さない（[AI 機能](./docs/AI機能.md)）
+- **認証情報**: Workers Secret のみ（`BQ_SA_KEY` / `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `SESSION_SECRET`。Vertex AI も同じ SA の鍵で呼ぶ。別の SA にするときは `VERTEX_SA_KEY`）。専用 SA `cms-bq-reader@bq-hgt`（読み取り専用）と専用 OAuth クライアント。**SA 鍵 JSON を Secret に置くのはセキュリティ要件 §3.1 の例外**（Workers は SA をアタッチできない。90 日ローテーション）
 - **応答**: CSP / nosniff / X-Frame-Options DENY / Referrer-Policy。エラーにスタック・SQL・ホスト名を含めない。`/api/health` は真偽値だけ
 - **ログ**: Workers Logs に 1 リクエスト 1 行（誰が・いつ・何を・結果・所要時間 `server-timing`）、D1 `audit_log` に書き込みの前後の値
 - **確認済み（2026-10-23）**: `git ls-files` に鍵なし、全履歴 grep に鍵の値なし、`npm audit --audit-level=high` 0 件、フロントのバンドルに `private_key` / `client_secret` なし（CI でも検査）

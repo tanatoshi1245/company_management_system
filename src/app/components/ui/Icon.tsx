@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'target' | 'settings' | 'help' | 'search' | 'close' | 'arrowRight' | 'arrowLeft' | 'external' | 'copy' | 'history' | 'warning' | 'check' | 'chevronDown' | 'refresh' | 'logout' | 'edit' | 'filter';
+export type IconName = 'home' | 'target' | 'settings' | 'help' | 'search' | 'close' | 'arrowRight' | 'arrowLeft' | 'external' | 'copy' | 'history' | 'warning' | 'check' | 'chevronDown' | 'refresh' | 'logout' | 'edit' | 'filter' | 'slides' | 'mail' | 'doc';
 
 const PATHS: Record<IconName, string> = {
   home: 'M3 8.5 8 4l5 4.5V13H9.5V9.5h-3V13H3z',
@@ -19,6 +19,9 @@ const PATHS: Record<IconName, string> = {
   logout: 'M6 2.5H3.5a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1H6M10 11.5 13.5 8 10 4.5M13.5 8H6',
   edit: 'M10.5 2.5 13.5 5.5 6 13H3v-3zM9 4l3 3',
   filter: 'M2 3h12l-4.5 5.5V13L7 11.5V8.5z',
+  slides: 'M2 3h12v8H2zM5.5 14h5M8 11v3M5 8.5l2-2 1.5 1.5L11 5.5',
+  mail: 'M2 3.5h12v9H2zM2 4l6 5 6-5',
+  doc: 'M4 1.5h5.5L12.5 4.5v10h-8.5zM9.5 1.5v3h3M6 8h4.5M6 10.5h4.5',
 };
 
 /** 1.5px ストロークの線画アイコン（currentColor）。絵文字・アイコンフォントは使わない */
