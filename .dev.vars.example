@@ -13,3 +13,5 @@ DEV_USER_EMAIL=preview@daijob.com
 # ALLOWED_EMAIL_DOMAINS=daijob.com
 # 個別に許可するメール（@partner.example のようにドメインも書ける）
 # ALLOWED_EMAILS=a@daijob.com,b@daijob.com
+# AI 機能の停止スイッチ（既定は停止。docs/AI機能.md）。ローカルで、サンプルデータの見本の画面を確かめるときだけ 1 にする（Vertex AI は呼ばれない）
+# AI_ENABLED=1

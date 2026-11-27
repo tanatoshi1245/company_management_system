@@ -1,3 +1,5 @@
+import type { MiddlewareHandler } from 'hono';
+import { AI_DISABLED_MESSAGE, aiEnabled } from './enabled';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv, Ctx } from '../types';
@@ -24,6 +26,14 @@ import { scoutRoutes } from './scout/routes';
 
 /** AI 機能の API（/api の下。docs/AI機能.md の表）。認証と同一オリジンの確認は index.ts で先頭に掛けてある。② スカウトのフィードバック・モデルは scout/routes.ts */
 export const aiRoutes = new Hono<AppEnv>();
+
+// 停止スイッチ（enabled.ts）: 停止中は、AI 機能の API をすべて 503 にする（BigQuery の分析用の表も Vertex AI も触らない）
+const aiGate: MiddlewareHandler<AppEnv> = async (c, next) => {
+  if (!aiEnabled(c.env)) return c.json({ error: AI_DISABLED_MESSAGE, code: 'aiDisabled' }, 503, { 'cache-control': 'private, no-store' });
+  await next();
+};
+aiRoutes.use('/ai/*', aiGate);
+aiRoutes.use('/companies/:id/ai/*', aiGate);
 
 const NO_STORE = { 'cache-control': 'private, no-store' } as const;
 const dbOf = (c: Ctx): D1Like | null => (c.env.CMS_DB ? asD1(c.env.CMS_DB) : null);

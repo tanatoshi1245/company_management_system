@@ -1,3 +1,4 @@
+import { AI_DISABLED_MESSAGE, aiEnabled } from './enabled';
 import type { z } from 'zod';
 import type { Env } from '../env';
 import { isMock } from '../env';
@@ -216,6 +217,8 @@ async function once<T>(env: Env, token: string, r: VertexJsonRequest<T>, fetchIm
 export async function callVertexJson<T>(env: Env, r: VertexJsonRequest<T>): Promise<VertexJsonResult<T>> {
   const t0 = Date.now();
   const fetchImpl = r.fetchImpl ?? safeFetch;
+  // 停止スイッチ（enabled.ts）: 停止中は、どこから呼ばれても Vertex AI へ出ていかない
+  if (!aiEnabled(env)) throw new VertexError('config', AI_DISABLED_MESSAGE);
   if (!vertexConfigured(env) || !validEngine(r.engine)) throw new VertexError('config', 'Vertex AI の設定がありません');
   let sa: ServiceAccountKey;
   try {

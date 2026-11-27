@@ -38,6 +38,8 @@ export interface Env {
   AI_SCOUT_ENGINES?: string;
   /** AI 機能: 分析の要点とチューニングに使う生成モデルの ID（vars） */
   AI_INSIGHT_ENGINE?: string;
+  /** AI 機能の停止スイッチ。"1" のときだけ AI 機能が動く（既定は停止。src/worker/ai/enabled.ts） */
+  AI_ENABLED?: string;
   /** AI 機能: 管理者のメール（カンマ区切り）。モデルの作り方（プレイブック）を見て、検証・チューニングを実行できる人。未設定なら誰も管理者にならない */
   AI_ADMIN_EMAILS?: string;
 }

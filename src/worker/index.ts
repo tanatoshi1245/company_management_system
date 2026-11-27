@@ -11,6 +11,7 @@ import type { Env } from './env';
 import { makeScoutDataSource } from './ai/scout/bqDataSource';
 import { scheduledScoutTuning } from './ai/scout/service';
 import { errorResponse } from './lib/errors';
+import { aiEnabled } from './ai/enabled';
 
 const app = new Hono<AppEnv>();
 
@@ -35,6 +36,8 @@ export default {
   fetch: app.fetch,
   request: app.request,
   scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): void {
+    // 停止スイッチ（ai/enabled.ts）: 停止中は何もしない
+    if (!aiEnabled(env)) return;
     ctx.waitUntil(scheduledScoutTuning(env, makeScoutDataSource));
   },
 };

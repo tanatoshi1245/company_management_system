@@ -49,6 +49,8 @@ export const MetaResponseSchema = z.object({
   mock: z.boolean(),
   /** どの環境か（wrangler.jsonc の APP_ENV）: production / staging（docs/テスト環境.md）/ preview */
   stage: z.string().default('production'),
+  /** AI 機能が動いているか（停止スイッチ = AI_ENABLED。false の間は、左のレールに AI メニューを出さない） */
+  ai: z.boolean().default(false),
 });
 export type MetaResponse = z.infer<typeof MetaResponseSchema>;
 

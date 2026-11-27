@@ -58,6 +58,7 @@ export function LeftRail({ me, meta, active }: { me: MeResponse | null; meta: Me
           </Link>
         ))}
       </nav>
+      {meta?.ai ? (
       <nav className="rail-nav rail-sub" aria-label="AI メニュー">
         <div className="rail-sub-title">AI メニュー</div>
         {AI_NAV.map((n) => (
@@ -77,6 +78,7 @@ export function LeftRail({ me, meta, active }: { me: MeResponse | null; meta: Me
           </Link>
         ))}
       </nav>
+      ) : null}
       {meta?.mock ? (
         <div>
           <span className="ribbon">サンプルデータ</span>

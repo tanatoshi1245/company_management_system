@@ -8,6 +8,7 @@ import { HOLIDAYS_VERSION, monthProgress } from '../../shared/calendar/businessD
 import { DATA_VERSION } from '../../shared/schema/common';
 import type { MetaResponse } from '../../shared/schema/me';
 import { CAVEATS } from '../../shared/caveats';
+import { aiEnabled } from '../ai/enabled';
 
 export const metaRoutes = new Hono<AppEnv>();
 
@@ -34,6 +35,7 @@ metaRoutes.get('/meta', async (c) => {
     dataSchemaVersion: DATA_VERSION,
     mock: isMock(c.env),
     stage: c.env.APP_ENV?.trim() || 'production',
+    ai: aiEnabled(c.env),
   };
   return c.json(body);
 });

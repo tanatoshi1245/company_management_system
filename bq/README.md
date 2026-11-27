@@ -108,6 +108,9 @@ bq query --use_legacy_sql=false 'SELECT * FROM `bq-hgt.dwh.cms_refresh_log` ORDE
 |---|---|
 | スケジュールドクエリ名 | `cms_ai スカウト文面マート 日次更新（契約企業マネジメントシステム AI / 毎日JST08:10）` |
 | 設定 ID | `6b16fcc5-0000-23e6-bf43-b8db38fbb212` |
+
+> **2026-11-27: この設定は無効にしてある**（ユーザー指示。AI 機能の内容の確認が済むまで、`cms_ai_*` の日次更新を止める。Data Transfer の `disabled = true`。本体の `cms_marts 日次更新` は動いたまま）。再開は、BigQuery Studio → スケジュールドクエリ → この設定を有効にする。表は 2026-11-27 時点の内容のまま残っている。
+
 | スケジュール | 毎日 23:10 UTC（= JST 08:10。上の cms_marts 日次更新 07:45 JST の後。`cms_company_master` を読む） |
 | SQL | `ai/scout_marts.sql`（スクリプト。宛先テーブルなし） |
 | 実行者 | `id-69-213@bq-hgt.iam.gserviceaccount.com` |

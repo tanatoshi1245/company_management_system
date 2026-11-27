@@ -227,9 +227,10 @@ describe('② スカウト: モデルの検証・アップデート・チュー�
 
   it('cron: default export に scheduled があり、週次で同じ処理を実行する。D1・Vertex AI の設定が無い・サンプルデータのときは何もしない', async () => {
     const v = stubVertex();
-    const wrangler = JSON.parse(readFileSync(join(process.cwd(), 'wrangler.jsonc'), 'utf8').replace(/^\s*\/\/.*$/gm, '')) as { triggers: { crons: string[] }; env: { staging: { triggers: { crons: string[] } } }; vars: Record<string, string> };
-    expect(wrangler.triggers.crons).toEqual(['0 20 * * 0']);
-    expect(wrangler.env.staging.triggers.crons).toEqual(['0 20 * * 0']);
+    const wrangler = JSON.parse(readFileSync(join(process.cwd(), 'wrangler.jsonc'), 'utf8').replace(/^\s*\/\/.*$/gm, '')) as { triggers?: { crons: string[] }; env: { staging: { triggers?: { crons: string[] } } }; vars: Record<string, string> };
+    // 2026-11-27: AI 機能の停止に合わせて、cron は設定から外してある（再開するときに戻す = tests/worker/aiDisabled.test.ts）
+    expect(wrangler.triggers).toBeUndefined();
+    expect(wrangler.env.staging.triggers).toBeUndefined();
     expect(wrangler.vars).toMatchObject({ VERTEX_PROJECT: 'bq-hgt', VERTEX_LOCATION: 'global' });
     expect(typeof worker.fetch).toBe('function');
     seedJudged(8, 'c');
