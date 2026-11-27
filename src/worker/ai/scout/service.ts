@@ -11,13 +11,18 @@ import {
   ScoutResultSchema,
   SCOUT_BODY_MAX,
   SCOUT_SUBJECT_MAX,
+  scoutBasisUsesJob,
+  scoutBasisUsesMember,
   type ScoutChoiceInput,
   type ScoutDraftFeedback,
   type ScoutInput,
+  type ScoutJobSummary,
+  type ScoutMemberSummary,
   type ScoutModel,
   type ScoutModelId,
   type ScoutModelsResponse,
   type ScoutResult,
+  type ScoutTarget,
   type ScoutTuneResponse,
   type ScoutUsedState,
 } from '../../../shared/ai/scout';
@@ -25,12 +30,13 @@ import { AiJobsRepo, type AiJobRow } from '../repo';
 import { newJobId } from '../ids';
 import { companyBrief, isAiAdmin, issuesOf, PII_MESSAGE, piiDetails, toDetail, type AiDeps, type WaitCtx } from '../service';
 import { scoutEngines, totalTokens, vertexConfigured, VertexError } from '../vertex';
-import type { ScoutDataSource } from './dataSource';
+import type { ScoutDataSource, ScoutJobInfo, ScoutMemberInfo } from './dataSource';
 import { generateScoutDrafts } from './generate';
 import { getScoutInsight } from './insight';
 import { SCOUT_MODELS } from './models';
 import { ScoutRepo, type ScoutDraftRow } from './repo';
 import { scoutSample } from './sample';
+import { effectiveInput, jobSummaryOf, maskJob, memberSummaryOf, targetOf } from './target';
 import { activateNewVersion, countsKey, runScoutTuning, statsByVersion, statsOf, TUNE_SCHEDULE_LABEL, tuneNoteOf } from './tuning';
 
 /**
@@ -47,13 +53,80 @@ export const NO_BENCHMARK_MESSAGE = '分析に使える送信実績がありま�
 const DATA_ERROR_MESSAGE = '分析に使うデータの取得に失敗しました。時間をおいて、もう一度お試しください';
 export const AI_CONFIG_MESSAGE = 'AI 機能の設定（Vertex AI）が完了していません。管理者に連絡してください';
 
+export const JOB_NOT_FOUND_MESSAGE = 'この企業の求人が見つかりません';
+export const MEMBER_NOT_FOUND_MESSAGE = '会員が見つかりません';
+
 const clipTitle = (s: string, n = 40) => (s.length > n ? `${s.slice(0, n)}…` : s);
-export const scoutTitleOf = (input: ScoutInput): string => (input.purpose === 'review' ? `添削: ${clipTitle(input.subject)}` : `作成: ${clipTitle(input.positionName)}`);
+/** 履歴の見出し。何をもとに作ったか（求人 ID・会員 ID）が分かる形にする。input は、求人・候補者の値で置き換えた後のもの */
+export const scoutTitleOf = (input: ScoutInput): string => {
+  const what = input.purpose === 'review' ? clipTitle(input.subject) : clipTitle(input.positionName);
+  const head = input.purpose === 'review' ? '添削' : '作成';
+  if (input.basis === 'job') return `${input.purpose === 'review' ? '添削 ' : ''}求人 ${input.jobId}: ${what}`;
+  if (input.basis === 'member') return `${input.purpose === 'review' ? '添削 ' : ''}会員 ${input.memberId} 向け: ${what}`;
+  if (input.basis === 'jobMember') return `${input.purpose === 'review' ? '添削 ' : ''}求人 ${input.jobId} × 会員 ${input.memberId}`;
+  return `${head}: ${what}`;
+};
+
+/** 要約の先頭に付ける「何をもとに」 */
+const basisLead = (input: ScoutInput): string =>
+  input.basis === 'job' ? `求人 ${input.jobId} の内容をもとに、` : input.basis === 'member' ? `会員 ${input.memberId} の情報に沿って、` : input.basis === 'jobMember' ? `求人 ${input.jobId} の内容をもとに、会員 ${input.memberId} 向けに合わせて、` : '';
 
 function summaryOf(input: ScoutInput, r: Pick<ScoutResult, 'basis' | 'drafts'>): string {
   const b = r.basis;
   const pick = b.threshold === 'over10' ? '返信率 10% 超の文面' : '返信率の高い順の文面（10% 超は無し）';
-  return `${b.scopeLabel}の直近 1 年の送信実績から、${pick} ${b.templates} 件（返信率 ${b.ratePct ?? '-'}%。全体は ${b.overallRatePct ?? '-'}%）を分析し、${r.drafts.length} つのモデルで文面を${input.purpose === 'review' ? '添削' : '作成'}しました。`.slice(0, 300);
+  return `${basisLead(input)}${b.scopeLabel}の直近 1 年の送信実績から、${pick} ${b.templates} 件（返信率 ${b.ratePct ?? '-'}%。全体は ${b.overallRatePct ?? '-'}%）を分析し、${r.drafts.length} つのモデルで文面を${input.purpose === 'review' ? '添削' : '作成'}しました。`.slice(0, 300);
+}
+
+/* ---------- 何をもとに作るか（求人 ID・会員 ID）。Vertex AI は呼ばない ---------- */
+
+type Names = readonly (string | null | undefined)[];
+
+/** その企業の求人（企業名などを置き換え済み）。ほかの企業の求人・無い ID は null。データの入口の失敗は 502 */
+async function loadJob(ds: ScoutDataSource, companyId: string, jobId: string, names: Names): Promise<ScoutJobInfo | null> {
+  let job: ScoutJobInfo | null;
+  try {
+    job = await ds.job(companyId, jobId);
+  } catch (e) {
+    console.error(`[ai/scout] job: ${e instanceof Error ? e.message.slice(0, 300) : ''}`);
+    throw new AppError('bq', 502, DATA_ERROR_MESSAGE);
+  }
+  return job ? maskJob(job, names) : null;
+}
+
+async function loadMember(ds: ScoutDataSource, memberId: string): Promise<ScoutMemberInfo | null> {
+  try {
+    return await ds.member(memberId);
+  } catch (e) {
+    console.error(`[ai/scout] member: ${e instanceof Error ? e.message.slice(0, 300) : ''}`);
+    throw new AppError('bq', 502, DATA_ERROR_MESSAGE);
+  }
+}
+
+export interface ScoutLookupDeps {
+  client: BqClient;
+  ds: ScoutDataSource;
+  /** 誰が引いたか（ログに残す） */
+  actor: string;
+  requestId: string;
+  ctx?: WaitCtx;
+}
+
+/** GET /api/companies/:id/ai/scout/jobs/:jobId … 求人の内容を確かめる（その企業の求人だけ） */
+export async function scoutJobSummary(d: ScoutLookupDeps, companyId: string, jobId: string): Promise<ScoutJobSummary> {
+  const brief = await companyBrief(d.client, companyId, d.ctx);
+  if (!brief) throw new AppError('notFound', 404, '企業が見つかりません');
+  const job = await loadJob(d.ds, companyId, jobId, [brief.name, brief.internalName]);
+  logEvent('ai.scout.lookup', { reqId: d.requestId, actor: d.actor, target: 'job', companyId, jobId, found: Boolean(job) });
+  if (!job) throw new AppError('notFound', 404, JOB_NOT_FOUND_MESSAGE);
+  return jobSummaryOf(job);
+}
+
+/** GET /api/ai/scout/members/:memberId … 候補者の属性を確かめる（誰が・どの会員 ID を引いたかを、ログに残す） */
+export async function scoutMemberSummary(d: Omit<ScoutLookupDeps, 'client' | 'ctx'>, memberId: string): Promise<ScoutMemberSummary> {
+  const member = await loadMember(d.ds, memberId);
+  logEvent('ai.scout.lookup', { reqId: d.requestId, actor: d.actor, target: 'member', memberId, found: Boolean(member) });
+  if (!member) throw new AppError('notFound', 404, MEMBER_NOT_FOUND_MESSAGE);
+  return memberSummaryOf(member);
 }
 
 /** 依頼を作って、その場で文面を作る。失敗は ai_jobs に failed で残し、fire = failed と理由を返す */
@@ -64,14 +137,30 @@ export async function createScoutJob(d: ScoutDeps, companyId: string, rawInput: 
   if (!mock && !verified) throw new AppError('readOnly', 403, '書き込みには Google ログインが必要です');
   const parsed = ScoutInputSchema.safeParse(rawInput);
   if (!parsed.success) throw new AppError('badRequest', 400, '入力が不正です', issuesOf(parsed.error, 'input'));
-  const input = parsed.data;
+  const asked = parsed.data;
   const brief = await companyBrief(d.client, companyId, d.ctx);
   if (!brief) throw new AppError('notFound', 404, '企業が見つかりません');
-  const pii = piiDetails(input, brief, 'input');
+  const pii = piiDetails(asked, brief, 'input');
   if (pii.length) throw new AppError('badRequest', 400, PII_MESSAGE, pii);
+  const actor = (d.identity?.email ?? 'preview').toLowerCase();
+
+  // 何をもとに作るか: 求人は、その企業の求人だけ（URL の企業で引く）。候補者は、BigQuery にある属性だけ。Vertex AI を呼ぶ前に確かめる
+  const names = [brief.name, brief.internalName];
+  const [job, member] = await Promise.all([
+    scoutBasisUsesJob(asked.basis) && asked.jobId ? loadJob(d.ds, companyId, asked.jobId, names) : null,
+    scoutBasisUsesMember(asked.basis) && asked.memberId ? loadMember(d.ds, asked.memberId) : null,
+  ]);
+  if (asked.memberId) logEvent('ai.scout.lookup', { reqId: d.requestId, actor, target: 'member', memberId: asked.memberId, found: Boolean(member), via: 'create' });
+  const missing = [
+    ...(scoutBasisUsesJob(asked.basis) && !job ? [{ path: 'input.jobId', message: 'この企業の求人ではありません' }] : []),
+    ...(scoutBasisUsesMember(asked.basis) && !member ? [{ path: 'input.memberId', message: MEMBER_NOT_FOUND_MESSAGE }] : []),
+  ];
+  if (missing.length) throw new AppError('badRequest', 400, '入力が不正です', missing);
+  // ポジション名・掲載職種・勤務地は求人の値、受け取る人の条件は候補者の属性で置き換える（保存するのも、置き換えた後の入力）
+  const input = effectiveInput(asked, job, member);
+  const target: ScoutTarget = targetOf(input, job, member);
 
   const at = now.toISOString();
-  const actor = (d.identity?.email ?? 'preview').toLowerCase();
   const jobId = newJobId(now);
   const title = scoutTitleOf(input);
   const inputJson = JSON.stringify(input);
@@ -79,7 +168,7 @@ export async function createScoutJob(d: ScoutDeps, companyId: string, rawInput: 
 
   // サンプルデータ: Vertex AI を呼ばず、見本を返す。Google ログイン済みで D1 があれば保存する（仮の利用者は保存しない）
   if (mock) {
-    const result = scoutSample(input, jobId);
+    const result = scoutSample(input, jobId, target);
     const row = rowOf({ sample: 1, result_json: JSON.stringify(result), summary: result.summary });
     const saved = verified && Boolean(d.db);
     if (verified && d.db) {
@@ -88,7 +177,7 @@ export async function createScoutJob(d: ScoutDeps, companyId: string, rawInput: 
         new AuditRepo(d.db).insertStmt({ at, actor, action: 'create', entity: 'ai_jobs', entityId: jobId, companyId: Number(companyId), before: null, after: { kind: 'scout', title, status: 'done', sample: true }, requestId: d.requestId }),
       ]);
     }
-    logEvent('ai.create', { reqId: d.requestId, actor, jobId, kind: 'scout', companyId, sample: true, saved });
+    logEvent('ai.create', { reqId: d.requestId, actor, jobId, kind: 'scout', companyId, basis: input.basis, sample: true, saved });
     return { job: toDetail(row, brief.name), fire: 'sample', fireMessage: null };
   }
 
@@ -104,7 +193,7 @@ export async function createScoutJob(d: ScoutDeps, companyId: string, rawInput: 
       jobs.insertStmt({ id: jobId, kind: 'scout', companyId, status: 'failed', title, input_json: inputJson, result_json: null, summary: null, created_by: actor, sample: false, at, error: message }),
       new AuditRepo(db).insertStmt({ at, actor, action: 'create', entity: 'ai_jobs', entityId: jobId, companyId: Number(companyId), before: null, after: { kind: 'scout', title, status: 'failed' }, requestId: d.requestId }),
     ]);
-    logEvent('ai.create', { reqId: d.requestId, actor, jobId, kind: 'scout', companyId, sample: false, ok: false, ms: Date.now() - t0, ...extra });
+    logEvent('ai.create', { reqId: d.requestId, actor, jobId, kind: 'scout', companyId, basis: input.basis, sample: false, ok: false, ms: Date.now() - t0, ...extra });
     return { job: toDetail(rowOf({ status: 'failed', error: message.slice(0, 500) }), brief.name), fire: 'failed', fireMessage: message };
   };
 
@@ -114,19 +203,19 @@ export async function createScoutJob(d: ScoutDeps, companyId: string, rawInput: 
     const engines = scoutEngines(d.env)!;
     const [ins, models, previous] = await Promise.all([getScoutInsight(d.env, db, benchmark, { now, fetchImpl: d.fetchImpl }), repo.activeModels(), repo.lastChosen(companyId)]);
     if (models.length === 0) throw new AppError('storage', 503, 'モデルの設定（D1 の ai_scout_models）がありません。d1/migrations/0005_ai_scout.sql を適用してください');
-    const gen = await generateScoutDrafts(d.env, { jobId, models, engines, companyNames: [brief.name, brief.internalName], input, insight: ins.insight, stats: benchmark.stats, templates: benchmark.basis.templates, previous, fetchImpl: d.fetchImpl });
+    const gen = await generateScoutDrafts(d.env, { jobId, models, engines, companyNames: [brief.name, brief.internalName], input, insight: ins.insight, stats: benchmark.stats, templates: benchmark.basis.templates, previous, job, member, fetchImpl: d.fetchImpl });
     const tokens = totalTokens(ins.tokens) + totalTokens(gen.tokens);
     if (gen.drafts.length === 0) return await fail(`文面を作れませんでした。${gen.warnings[0] ?? ''}`.trim(), { reason: 'noDrafts', tokens, insightCached: ins.cached });
 
     const drafts = gen.drafts.map((g) => g.draft);
-    const result = ScoutResultSchema.parse({ ok: true, summary: summaryOf(input, { basis: benchmark.basis, drafts }), basis: benchmark.basis, stats: benchmark.stats, insight: ins.insight, insightCached: ins.cached, drafts, warnings: gen.warnings.slice(0, 4), elapsedMs: Date.now() - t0, tokens });
+    const result = ScoutResultSchema.parse({ ok: true, summary: summaryOf(input, { basis: benchmark.basis, drafts }), basis: benchmark.basis, stats: benchmark.stats, insight: ins.insight, target, insightCached: ins.cached, drafts, warnings: gen.warnings.slice(0, 4), elapsedMs: Date.now() - t0, tokens });
     const resultJson = JSON.stringify(result);
     await db.batch([
       jobs.insertStmt({ id: jobId, kind: 'scout', companyId, status: 'done', title, input_json: inputJson, result_json: resultJson, summary: result.summary, created_by: actor, sample: false, at }),
       ...gen.drafts.map((g) => repo.insertDraftStmt({ draft_id: g.draft.draftId, job_id: jobId, companyId, model_id: g.draft.modelId, model_version: g.draft.modelVersion, engine: g.engine, subject: g.draft.subject, body: g.draft.body, tokens: totalTokens(g.tokens), at })),
-      new AuditRepo(db).insertStmt({ at, actor, action: 'create', entity: 'ai_jobs', entityId: jobId, companyId: Number(companyId), before: null, after: { kind: 'scout', title, status: 'done', sample: false, drafts: drafts.map((x) => `${x.modelId}:${x.modelVersion}`) }, requestId: d.requestId }),
+      new AuditRepo(db).insertStmt({ at, actor, action: 'create', entity: 'ai_jobs', entityId: jobId, companyId: Number(companyId), before: null, after: { kind: 'scout', title, status: 'done', sample: false, basis: input.basis, drafts: drafts.map((x) => `${x.modelId}:${x.modelVersion}`) }, requestId: d.requestId }),
     ]);
-    logEvent('ai.create', { reqId: d.requestId, actor, jobId, kind: 'scout', companyId, sample: false, ok: true, ms: result.elapsedMs, insightMs: ins.ms, generateMs: gen.ms, tokens, insightCached: ins.cached, drafts: drafts.length, warnings: gen.warnings.length });
+    logEvent('ai.create', { reqId: d.requestId, actor, jobId, kind: 'scout', companyId, basis: input.basis, sample: false, ok: true, ms: result.elapsedMs, insightMs: ins.ms, generateMs: gen.ms, tokens, insightCached: ins.cached, drafts: drafts.length, warnings: gen.warnings.length });
     const row = rowOf({ result_json: resultJson, summary: result.summary });
     return { job: await withScoutFeedback(db, row, toDetail(row, brief.name)), fire: 'done', fireMessage: null };
   } catch (e) {

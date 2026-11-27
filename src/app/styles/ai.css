@@ -171,9 +171,12 @@
 /* 3 つの案（結果の列が広いときは横に 3 枚、狭いときは縦） */
 .ai-drafts-wrap { container-type: inline-size; margin: var(--s3) 0; }
 .ai-drafts { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s3); align-items: stretch; }
+/* 3 枚を横に並べるのは、1 枚の本文が 1 行 25 字以上になる幅から（それより狭いときは縦） */
 @container (min-width: 680px) {
-  .ai-drafts[data-count='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .ai-drafts[data-count='2'] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container (min-width: 1100px) {
+  .ai-drafts[data-count='3'] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 .ai-draft-card { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; padding: 10px; border: 1px solid var(--rule-strong); border-radius: var(--radius-lg); background: var(--surface); transition: border-color var(--motion), box-shadow var(--motion); }
 .ai-draft-card.selected { border-color: var(--dj-navy); box-shadow: 0 0 0 2px var(--dj-navy-tint-2); background: var(--dj-navy-tint); }
@@ -228,3 +231,42 @@
 .ai-playbook pre { margin: 0; padding: 10px 12px; font-family: var(--font-jp); font-size: var(--fs-12); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow-y: auto; }
 @media (max-width: 1280px) { .ai-basis.six { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .ai-basis.three, .ai-basis.six { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ai-insight { grid-template-columns: minmax(0, 1fr); } .ai-kv > div { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+
+/* ---- 何をもとに作るか（2026-11-27。最初に選ぶカード）と、求人 ID・会員 ID を確かめる ---- */
+/* 下の段（3 つの案）は、入力の列の下まで使う全幅 */
+.ai-layout > .ai-col-wide { grid-column: 1 / -1; min-width: 0; }
+.ai-basis-cards { display: grid; gap: var(--s2); margin-top: var(--s1); }
+.ai-basis-card { display: flex; align-items: flex-start; gap: var(--s2); padding: 8px 10px; border: 1px solid var(--rule-strong); border-radius: var(--radius); background: var(--surface); cursor: pointer; transition: border-color var(--motion), background-color var(--motion); }
+.ai-basis-card:hover { background: var(--surface-low); border-color: var(--dj-navy-soft); }
+.ai-basis-card.on { border-color: var(--dj-navy); background: var(--dj-navy-tint); box-shadow: 0 0 0 1px var(--dj-navy); }
+.ai-basis-card:focus-within { box-shadow: var(--ring); }
+.ai-basis-card input { flex: none; margin: 3px 0 0; accent-color: var(--dj-navy); }
+.ai-basis-card .txt { display: grid; gap: 2px; min-width: 0; }
+.ai-basis-card .txt b { font-size: var(--fs-13); color: var(--heading); }
+.ai-basis-card .txt span { font-size: var(--fs-12); color: var(--ink-soft); }
+.ai-basis-hint { margin: var(--s2) 0 0; }
+.ai-group-note { margin: var(--s1) 0 var(--s3); }
+.ai-lookup { display: grid; gap: var(--s3); margin-top: var(--s1); }
+.ai-lookup-row { display: flex; gap: var(--s2); min-width: 0; }
+.ai-lookup-row input.ctl { flex: 1 1 120px; }
+.ai-lookup-row .btn { flex: none; white-space: nowrap; }
+.ai-target-card { display: grid; gap: var(--s2); padding: 10px 12px; border: 1px solid var(--rule); border-left: 3px solid var(--dj-navy); border-radius: var(--radius); background: var(--surface-low); font-size: var(--fs-12); min-width: 0; }
+.ai-target-card > header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.ai-target-card .ttl { font-size: var(--fs-13); color: var(--heading); overflow-wrap: anywhere; }
+.ai-target-card p { margin: 0; }
+.ai-target-card .ai-caveat { margin-top: 0; }
+.ai-target-kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 6px var(--s3); margin: 0; }
+.ai-target-kv.wide { grid-template-columns: minmax(0, 1fr); }
+.ai-target-kv > div { min-width: 0; }
+.ai-target-kv dt, .ai-target-head .lbl { font-size: var(--fs-11); font-weight: 700; color: var(--muted); }
+.ai-target-kv dd { margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.ai-target-head p { color: var(--ink-soft); line-height: 1.6; overflow-wrap: anywhere; }
+.ai-target-filters { display: grid; gap: 6px; padding-top: var(--s2); border-top: 1px solid var(--rule); }
+.ai-tag.static { padding: 2px 9px; }
+.ai-run-note { display: grid; gap: 2px; }
+.ai-run-note .why { color: var(--warn); font-weight: 600; }
+/* 結果の見出しの下: 何をもとに作ったか */
+.ai-target { display: grid; gap: 6px; margin-bottom: var(--s3); font-size: var(--fs-13); }
+.ai-target-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; }
+.ai-target details > summary { cursor: pointer; font-size: var(--fs-12); color: var(--ink-soft); }
+.ai-target details[open] > summary { margin-bottom: var(--s2); }

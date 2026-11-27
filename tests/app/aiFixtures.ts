@@ -1,10 +1,10 @@
 import { vi } from 'vitest';
 import type { AiCompanyDefaultsResponse, AiCompanyOption, AiConfigResponse, AiJobDetail, AiJobSummary, AiKind } from '../../src/shared/ai/common';
 import type { JobResult } from '../../src/shared/ai/job';
-import type { ScoutChoiceInput, ScoutModelsResponse, ScoutOptionsResponse, ScoutResult, ScoutTuneResponse, ScoutUsageInput } from '../../src/shared/ai/scout';
-import { SCOUT_MODELS_VIEWER, SCOUT_OPTIONS, SCOUT_TUNE } from './aiScoutFixtures';
+import type { ScoutChoiceInput, ScoutJobSummary, ScoutMemberSummary, ScoutModelsResponse, ScoutOptionsResponse, ScoutResult, ScoutTuneResponse, ScoutUsageInput } from '../../src/shared/ai/scout';
+import { SCOUT_JOB_ENDED, SCOUT_JOB_SUMMARY, SCOUT_MEMBER_SUMMARY, SCOUT_MODELS_VIEWER, SCOUT_OPTIONS, SCOUT_TUNE } from './aiScoutFixtures';
 
-export { SCOUT_INPUT, SCOUT_MODELS, SCOUT_MODELS_VIEWER, SCOUT_OPTIONS, SCOUT_RESULT, SCOUT_REVIEW_RESULT, SCOUT_TUNE } from './aiScoutFixtures';
+export { SCOUT_INPUT, SCOUT_JOB_ENDED, SCOUT_JOB_INPUT, SCOUT_JOB_MEMBER_INPUT, SCOUT_JOB_MEMBER_RESULT, SCOUT_JOB_RESULT, SCOUT_JOB_SUMMARY, SCOUT_MEMBER_SUMMARY, SCOUT_MODELS, SCOUT_MODELS_VIEWER, SCOUT_OPTIONS, SCOUT_RESULT, SCOUT_REVIEW_RESULT, SCOUT_TUNE } from './aiScoutFixtures';
 
 /** AI 機能の画面テストで共用する見本と、fetch のモック（tests/app/ai*.test.tsx）。テストファイルではない */
 
@@ -81,6 +81,9 @@ export interface AiMock {
   scoutOptions: ScoutOptionsResponse;
   scoutModels: ScoutModelsResponse;
   scoutTune: ScoutTuneResponse;
+  /** ② スカウト: 求人の内容（キー = 「企業 ID:求人 ID」。その企業の求人でなければ 404）と、候補者の情報（キー = 会員 ID） */
+  scoutJobs: Record<string, ScoutJobSummary>;
+  scoutMembers: Record<string, ScoutMemberSummary>;
 }
 
 /** ② スカウトの結果の中の、選択と利用の記録を書き換える（Worker の PUT …/scout/choice・usage の代わり） */
@@ -103,6 +106,8 @@ export function mockAiApi(opts: { config?: Partial<AiConfigResponse>; jobs?: AiJ
     scoutOptions: opts.scoutOptions ?? SCOUT_OPTIONS,
     scoutModels: opts.scoutModels ?? SCOUT_MODELS_VIEWER,
     scoutTune: SCOUT_TUNE,
+    scoutJobs: { '101:5001': SCOUT_JOB_SUMMARY, '101:5002': SCOUT_JOB_ENDED, '102:6001': { ...SCOUT_JOB_SUMMARY, jobId: '6001', title: '物流センターの運営管理' } },
+    scoutMembers: { '70001': SCOUT_MEMBER_SUMMARY },
   };
   const nf = () => Response.json({ error: '見つかりません', code: 'notFound' }, { status: 404 });
   globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -133,6 +138,10 @@ export function mockAiApi(opts: { config?: Partial<AiConfigResponse>; jobs?: AiJ
       m.jobs.set(j.id, next);
       return Response.json(next);
     }
+    x = url.match(/^\/api\/companies\/([^/]+)\/ai\/scout\/jobs\/([^/]+)$/);
+    if (x && method === 'GET') return m.scoutJobs[`${x[1]}:${x[2]}`] ? Response.json(m.scoutJobs[`${x[1]}:${x[2]}`]) : nf();
+    x = url.match(/^\/api\/ai\/scout\/members\/([^/]+)$/);
+    if (x && method === 'GET') return m.scoutMembers[x[1]] ? Response.json(m.scoutMembers[x[1]]) : nf();
     if (url === '/api/ai/scout/options') return Response.json(m.scoutOptions);
     if (url === '/api/ai/scout/models') return Response.json(m.scoutModels);
     if (url === '/api/ai/scout/tune' && method === 'POST') return Response.json(m.scoutTune);

@@ -1,12 +1,13 @@
-import { hasScoutFilters, ScoutResultSchema, type ScoutInput, type ScoutResult } from '../../../shared/ai/scout';
+import { hasScoutFilters, ScoutResultSchema, type ScoutInput, type ScoutResult, type ScoutTarget } from '../../../shared/ai/scout';
 import { draftIdOf } from '../ids';
 import { SCOUT_MODELS } from './models';
 
 /**
  * ② の見本（サンプルデータのとき。Vertex AI を呼ばない）。数値は見本で、実際の集計ではない。
- * 実在の社名・個人名を書かない（差し込みは {{企業名}} {{候補者名}} {{担当者名}}）
+ * 実在の社名・個人名を書かない（差し込みは {{企業名}} {{候補者名}} {{担当者名}}）。
+ * target = 何をもとに作ったか（求人・候補者の要約。サンプルデータのフィクスチャから引いたもの）。input は、求人・候補者の値で置き換えた後のもの
  */
-export function scoutSample(input: ScoutInput, jobId: string): ScoutResult {
+export function scoutSample(input: ScoutInput, jobId: string, target: ScoutTarget | null = null): ScoutResult {
   const position = input.positionName || 'ポジション';
   const review = input.purpose === 'review';
   const location = input.jobLocation || '{{勤務地}}';
@@ -57,6 +58,7 @@ export function scoutSample(input: ScoutInput, jobId: string): ScoutResult {
       ],
       avoid: ['会社の紹介から始め、送った理由が後ろにある', 'いきなり応募を求める'],
     },
+    target,
     insightCached: false,
     drafts: [
       {

@@ -71,8 +71,31 @@ function DraftCard({ draft, result, selected, canEdit, canChoose, choosing, onSa
   );
 }
 
+/** ② の結果の上の段（右の列）: 注意（warnings）→ 分析結果（畳める） */
+export function ScoutResultTop({ result }: { result: ScoutResult }) {
+  return (
+    <>
+      {result.warnings.length ? (
+        <Notice tone="warn">
+          <b>注意</b>
+          {result.warnings.length === 1 ? (
+            `: ${result.warnings[0]}`
+          ) : (
+            <ul className="ai-list">
+              {result.warnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          )}
+        </Notice>
+      ) : null}
+      <ScoutAnalysis result={result} />
+    </>
+  );
+}
+
 /**
- * ② の結果: 分析結果（畳める）→ 3 つの案（モデルごとに 1 枚。コピー・手直し・「この案を選ぶ」）→ 「どれも使わない」とコメント → 選んだ後の「企業が使いましたか？」。
+ * ② の結果の下の段（入力の列の下まで使う全幅。3 枚を横に並べても 1 枚が狭くならないように）: 3 つの案（モデルごとに 1 枚。コピー・手直し・「この案を選ぶ」）→ 「どれも使わない」とコメント → 選んだ後の「企業が使いましたか？」。
  * result は、元の結果に直した版を重ねたもの（readScoutResult）。onSave には、保存する形（案の件名・本文だけ差し替えたもの）を渡す。
  * 「どれも使わない」を押したことは、結果からは読めないので、この画面を開いている間だけ覚える（親が key = ジョブ ID で作り直す）。
  */
@@ -141,22 +164,6 @@ export function ScoutResultView({
 
   return (
     <div className="ai-result-body">
-      {result.warnings.length ? (
-        <Notice tone="warn">
-          <b>注意</b>
-          {result.warnings.length === 1 ? (
-            `: ${result.warnings[0]}`
-          ) : (
-            <ul className="ai-list">
-              {result.warnings.map((w, i) => (
-                <li key={i}>{w}</li>
-              ))}
-            </ul>
-          )}
-        </Notice>
-      ) : null}
-      <ScoutAnalysis result={result} />
-
       <section className="card ai-section" aria-label="3 つの案">
         <div className="card-head">
           <h2>3 つの案</h2>

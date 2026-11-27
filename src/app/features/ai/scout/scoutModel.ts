@@ -3,10 +3,16 @@ import { hasBlockingPii, type PiiFinding } from '../../../../shared/ai/pii';
 import {
   EMPTY_SCOUT_FILTERS,
   SCOUT_FILTER_KEYS,
+  SCOUT_FILTER_LABEL,
   SCOUT_FILTER_MAX,
   ScoutInputSchema,
+  ScoutJobIdSchema,
+  ScoutMemberIdSchema,
   ScoutResultSchema,
+  scoutBasisUsesJob,
+  scoutBasisUsesMember,
   type ScoutBasis,
+  type ScoutBasisKind,
   type ScoutDraft,
   type ScoutDraftFeedback,
   type ScoutFilterKey,
@@ -40,22 +46,58 @@ export interface ScoutForm {
 const emptyFilters = (): ScoutFilters => ({ ageGroups: [], nationalities: [], japaneseLevels: [], englishLevels: [], residences: [], occupations: [] });
 export const emptyScoutForm = (): ScoutForm => ({ subject: '', body: '', industry: '', positionName: '', jobOccupations: [], jobLocation: '', lang: 'ja', note: '', filters: emptyFilters() });
 
-/** フォーム → API へ送る入力（検証の前の形）。作成では、件名と本文を送らない */
-export function toScoutInput(purpose: ScoutPurpose, form: ScoutForm): Record<string, unknown> {
+/** 何をもとに作るか（使う人が最初に選ぶ）と、確かめた求人 ID・会員 ID。使わない ID は null */
+export interface ScoutSource {
+  basis: ScoutBasisKind;
+  jobId: string | null;
+  memberId: string | null;
+}
+export const CONDITIONS_SOURCE: ScoutSource = { basis: 'conditions', jobId: null, memberId: null };
+
+/**
+ * フォーム → API へ送る入力（検証の前の形）。作成では、件名と本文を送らない。
+ * 求人 ID から作るときは、ポジション名・掲載職種・勤務地を送らない（欄を出していない。Worker が求人の値を使う）。
+ * 会員 ID から作るときは、送る相手の条件を送らない（欄を出していない。Worker が候補者の属性から決める）。
+ */
+export function toScoutInput(purpose: ScoutPurpose, form: ScoutForm, source: ScoutSource = CONDITIONS_SOURCE): Record<string, unknown> {
   const review = purpose === 'review';
+  const usesJob = scoutBasisUsesJob(source.basis);
+  const usesMember = scoutBasisUsesMember(source.basis);
   const { subject, body, ...rest } = form;
-  return { purpose, subject: review ? subject : '', body: review ? body : '', ...rest };
+  return {
+    purpose,
+    basis: source.basis,
+    jobId: usesJob ? source.jobId : null,
+    memberId: usesMember ? source.memberId : null,
+    subject: review ? subject : '',
+    body: review ? body : '',
+    ...rest,
+    ...(usesJob ? { positionName: '', jobOccupations: [], jobLocation: '' } : {}),
+    ...(usesMember ? { filters: emptyFilters() } : {}),
+  };
 }
 
 export type ScoutValidation = { ok: true; input: ScoutInput; errors: Record<string, never> } | { ok: false; input: null; errors: Record<string, string> };
 
-export function validateScout(purpose: ScoutPurpose, form: ScoutForm): ScoutValidation {
-  const r = ScoutInputSchema.safeParse(toScoutInput(purpose, form));
+export function validateScout(purpose: ScoutPurpose, form: ScoutForm, source: ScoutSource = CONDITIONS_SOURCE): ScoutValidation {
+  const r = ScoutInputSchema.safeParse(toScoutInput(purpose, form, source));
   return r.success ? { ok: true, input: r.data, errors: {} } : { ok: false, input: null, errors: fieldErrors(r.error) };
 }
 
-/** 件名・本文・ポジション名・勤務地・補足に、社名・個人情報が入っていないか（block があれば実行できない） */
-export function scoutPii(purpose: ScoutPurpose, form: ScoutForm, companyNames: readonly (string | null | undefined)[]): PiiFinding[] {
+/** 求人 ID・会員 ID の書き方（数字だけ）を確かめる。よければ、前後の空白を取った ID */
+export function parseScoutId(kind: 'job' | 'member', text: string): { ok: true; id: string } | { ok: false; error: string } {
+  const v = text.trim();
+  if (!v) return { ok: false, error: kind === 'job' ? '求人 ID を入れてください' : '会員 ID を入れてください' };
+  const r = (kind === 'job' ? ScoutJobIdSchema : ScoutMemberIdSchema).safeParse(v);
+  return r.success ? { ok: true, id: r.data } : { ok: false, error: r.error.issues[0]?.message ?? 'ID は数字で入れてください' };
+}
+
+/** 条件を「年齢層: 30代」の形の一覧にする（候補者から決まった条件を見せる用） */
+export const filterChips = (f: ScoutFilters): { key: ScoutFilterKey; label: string; value: string }[] => SCOUT_FILTER_KEYS.flatMap((key) => f[key].map((value) => ({ key, label: SCOUT_FILTER_LABEL[key], value })));
+
+/** 件名・本文・ポジション名・勤務地・補足に、社名・個人情報が入っていないか（block があれば実行できない）。求人 ID から作るときは、送らない欄（ポジション名・勤務地）を見ない */
+export function scoutPii(purpose: ScoutPurpose, form: ScoutForm, companyNames: readonly (string | null | undefined)[], basis: ScoutBasisKind = 'conditions'): PiiFinding[] {
+  const usesJob = scoutBasisUsesJob(basis);
   const fields = [
     ...(purpose === 'review'
       ? [
@@ -63,8 +105,12 @@ export function scoutPii(purpose: ScoutPurpose, form: ScoutForm, companyNames: r
           { label: '本文', text: form.body },
         ]
       : []),
-    { label: 'ポジション名', text: form.positionName },
-    { label: '勤務地', text: form.jobLocation },
+    ...(usesJob
+      ? []
+      : [
+          { label: 'ポジション名', text: form.positionName },
+          { label: '勤務地', text: form.jobLocation },
+        ]),
     { label: '補足', text: form.note },
   ];
   return piiByField(fields, companyNames);
@@ -72,11 +118,11 @@ export function scoutPii(purpose: ScoutPurpose, form: ScoutForm, companyNames: r
 export { hasBlockingPii };
 
 /** 保存済みのジョブの入力 → フォーム（履歴から開いたとき。読めなければ null） */
-export function scoutFormFromInput(input: unknown): { purpose: ScoutPurpose; form: ScoutForm } | null {
+export function scoutFormFromInput(input: unknown): { purpose: ScoutPurpose; source: ScoutSource; form: ScoutForm } | null {
   const r = ScoutInputSchema.safeParse(input);
   if (!r.success) return null;
-  const { purpose, ...form } = r.data;
-  return { purpose, form };
+  const { purpose, basis, jobId, memberId, ...form } = r.data;
+  return { purpose, source: { basis, jobId, memberId }, form };
 }
 
 /** 条件を 1 つ選ぶ / 外す（上限 SCOUT_FILTER_MAX。上限のときは足さない） */

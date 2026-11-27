@@ -1,4 +1,4 @@
-import type { ScoutInput, ScoutModelsResponse, ScoutModelStats, ScoutOptionsResponse, ScoutResult, ScoutTuneResponse } from '../../src/shared/ai/scout';
+import type { ScoutInput, ScoutJobSummary, ScoutMemberSummary, ScoutModelsResponse, ScoutModelStats, ScoutOptionsResponse, ScoutResult, ScoutTuneResponse } from '../../src/shared/ai/scout';
 
 /** ② スカウトの見本（結果・条件の選択肢・モデルの成績・チューニングの応答）。全部の項目を含む。テストファイルではない（aiFixtures.ts から使う） */
 
@@ -14,6 +14,9 @@ export const SCOUT_OPTIONS: ScoutOptionsResponse = {
 
 export const SCOUT_INPUT: ScoutInput = {
   purpose: 'template',
+  basis: 'conditions',
+  jobId: null,
+  memberId: null,
   subject: '',
   body: '',
   industry: 'IT・通信',
@@ -92,6 +95,7 @@ export const SCOUT_RESULT: ScoutResult = {
     ],
     avoid: ['会社の説明から始める', '返信のしかたを 3 つ以上並べる'],
   },
+  target: null,
   insightCached: true,
   drafts: [
     {
@@ -133,6 +137,49 @@ export const SCOUT_RESULT: ScoutResult = {
   tokens: 18350,
   choice: null,
 };
+
+/** 求人の内容（GET /api/companies/:id/ai/scout/jobs/:jobId）。企業 101 の求人 */
+export const SCOUT_JOB_SUMMARY: ScoutJobSummary = {
+  jobId: '5001',
+  title: 'バイリンガル法人営業マネージャー',
+  occupation: '営業',
+  location: '東京都',
+  salary: '800〜1,000 万円',
+  japaneseLevel: 'ネイティヴ',
+  englishLevel: 'ビジネス会話',
+  published: true,
+  descriptionHead: '{{企業名}} の法人営業チーム（5 名）を率いていただきます。担当は外資系のお客様です。',
+  requirementsHead: '法人営業の経験 5 年以上。英語ビジネスレベル以上。',
+};
+/** 掲載が終わった求人 */
+export const SCOUT_JOB_ENDED: ScoutJobSummary = { ...SCOUT_JOB_SUMMARY, jobId: '5002', title: 'カスタマーサクセス', occupation: 'カスタマーサポート', published: false, salary: null };
+
+/** 候補者の情報（GET /api/ai/scout/members/:memberId）。氏名・連絡先は無い */
+export const SCOUT_MEMBER_SUMMARY: ScoutMemberSummary = {
+  memberId: '70001',
+  ageGroup: '30代',
+  nationality: '日本以外',
+  japaneseLevel: 'ビジネス会話',
+  englishLevel: 'ネイティヴ',
+  residence: '東京都',
+  occupation: '営業',
+  lastIndustry: 'IT・通信',
+  careerLevel: 'マネージャー',
+  experiencedOccupations: ['営業', 'マーケティング'],
+  desiredOccupations: ['営業', '事業開発'],
+  incomeRange: '600〜800万円',
+  desiredIncomeRange: '800〜1000万円',
+  filters: { ageGroups: ['30代'], nationalities: [], japaneseLevels: [], englishLevels: [], residences: [], occupations: ['営業'] },
+};
+
+/** 求人 ID から作った依頼の入力（保存される形。ポジション名は Worker が求人の値で置き換える） */
+export const SCOUT_JOB_INPUT: ScoutInput = { ...SCOUT_INPUT, basis: 'job', jobId: '5001', positionName: 'バイリンガル法人営業マネージャー', jobOccupations: [], jobLocation: '' };
+/** 求人 ID + 会員 ID から作った依頼の入力 */
+export const SCOUT_JOB_MEMBER_INPUT: ScoutInput = { ...SCOUT_JOB_INPUT, basis: 'jobMember', memberId: '70001', filters: { ageGroups: [], nationalities: [], japaneseLevels: [], englishLevels: [], residences: [], occupations: [] } };
+
+/** 何をもとに作ったか（target）つきの結果 */
+export const SCOUT_JOB_RESULT: ScoutResult = { ...SCOUT_RESULT, target: { basis: 'job', job: SCOUT_JOB_SUMMARY, member: null } };
+export const SCOUT_JOB_MEMBER_RESULT: ScoutResult = { ...SCOUT_RESULT, target: { basis: 'jobMember', job: SCOUT_JOB_SUMMARY, member: SCOUT_MEMBER_SUMMARY } };
 
 /** 添削の結果（変更点つき）と、注意つきの結果 */
 export const SCOUT_REVIEW_RESULT: ScoutResult = {

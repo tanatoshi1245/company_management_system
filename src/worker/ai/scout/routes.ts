@@ -5,19 +5,20 @@ import { isMock } from '../../env';
 import { requireVerified } from '../../auth/middleware';
 import { parseJson, parseParam } from '../../lib/validate';
 import { AppError } from '../../lib/errors';
+import { CompanyIdSchema } from '../../../shared/schema/common';
 import { cacheGet, cacheKey, cachePut } from '../../lib/cache';
 import { asD1, type D1Like } from '../../d1/db';
 import { actorOf, clientOf, requireDb } from '../../services/writeContext';
 import { AiJobIdSchema, type AiJobDetail } from '../../../shared/ai/common';
-import { ScoutChoiceInputSchema, ScoutModelIdSchema, ScoutUsageInputSchema, type ScoutModelsResponse, type ScoutOptionsResponse, type ScoutTuneResponse } from '../../../shared/ai/scout';
+import { ScoutChoiceInputSchema, ScoutJobIdSchema, ScoutMemberIdSchema, ScoutModelIdSchema, ScoutUsageInputSchema, type ScoutJobSummary, type ScoutMemberSummary, type ScoutModelsResponse, type ScoutOptionsResponse, type ScoutTuneResponse } from '../../../shared/ai/scout';
 import { AiJobsRepo, type AiJobRow } from '../repo';
 import { companyBrief, isAiAdmin, toDetail } from '../service';
 import { vertexConfigured } from '../vertex';
 import { makeScoutDataSource } from './bqDataSource';
-import { AI_CONFIG_MESSAGE, rollbackScoutModel, scoutModelsResponse, setScoutChoice, setScoutUsage, withScoutFeedback } from './service';
+import { AI_CONFIG_MESSAGE, rollbackScoutModel, scoutJobSummary, scoutMemberSummary, scoutModelsResponse, setScoutChoice, setScoutUsage, withScoutFeedback } from './service';
 import { runScoutTuning } from './tuning';
 
-/** ② スカウトのフィードバック・条件の選択肢・モデルの成績とチューニング（/api の下。ai/routes.ts から束ねる） */
+/** ② スカウトのフィードバック・条件の選択肢・求人と候補者の内容の確認・モデルの成績とチューニング（/api の下。ai/routes.ts から束ねる） */
 export const scoutRoutes = new Hono<AppEnv>();
 
 const NO_STORE = { 'cache-control': 'private, no-store' } as const;
@@ -70,6 +71,24 @@ scoutRoutes.get('/ai/scout/options', async (c) => {
   const body: ScoutOptionsResponse = await makeScoutDataSource(c.env).options();
   // マートがまだ無い（dataDate = null）ときは、キャッシュしない
   if (body.dataDate !== null) await cachePut(key, body, OPTIONS_TTL_SEC, c.executionCtx);
+  return c.json(body, 200, NO_STORE);
+});
+
+/**
+ * 求人の内容を確かめる（「求人 ID から作る」の、実行の前）。企業は URL からだけ: その企業の求人でなければ 404。
+ * Vertex AI は呼ばない。仕事内容・応募条件は先頭 200 字だけを返す
+ */
+scoutRoutes.get('/companies/:id/ai/scout/jobs/:jobId', async (c) => {
+  const companyId = parseParam(c.req.param('id'), CompanyIdSchema);
+  const jobId = parseParam(c.req.param('jobId'), ScoutJobIdSchema);
+  const body: ScoutJobSummary = await scoutJobSummary({ client: clientOf(c), ds: makeScoutDataSource(c.env), actor: c.get('identity')?.email ?? 'preview', requestId: c.get('requestId'), ctx: c.executionCtx }, companyId, jobId);
+  return c.json(body, 200, NO_STORE);
+});
+
+/** 候補者の属性を確かめる（「会員 ID から作る」の、実行の前）。BigQuery にある属性だけ。Vertex AI は呼ばない。誰が・どの会員 ID を引いたかをログに残す */
+scoutRoutes.get('/ai/scout/members/:memberId', async (c) => {
+  const memberId = parseParam(c.req.param('memberId'), ScoutMemberIdSchema);
+  const body: ScoutMemberSummary = await scoutMemberSummary({ ds: makeScoutDataSource(c.env), actor: c.get('identity')?.email ?? 'preview', requestId: c.get('requestId') }, memberId);
   return c.json(body, 200, NO_STORE);
 });
 

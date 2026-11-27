@@ -91,6 +91,27 @@ export const SCOUT_TEXT = {
   placeholders: '{{企業名}} {{候補者名}} などの差し込みは、送る前に置き換えてください。AI が、依頼に無い内容（業務の説明・待遇など）を書くことがあります。企業へ渡す前に、事実と合っているかを確かめてください',
   tuneNow: '今すぐ検証・チューニング',
   rollback: 'この版に戻す',
+  /* 何をもとに作るか（最初に選ぶ。選ぶ・確かめるだけでは AI は動かない） */
+  basisLegend: '何をもとに作りますか？',
+  basisHint: '選ぶと、入力欄が出ます。選ぶ・確かめるだけでは AI は動きません',
+  checkJob: '求人を確かめる',
+  checkMember: '候補者を確かめる',
+  checking: '確かめています…',
+  jobIdHint: '求人ページの URL の数字。この企業の求人だけ使えます',
+  memberIdHint: '会員 ID（数字）',
+  jobNeedsCompany: '先に企業を選んでください',
+  jobNotFound: 'この企業の求人が見つかりません',
+  memberNotFound: '会員が見つかりません',
+  jobUnpublished: 'この求人は掲載が終わっています。内容がいまの募集と合っているか確かめてください',
+  jobFields: 'ポジション名・掲載職種・勤務地は、求人の内容を使います',
+  memberPrivacy: '氏名・連絡先は表示されません。属性は現在のプロフィールです',
+  memberFilters: '分析対象は、この候補者の年齢層・経験職種の送信実績で絞り込みます',
+  memberNoFilters: '絞り込みに使える属性が無いため、条件を付けずに分析します',
+  runHint: '実行すると AI が動きます（十数秒）',
+  needJob: '求人を確かめると実行できます',
+  needMember: '候補者を確かめると実行できます',
+  needJobMember: '求人と候補者を確かめると実行できます',
+  targetLabel: '何をもとに作ったか',
 } as const;
 
 export const AI_KIND_DESCRIPTION = {

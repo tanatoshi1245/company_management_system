@@ -17,10 +17,14 @@ import {
   type AiKind,
 } from '../../../../shared/ai/common';
 import {
+  ScoutJobSummarySchema,
+  ScoutMemberSummarySchema,
   ScoutModelsResponseSchema,
   ScoutOptionsResponseSchema,
   ScoutTuneResponseSchema,
   type ScoutChoiceInput,
+  type ScoutJobSummary,
+  type ScoutMemberSummary,
   type ScoutModelId,
   type ScoutModelsResponse,
   type ScoutOptionsResponse,
@@ -77,6 +81,13 @@ const SCOUT_MODELS_URL = '/api/ai/scout/models';
 
 /** 受け取る人の条件の選択肢（マートにある値） */
 export const useScoutOptions = (): Resource<ScoutOptionsResponse> => useResource('/api/ai/scout/options', ScoutOptionsResponseSchema, { ttlMs: 30 * 60_000 });
+
+/** 求人の内容を確かめる（その企業の求人でなければ 404）。**AI は動かない**（読むだけ） */
+export const fetchScoutJob = (companyId: string, jobId: string, signal?: AbortSignal): Promise<ScoutJobSummary> =>
+  apiGet(`/api/companies/${enc(companyId)}/ai/scout/jobs/${enc(jobId)}`, ScoutJobSummarySchema, signal);
+
+/** 候補者の情報を確かめる（無ければ 404。氏名・連絡先は返らない）。**AI は動かない**（読むだけ） */
+export const fetchScoutMember = (memberId: string, signal?: AbortSignal): Promise<ScoutMemberSummary> => apiGet(`/api/ai/scout/members/${enc(memberId)}`, ScoutMemberSummarySchema, signal);
 
 /** どの案を選んだか（draftId = null は「どれも使わない」） */
 export async function putScoutChoice(jobId: string, input: ScoutChoiceInput): Promise<AiJobDetail> {
