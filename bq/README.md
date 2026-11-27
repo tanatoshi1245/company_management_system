@@ -100,15 +100,36 @@ bq query --use_legacy_sql=false 'SELECT * FROM `bq-hgt.dwh.cms_refresh_log` ORDE
 - スクリプトは `BEGIN … EXCEPTION` で `cms_refresh_log` に `error` 行を残す。Worker は前日の `dataVersion` で配信を続け、画面の左レールに「今朝の更新に失敗」と出る
 - 再実行は冪等（全件差し替え / 当日分の DELETE → INSERT）。同じ日に何度実行してもよい
 
-## AI 機能の SQL（セッションが読む。マートではない）
+## AI 機能の日次マート cms_ai_*（2026-11-27〜。Worker が読む）
 
-AI 機能（[docs/AI機能.md](../docs/AI機能.md)）で立ち上がった Claude Code のセッションが `npm run ai:sql` で実行する SQL（[`ai/<機能>/sql/`](../ai/README.md)）。**Worker は実行しない**（Worker が読むのは従来どおりマートだけ）。読むだけ（SELECT 1 文・`@param`）で、表は作らない。実行の前に必ず dry run し、宣言した上限を超えたら実行しない。
+② スカウト文面の AI 作成（[docs/AI機能.md](../docs/AI機能.md)）の材料。以前の「セッションが `ai/<機能>/sql/` の SQL で生テーブルを読む」方式は 2026-11-27 にやめた（Worker が Vertex AI を直接呼び、マートだけを読む）。SQL・列定義・置き換えと特徴の正規表現は [`ai/README.md`](./ai/README.md)。
 
-| SQL | 読む表 | dry run（2026-11-25 実測） | 上限（`-- max_bytes`） | 実行時間・行数（実測） |
+| 項目 | 値 |
+|---|---|
+| スケジュールドクエリ名 | `cms_ai スカウト文面マート 日次更新（契約企業マネジメントシステム AI / 毎日JST08:10）` |
+| 設定 ID | `6b16fcc5-0000-23e6-bf43-b8db38fbb212` |
+| スケジュール | 毎日 23:10 UTC（= JST 08:10。上の cms_marts 日次更新 07:45 JST の後。`cms_company_master` を読む） |
+| SQL | `ai/scout_marts.sql`（スクリプト。宛先テーブルなし） |
+| 実行者 | `id-69-213@bq-hgt.iam.gserviceaccount.com` |
+| 登録日 | 2026-11-27（Data Transfer API で登録。登録直後の実行 ok） |
+
+| 表 | 粒度 | 行数（2026-11-27） |
+|---|---|---|
+| cms_ai_dim_industry_group | 業界 → 類似業界のまとまり（48 → 12） | 48 |
+| cms_ai_scout_templates | 文面（企業 × 本文。社名・URL などは置き換え済み） | 23,400（49.8 MB） |
+| cms_ai_scout_sends | スカウト 1 通（返信・採用・受け取った人の属性） | 269,616（48.0 MB） |
+| cms_ai_scout_drafts | CS が選んだ案（アプリが MERGE で書く） | 0 |
+| cms_ai_scout_draft_outcomes | 案と送信実績の照合 | 0 |
+| cms_ai_refresh_log | 実行記録（`step = 'scout_marts'`） | 追記 |
+
+| SQL | 読む表 | スキャン（2026-11-27 実測） | 上限 | 時間 |
 |---|---|---|---|---|
-| `ai/scout/sql/peer_templates.sql` | cms_company_master / scouts / scout_histories / **messages**（subject・body） | 18.43 GB | 25 GB | 約 3〜4 秒・1 + 文面の数（既定で最大 1 + 5 社 × 3 + 自社 3 行。実測 11 行・28 行） |
-| `ai/job/sql/peer_jobs.sql` | cms_company_master / cms_company_job_monthly / **jobs_all**（job_description・application_condition） | 1.23 GB | 3 GB | 約 2 秒・1 + 上位の求人の数（既定 9 行） |
-| `ai/job/sql/target_job.sql` | cms_company_master / cms_company_job_monthly / **jobs_all** | 1.57 GB | 3 GB | 約 1 秒・0〜2 行（言語ごと） |
+| `ai/scout_marts.sql`（日次） | cms_company_master / scouts / scout_histories / **messages**（subject・body。1 回の実行で 1 回）/ member_profile_latest / member_details | 20.1 GB | —（手動実行は `--maximum_bytes_billed=30000000000`） | 34〜40 秒 |
+| Worker `ai_scout_benchmark` | cms_ai_scout_sends / cms_ai_scout_templates / cms_ai_refresh_log | dry run 93 MB（実行 69〜85 MB） | 400 MB | 1.4〜2.0 秒（キャッシュ 0.6 秒） |
+| Worker `ai_scout_options` | cms_ai_scout_sends / cms_ai_refresh_log | 26 MB | 200 MB | 0.5〜0.6 秒 |
+| Worker `ai_scout_outcomes` | cms_ai_scout_draft_outcomes | 0 MB | 50 MB | 0.4 秒 |
+| Worker `ai_scout_drafts_merge`（書き込み） | cms_ai_scout_drafts | 0 MB | 200 MB | 1.7 秒 |
 
-- `messages` はパーティションもクラスタリングも無く、件名と本文を読むと期間によらず毎回 約 18〜20GB。② の依頼 1 件につき 1 回（[ai/session.md](../ai/session.md)）。依頼が増えて量が問題になったら、スカウトの最初の 1 通だけを持つマート（企業 × 文面 × 月）を日次で作り、SQL の読み先を差し替える
-- スキャン量は表の大きさとともに増える。SQL を変えたとき・上限に近づいたときは、この表を測り直す（`BQ_SA_KEY_FILE=… npm run ai:sql -- <機能>/<名前> --param company_id=<ID> … --dry`）
+- `messages` はパーティションもクラスタリングも無く、件名と本文を読むと期間によらず毎回 約 18.4 GB。日次の 1 回だけにして、依頼ごとには読まない（以前は依頼 1 件につき 1 回 18.4 GB）
+- Worker 用 SA（`cms-bq-reader@bq-hgt`）に、読む 4 表の dataViewer と、`cms_ai_scout_drafts` の dataEditor を表単位で付ける（コマンドは [`ai/README.md`](./ai/README.md)）
+- スキャン量は `npm run dryrun` で測り直す（AI の 4 つの照会も入っている）

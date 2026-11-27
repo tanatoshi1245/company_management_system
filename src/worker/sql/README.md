@@ -21,6 +21,7 @@ status: active
 | industryBenchmark.ts | cms_industry_benchmark_monthly | cms_company_monthly, cms_company_master |
 | companyDetail.ts（8 ビルダー: company_master_one / company_monthly_one / daily_usage / scout_cohort / application_cohort / member_attributes / bench_series / company_login_one） | cms_company_master, cms_company_monthly, cms_company_daily_usage, cms_scout_cohort_status, cms_application_cohort_status, cms_scout_member_attributes_monthly, cms_industry_benchmark_monthly, cms_company_login | 各マート README |
 | ai.ts（ai_occupation_options: AI 機能の職種の選択肢） | cms_company_job_monthly | 各マート README |
+| aiScout.ts（4 ビルダー: ai_scout_benchmark / ai_scout_options / ai_scout_outcomes / ai_scout_drafts_merge（書き込み）。② スカウト文面の AI 作成） | cms_ai_scout_sends, cms_ai_scout_templates, cms_ai_scout_draft_outcomes, cms_ai_scout_drafts, cms_ai_refresh_log | [bq/ai/README](../../../bq/ai/README.md)（messages, scouts, scout_histories, member_profile_latest, member_details, cms_company_master） |
 
 ## テスト
-tests/worker/sql.test.ts（@param 以外のリテラルが無いこと）
+tests/worker/sql.test.ts（@param 以外のリテラルが無いこと）、tests/worker/aiScoutData.test.ts（AI のマート cms_ai_* の SQL）

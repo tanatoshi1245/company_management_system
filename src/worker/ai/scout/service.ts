@@ -144,19 +144,25 @@ export async function createScoutJob(d: ScoutDeps, companyId: string, rawInput: 
 
 export const feedbackOf = (r: ScoutDraftRow): ScoutDraftFeedback => ({ chosen: r.chosen === 1, usedState: r.used_state, usedSource: r.used_source, sends: r.out_sends, replies: r.out_replies, hires: r.out_hires, outcomeAt: r.out_updated_at });
 
-function attach(result: unknown, byId: Map<string, ScoutDraftRow>): unknown {
+/** その依頼の判断（各案の行から）: judged = 判断済み、none = どれも使わない、comment = 保存したコメント */
+const choiceOf = (rows: ScoutDraftRow[]): { judged: boolean; none: boolean; comment: string } => {
+  const judged = rows.some((r) => r.judged === 1);
+  return { judged, none: judged && !rows.some((r) => r.chosen === 1), comment: judged ? (rows.find((r) => r.comment)?.comment ?? '').slice(0, 300) : '' };
+};
+
+function attach(result: unknown, rows: ScoutDraftRow[]): unknown {
   if (!result || typeof result !== 'object' || !Array.isArray((result as { drafts?: unknown }).drafts)) return result;
+  const byId = new Map(rows.map((r) => [r.draft_id, r]));
   const r = result as { drafts: unknown[] };
-  return { ...r, drafts: r.drafts.map((x) => (x && typeof x === 'object' && typeof (x as { draftId?: unknown }).draftId === 'string' ? { ...x, feedback: byId.has((x as { draftId: string }).draftId) ? feedbackOf(byId.get((x as { draftId: string }).draftId)!) : null } : x)) };
+  return { ...r, choice: choiceOf(rows), drafts: r.drafts.map((x) => (x && typeof x === 'object' && typeof (x as { draftId?: unknown }).draftId === 'string' ? { ...x, feedback: byId.has((x as { draftId: string }).draftId) ? feedbackOf(byId.get((x as { draftId: string }).draftId)!) : null } : x)) };
 }
 
-/** ② の結果（と直した版）の各案に、D1（ai_scout_drafts）のフィードバックと実績を付ける。見本・以前の形の結果は、そのまま返す */
+/** ② の結果（と直した版）の各案に、D1（ai_scout_drafts）のフィードバックと実績を、結果に choice（判断の状態）を付ける。保存する本体には入れない。見本・以前の形の結果は、そのまま返す */
 export async function withScoutFeedback(db: D1Like | null, row: AiJobRow, detail: AiJobDetail): Promise<AiJobDetail> {
   if (!db || row.kind !== 'scout' || row.status !== 'done' || row.sample === 1) return detail;
   const rows = await new ScoutRepo(db).draftsByJob(row.id).catch(() => [] as ScoutDraftRow[]);
   if (!rows.length) return detail;
-  const byId = new Map(rows.map((r) => [r.draft_id, r]));
-  return { ...detail, result: attach(detail.result, byId), editedResult: attach(detail.editedResult, byId) };
+  return { ...detail, result: attach(detail.result, rows), editedResult: attach(detail.editedResult, rows) };
 }
 
 /* ---------- 画面で直した版 ---------- */
@@ -181,7 +187,7 @@ export function mergeScoutEdited(row: AiJobRow, submitted: unknown, brief: { nam
   const drafts = orig.drafts.map((x) => ({ ...x, subject: byId.get(x.draftId)!.subject, body: byId.get(x.draftId)!.body, feedback: null }));
   const pii = drafts.flatMap((x, i) => piiDetails({ subject: x.subject, body: x.body }, brief, `result.drafts.${i}`));
   if (pii.length) throw new AppError('badRequest', 400, PII_MESSAGE, pii.slice(0, 20));
-  return ScoutResultSchema.parse({ ...orig, drafts });
+  return ScoutResultSchema.parse({ ...orig, choice: null, drafts });
 }
 
 /* ---------- フィードバック（どれを選んだか・企業が使ったか） ---------- */

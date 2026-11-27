@@ -34,17 +34,22 @@ status: active
 | GET / PUT /api/settings/plan-defaults | session / verified | `{plan, values}`（null の指標は削除） | `{plans, updatedAt}` | D1 plan_target_defaults + audit_log |
 | POST /api/admin/cache/bump | verified + 同一オリジン | — | `{cacheEpoch}` | D1 app_meta + audit_log |
 | `GET /api/scout-unused?month=` / `PUT`・`DELETE /api/scout-unused/:companyId/:month` / `POST /api/scout-unused/sync` | `scoutUnused.ts` | スカウト未利用の理由・補足（D1 が正 → BigQuery `scout_unused_companies_monthly` に `match_method = 'app'` の行を MERGE）。書き込みは `requireVerified` + 同一オリジン、strict zod、監査ログ同 batch |
-| GET /api/ai/config | session | — | `AiConfigResponse`（発火の設定・保存先の有無、見本で動くか、書き込めるか、管理者か。真偽値だけ） | Worker の変数 |
+| GET /api/ai/config | session | — | `AiConfigResponse`（Vertex AI を呼べる設定 = `fireConfigured`・保存先の有無、見本で動くか、書き込めるか、管理者か、機能ごとの可否 `features`。真偽値だけ） | Worker の変数 |
 | GET /api/ai/companies | session | — | `AiCompaniesResponse`（当月のボードに出ている企業） | ボードのマート（キャッシュ共用） |
 | GET /api/ai/companies/:id/defaults | session | :id | `AiCompanyDefaultsResponse`（業界・掲載職種・直近 6 か月の求人、業界・職種の選択肢。無い企業は 404） | cms_company_master, cms_company_job_monthly |
 | GET /api/ai/jobs | session | ?company=&kind=report\|scout\|job（strict） | `AiJobListResponse`（新しい順・30 件まで。結果の本体なし。D1 が無ければ空） | D1 ai_jobs |
-| GET /api/ai/jobs/:jobId | session | :jobId `^[a-z0-9]{16,40}$` | `AiJobDetail`（入力・結果・直した版。期限切れの running は failed にして返す。sessionUrl は管理者だけ） | D1 ai_jobs, cms_company_master（企業名。10 分キャッシュ） |
-| POST /api/companies/:id/ai/jobs | verified + 同一オリジン（サンプルデータのときだけ仮の利用者も可・保存しない） | `{kind, input}`（strict。input は kind ごとの型。社名・個人情報があれば 400） | 201 `AiCreateResponse`（fire = sent / sample / failed） | D1 ai_jobs + audit_log（1 batch）、発火（api.anthropic.com） |
-| POST /api/ai/jobs/:jobId/fire | verified + 同一オリジン | — | `AiCreateResponse`（未起動・失敗のジョブだけ。それ以外は 409） | 同上 |
-| PUT / DELETE /api/ai/jobs/:jobId/edited | verified + 同一オリジン | `{result}`（strict。結果と同じ型。done のジョブだけ） | `AiJobDetail` | D1 ai_jobs + audit_log |
+| GET /api/ai/jobs/:jobId | session | :jobId `^[a-z0-9]{16,40}$` | `AiJobDetail`（入力・結果・直した版。② は、各案に `feedback`、結果に `choice` を付ける。sessionUrl は常に null） | D1 ai_jobs・ai_scout_drafts, cms_company_master（企業名。10 分キャッシュ） |
+| POST /api/companies/:id/ai/jobs | verified + 同一オリジン（サンプルデータのときだけ仮の利用者も可・保存しない） | `{kind, input}`（strict。kind = scout だけ。job / report は 409 `notReady`。社名・個人情報があれば 400） | 201 `AiCreateResponse`（fire = done / sample / failed。failed の理由は fireMessage）。Vertex AI の設定が無い本番は 503 `aiConfig` | cms_ai_scout_*（分析対象）、Vertex AI、D1 ai_jobs + ai_scout_drafts + audit_log（1 batch）、ai_scout_insights |
+| PUT / DELETE /api/ai/jobs/:jobId/edited | verified + 同一オリジン | `{result}`（strict。done のジョブだけ。② で直せるのは各案の subject / body だけ = ほかは元の結果のまま保存。社名・連絡先は 400） | `AiJobDetail` | D1 ai_jobs + audit_log（② は、選ばれた案の bq_synced_at を戻す） |
 | DELETE /api/ai/jobs/:jobId | verified + 同一オリジン | — | 204 | 同上（deleted_at） |
+| PUT /api/ai/jobs/:jobId/scout/choice | verified + 同一オリジン | `ScoutChoiceInputSchema`（draftId = null は「どれも使わない」。選び直せる。コメントの社名・連絡先は 400。見本は 409） | `AiJobDetail` | D1 ai_scout_drafts + audit_log |
+| PUT /api/ai/jobs/:jobId/scout/usage | verified + 同一オリジン | `ScoutUsageInputSchema`（選んだ案が無い・送信実績と照合済みは 409） | `AiJobDetail` | 同上 |
+| GET /api/ai/scout/options | session | — | `ScoutOptionsResponse`（受け取る人の条件の選択肢。10 分キャッシュ） | cms_ai_scout_*（`ai/scout/bqDataSource.ts`） |
+| GET /api/ai/scout/models | session | — | `ScoutModelsResponse`（3 つのモデル・版ごとの成績・最後の実行。playbook・engine は管理者にだけ） | D1 ai_scout_models・ai_scout_model_versions・ai_scout_drafts・ai_scout_tune_runs |
+| POST /api/ai/scout/tune | verified + 管理者 + 同一オリジン | — | `ScoutTuneResponse`（実績の取り込み → 検証 → 据え置き / チューニング / 前の版へ戻す。サンプルデータは 409、設定なしは 503） | cms_ai_scout_*、Vertex AI、D1（上の表 + audit_log） |
+| POST /api/ai/scout/models/:id/rollback | verified + 管理者 + 同一オリジン | `{version}`（strict。無い版は 404、いまの版は 409） | `ScoutModelsResponse` | D1 ai_scout_models・ai_scout_model_versions + audit_log |
 
-`/api` の外: `GET /hook/ai/jobs/:jobId/context`・`POST /hook/ai/jobs/:jobId/result`（`src/worker/ai/hook.ts`。AI 機能のセッションが使う。Google ログインの外で、ジョブごとの合言葉（`Authorization: Bearer`）を確かめる。違えば一律 401、`/hook/` のほかのパスは 404）。詳しくは [`src/worker/ai/README.md`](../ai/README.md)。
+`/api` の外に AI 機能の入口は無い（以前の `/hook/ai/*` は 2026-11-27 に無くした。`/hook/` は未ログインで 401、ログイン済みでも 404）。週次の cron（`src/worker/index.ts` の `scheduled`。月曜 05:00 JST）が、`POST /api/ai/scout/tune` と同じ処理を実行する。詳しくは [`src/worker/ai/README.md`](../ai/README.md)。
 
 D1 が束ねられていない環境では書き込み系は 503 `storage`、読み取り系は空を返す。
 
