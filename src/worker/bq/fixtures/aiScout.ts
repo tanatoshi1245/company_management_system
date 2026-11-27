@@ -234,3 +234,76 @@ export function mockAiScoutMember(q: BuiltQuery): Row[] {
   const m = MEMBERS[str(q, 'member_id')];
   return m ? [{ ...m }] : [];
 }
+
+/**
+ * 作り物の職務経歴・自己PR（会員 20001 だけ。日本語と英語の 2 行。20002 はレジュメなし）。
+ * 実在しない内容で、社名・人名は無い（マート dwh_restricted.cms_ai_member_resumes と同じく、勤務先の社名の列は無い）
+ */
+const RESUMES: Record<string, { lang: 'ja' | 'en'; appeal: string; work: { title: string | null; start_ym: string | null; end_ym: string | null; notes: string }[]; work_count: number; job_change_times: number | null }[]> = {
+  '20001': [
+    {
+      lang: 'ja',
+      appeal:
+        'Web アプリケーションの開発に 8 年ほど携わり、直近の 3 年はプロジェクトマネージャーとして、日本と海外拠点の開発チームの橋渡しを担当してきました。' +
+        '要件の整理から進行管理、リリース後の改善までを一貫して進めることを得意としています。' +
+        '英語と日本語の両方で会議の進行と資料の作成ができ、認識のずれを早い段階で見つけて解消することを心がけています。' +
+        '開発の経験があるため、技術的な課題を自分で読み解き、エンジニアと同じ言葉で話せることが強みです。' +
+        '今後は、より大きな規模のプロダクトで、海外のメンバーを含むチームをまとめる役割に挑戦したいと考えています。' +
+        '新しい技術の習得にも継続して取り組んでおり、クラウドの設計に関する資格の取得を進めています。',
+      work: [
+        {
+          title: 'プロジェクトマネージャー',
+          start_ym: '2022-04',
+          end_ym: null,
+          notes:
+            '受託開発のプロジェクトで、進行管理と顧客との調整を担当。\n・メンバー 8 名（うち海外拠点 4 名）のチームの進行管理\n・要件の整理と、見積りの作成\n・週次の定例会議の進行（英語・日本語）\n・リリースの計画と、品質の確認',
+        },
+        {
+          title: 'Web エンジニア',
+          start_ym: '2017-04',
+          end_ym: '2022-03',
+          notes: '業務システムと EC サイトの開発を担当。\n・サーバーサイドの設計と実装\n・コードレビューと、新しいメンバーの育成\n・運用の自動化による、作業時間の短縮',
+        },
+      ],
+      work_count: 2,
+      job_change_times: 2,
+    },
+    {
+      lang: 'en',
+      appeal:
+        'I have about eight years of experience in web application development, and for the last three years I have worked as a project manager bridging development teams in Japan and overseas. ' +
+        'I am comfortable leading meetings and preparing documents in both English and Japanese.',
+      work: [
+        { title: 'Project Manager', start_ym: '2022-04', end_ym: null, notes: 'Managed schedules and client communication for contract development projects.\n- Led a team of eight, including four members overseas\n- Organized requirements and prepared estimates' },
+        { title: 'Web Engineer', start_ym: '2017-04', end_ym: '2022-03', notes: 'Developed business systems and e-commerce sites.\n- Server-side design and implementation\n- Code review and onboarding of new members' },
+      ],
+      work_count: 2,
+      job_change_times: 2,
+    },
+  ],
+};
+
+/** ai_scout_member_resume: 文面の言語（@lang）のレジュメを優先して 1 行（SQL の ORDER BY と同じ）。本文は @appeal_chars / @work_chars 文字、職務経歴は @work_max 社まで */
+export function mockAiScoutMemberResume(q: BuiltQuery): Row[] {
+  const memberId = str(q, 'member_id');
+  const list = RESUMES[memberId];
+  if (!list || list.length === 0) return [];
+  const r = list.find((x) => x.lang === str(q, 'lang')) ?? list[0];
+  const appealChars = Number(str(q, 'appeal_chars')) || 600;
+  const workChars = Number(str(q, 'work_chars')) || 600;
+  const workMax = Number(str(q, 'work_max')) || 3;
+  return [
+    {
+      member_id: memberId,
+      lang: r.lang,
+      appeal: r.appeal.slice(0, appealChars),
+      appeal_chars: r.appeal.length,
+      work_json: JSON.stringify(r.work.slice(0, workMax).map((w) => ({ ...w, notes: w.notes.slice(0, workChars) }))),
+      work_count: r.work_count,
+      work_chars: r.work.reduce((n, w) => n + w.notes.length, 0),
+      management_experience: null,
+      management_experience_years: 0,
+      job_change_times: r.job_change_times,
+    },
+  ];
+}

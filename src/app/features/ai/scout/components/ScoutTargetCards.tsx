@@ -1,7 +1,7 @@
 import { SCOUT_BASIS_LABEL, type ScoutJobSummary, type ScoutMemberSummary, type ScoutTarget } from '../../../../../shared/ai/scout';
 import { SCOUT_TEXT } from '../../../../../shared/ai/options';
 import { Badge } from '../../../../components/ui/Badge';
-import { filterChips } from '../scoutModel';
+import { filterChips, resumeLine } from '../scoutModel';
 
 /** 求人・候補者の要約のカード（入力で確かめるとき・結果で「何をもとに作ったか」を出すとき、の両方で使う） */
 
@@ -51,7 +51,10 @@ export function ScoutJobCard({ job }: { job: ScoutJobSummary }) {
 
 const list = (v: string[]): string => (v.length ? v.join('、') : '—');
 
-/** 候補者の情報（BigQuery にある属性だけ。氏名・連絡先は無い）。分析対象の絞り込みに使う条件をチップで見せる */
+/**
+ * 候補者の情報（BigQuery にある属性と、職務経歴・自己PR の登録の有無。氏名・連絡先・本文は無い）。分析対象の絞り込みに使う条件をチップで見せる。
+ * 職務経歴・自己PR は、件数・文字数・直近の役職名だけ（本文は応答に無い。文面を作るときに Worker が AI へ渡す）
+ */
 export function ScoutMemberCard({ member, showFilters = true }: { member: ScoutMemberSummary; showFilters?: boolean }) {
   const chips = filterChips(member.filters);
   return (
@@ -76,6 +79,18 @@ export function ScoutMemberCard({ member, showFilters = true }: { member: ScoutM
         <Row label="経験職種" value={list(member.experiencedOccupations)} />
         <Row label="希望職種" value={list(member.desiredOccupations)} />
       </dl>
+      <div className="ai-target-head" role="group" aria-label={SCOUT_TEXT.resumeLabel} data-resume={member.resume ? 'yes' : 'no'}>
+        <span className="lbl">{SCOUT_TEXT.resumeLabel}</span>
+        {member.resume ? (
+          <>
+            <p>{resumeLine(member.resume)}</p>
+            <p>{SCOUT_TEXT.resumeUse}</p>
+            <p className="muted small">{SCOUT_TEXT.resumeCaution}</p>
+          </>
+        ) : (
+          <p>{SCOUT_TEXT.resumeNone}</p>
+        )}
+      </div>
       {showFilters ? (
         <div className="ai-target-filters">
           <p className="small">{chips.length ? SCOUT_TEXT.memberFilters : SCOUT_TEXT.memberNoFilters}</p>
@@ -123,6 +138,7 @@ export function ScoutTargetView({ target }: { target: ScoutTarget }) {
             候補者: 会員 ID <span className="num">{member.memberId}</span>
             {member.occupation ? `・${member.occupation}` : ''}
             {languages ? `・${languages}` : ''}
+            {`・${SCOUT_TEXT.resumeLabel} ${member.resume ? 'あり' : 'なし（属性だけで作成）'}`}
           </summary>
           <ScoutMemberCard member={member} />
         </details>

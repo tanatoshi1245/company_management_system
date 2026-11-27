@@ -4,6 +4,7 @@
 --   宛先テーブル: なし（スクリプト内で CREATE OR REPLACE。drafts だけ CREATE TABLE IF NOT EXISTS）
 --   作る表: cms_ai_dim_industry_group / cms_ai_scout_templates / cms_ai_scout_sends / cms_ai_scout_drafts（枠だけ）/ cms_ai_scout_draft_outcomes
 --           / cms_ai_jobs（求人の内容。求人 ID からの作成用）/ cms_ai_member_profiles（候補者の属性。会員 ID からの作成用）（2026-11-27 追加）
+--           / dwh_restricted.cms_ai_member_resumes（候補者の職務経歴・自己PR のテキスト。**この 1 表だけ、閲覧制限付きのデータセットに作る**。2026-11-27 追加）
 --   スキャン: 約 24 GB/日（messages の subject・body を 1 回 = 約 18.4 GB。messages はパーティションが無い。jobs_all = 約 1.9 GB（本文 2 列が 1.3 GB））。所要 約 80 秒
 --   失敗時は EXCEPTION で cms_ai_refresh_log に error 行を残し、前日の表がそのまま残る。再実行は冪等（全件差し替え）
 --   設計・列定義・正規表現: company_management_system/bq/ai/README.md
@@ -469,7 +470,85 @@ BEGIN
     JOIN mem_raw r USING (member_id)
     WHERE r.retired_on IS NULL;
 
-    -- 12. 実行記録 ---------------------------------------------------------------------------------------------------------
+    -- 12. cms_ai_member_resumes: 候補者の職務経歴・自己PR のテキスト（会員 × 言語 = 1 行。会員 ID からの文面の作成用。2026-11-27 ユーザー指示） ----
+    --   **この表だけは、閲覧制限付きのデータセット dwh_restricted に置く**（元の dwh_restricted.member_work_histories / member_resumes と同じ制限のまま。本文を dwh へ写さない）。
+    --   元の 2 表は ターゲット人材（member_category A/B/C/I）だけで、メールアドレス・URL・電話番号は取り込みの時点で [EMAIL] [URL] [PHONE] に伏せてある
+    --   （ここでも同じ記号へ、もう一度置き換える = 取り込みの決まりから漏れた形の分）。氏名の混入は検出できない。
+    --   持たないもの: 勤務先の社名（元の表の社名の列は読まない）・職種 / 業界の ID・レジュメのタイトル・中国語のレジュメ（language_id = 3）。
+    --   対象: cms_ai_member_profiles（11）に居る会員（= 退会していない）で、自己PR か職務内容のどちらかに本文があるレジュメ。
+    --   1 会員 × 1 言語にレジュメが複数あるとき（全体の約 1 割）は 1 つを選ぶ: 企業の検索対象（is_searchable）→ 入力完了（is_complete）→ 本文の多い順 → 更新の新しい順。
+    --   職務経歴は、選んだレジュメの行のうち、役職か職務内容のどちらかがあるもの。行の is_complete では絞らない（未完了の行の約 4 割に本文があり、
+    --   未完了の行だけのレジュメが 4 万件あるため）。同じレジュメの中で、開始日・役職・職務内容が同じ行は 1 行にする。新しい順（開始日の降順。開始日なしは最後）に 4 社まで。
+    --   マネジメント経験・転職回数は、元の列の値のまま（コード値の意味は未確認。Worker は、意味を確かめるまで文面の材料にしない）
+    CREATE OR REPLACE TABLE `bq-hgt.dwh_restricted.cms_ai_member_resumes`
+    PARTITION BY RANGE_BUCKET(member_id, GENERATE_ARRAY(0, 4000000, 2000))
+    CLUSTER BY member_id, language_id
+    OPTIONS (description = '契約企業マネジメントシステム AI: 候補者の職務経歴・自己PR のテキスト（会員 × 言語 = 1 行。ターゲット人材で、本文のある会員だけ。退会した会員は除く）。メールアドレス・URL・電話番号は伏せてある。勤務先の社名は持たない。氏名の混入は検出できない。閲覧制限付き。毎朝 全件差し替え') AS
+    WITH rs AS (
+      SELECT r.id AS resume_id, r.member_id, r.language_id, IFNULL(r.is_searchable, FALSE) AS is_searchable, IFNULL(r.is_complete, FALSE) AS is_complete, r.updated_at,
+             TRIM(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(REPLACE(IFNULL(r.appeal, ''), '\r', ''),
+               r'(?i)(?:https?[:：][/∕／]{2}|www[.․])[ \t]?[^\s　<>"）)」』】]+', '[URL]'),
+               r'[A-Za-z0-9._%+\-]+[ \t]?[@＠][ \t]?[A-Za-z0-9\-]+(?:\.+[A-Za-z0-9\-]+)+', '[EMAIL]'),
+               r'(^|[^0-9.,/\-])(?:(?:\+\d{1,3}[-\s]?\(?\d{1,4}\)?|\(?0\d{1,4}\)?)[-\s‐－.]{1,2}\d{1,4}[-\s‐－.]{1,2}\d{3,4}|0\d{9,10})\b', r'\1[PHONE]'),
+               r'(?i)((?:tel|mob|mobile|phone|cell|whatsapp|電話|携帯|連絡先)[^0-9\n]{0,6})\+?\d{9,13}', r'\1[PHONE]')) AS appeal,
+             r.management_experience, r.management_experience_years, r.job_change_times
+      FROM `bq-hgt.dwh_restricted.member_resumes` r
+      WHERE r.language_id IN (1, 2)
+        AND r.member_id IN (SELECT member_id FROM `bq-hgt.dwh.cms_ai_member_profiles`)
+    ),
+    wk0 AS (
+      SELECT w.member_resume_id AS resume_id, w.id, IFNULL(w.is_complete, FALSE) AS is_complete, IFNULL(w.position, 0) AS position, w.updated_at,
+             IF(w.start_date BETWEEN DATE '1950-01-01' AND CURRENT_DATE('Asia/Tokyo'), w.start_date, NULL) AS start_date,
+             IF(w.end_date BETWEEN DATE '1950-01-01' AND CURRENT_DATE('Asia/Tokyo') AND (w.start_date IS NULL OR w.end_date >= w.start_date), w.end_date, NULL) AS end_date,
+             TRIM(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(REPLACE(IFNULL(w.position_title, ''), '\r', ''),
+               r'(?i)(?:https?[:：][/∕／]{2}|www[.․])[ \t]?[^\s　<>"）)」』】]+', '[URL]'),
+               r'[A-Za-z0-9._%+\-]+[ \t]?[@＠][ \t]?[A-Za-z0-9\-]+(?:\.+[A-Za-z0-9\-]+)+', '[EMAIL]'),
+               r'(^|[^0-9.,/\-])(?:(?:\+\d{1,3}[-\s]?\(?\d{1,4}\)?|\(?0\d{1,4}\)?)[-\s‐－.]{1,2}\d{1,4}[-\s‐－.]{1,2}\d{3,4}|0\d{9,10})\b', r'\1[PHONE]'),
+               r'(?i)((?:tel|mob|mobile|phone|cell|whatsapp|電話|携帯|連絡先)[^0-9\n]{0,6})\+?\d{9,13}', r'\1[PHONE]')) AS title,
+             TRIM(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(REGEXP_REPLACE(REPLACE(IFNULL(w.notes, ''), '\r', ''),
+               r'(?i)(?:https?[:：][/∕／]{2}|www[.․])[ \t]?[^\s　<>"）)」』】]+', '[URL]'),
+               r'[A-Za-z0-9._%+\-]+[ \t]?[@＠][ \t]?[A-Za-z0-9\-]+(?:\.+[A-Za-z0-9\-]+)+', '[EMAIL]'),
+               r'(^|[^0-9.,/\-])(?:(?:\+\d{1,3}[-\s]?\(?\d{1,4}\)?|\(?0\d{1,4}\)?)[-\s‐－.]{1,2}\d{1,4}[-\s‐－.]{1,2}\d{3,4}|0\d{9,10})\b', r'\1[PHONE]'),
+               r'(?i)((?:tel|mob|mobile|phone|cell|whatsapp|電話|携帯|連絡先)[^0-9\n]{0,6})\+?\d{9,13}', r'\1[PHONE]')) AS notes
+      FROM `bq-hgt.dwh_restricted.member_work_histories` w
+      WHERE w.language_id IN (1, 2)
+    ),
+    wk AS (
+      SELECT * EXCEPT (rn)
+      FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY resume_id, IFNULL(CAST(start_date AS STRING), ''), title, notes ORDER BY is_complete DESC, id DESC) AS rn
+            FROM wk0 WHERE notes != '' OR title != '')
+      WHERE rn = 1
+    ),
+    wa AS (
+      SELECT resume_id, COUNT(*) AS work_count, SUM(CHAR_LENGTH(notes)) AS work_chars, MAX(updated_at) AS work_updated_at,
+             ARRAY_AGG(STRUCT(NULLIF(SUBSTR(title, 1, 80), '') AS title, FORMAT_DATE('%Y-%m', start_date) AS start_ym, FORMAT_DATE('%Y-%m', end_date) AS end_ym,
+                              SUBSTR(notes, 1, 1200) AS notes, CHAR_LENGTH(notes) AS notes_chars)
+                       ORDER BY IFNULL(start_date, DATE '0001-01-01') DESC, IFNULL(end_date, DATE '9999-12-31') DESC, position, id DESC LIMIT 4) AS work
+      FROM wk
+      GROUP BY resume_id
+    ),
+    pick AS (
+      SELECT rs.*, wa.work_count, wa.work_chars, wa.work_updated_at, wa.work,
+             ROW_NUMBER() OVER (PARTITION BY rs.member_id, rs.language_id
+                                ORDER BY rs.is_searchable DESC, rs.is_complete DESC, CHAR_LENGTH(rs.appeal) + IFNULL(wa.work_chars, 0) DESC, rs.updated_at DESC, rs.resume_id DESC) AS rn
+      FROM rs
+      LEFT JOIN wa USING (resume_id)
+      WHERE rs.appeal != '' OR IFNULL(wa.work_chars, 0) > 0
+    )
+    SELECT member_id, language_id,
+           IF(language_id = 2, 'ja', 'en') AS lang,
+           SUBSTR(appeal, 1, 1200) AS appeal,
+           CHAR_LENGTH(appeal) AS appeal_chars,
+           IFNULL(work, []) AS work,
+           IFNULL(work_count, 0) AS work_count,
+           IFNULL(work_chars, 0) AS work_chars,
+           management_experience, management_experience_years, job_change_times,
+           GREATEST(IFNULL(updated_at, work_updated_at), IFNULL(work_updated_at, updated_at)) AS updated_at,
+           CURRENT_TIMESTAMP() AS refreshed_at
+    FROM pick
+    WHERE rn = 1;
+
+    -- 13. 実行記録 ---------------------------------------------------------------------------------------------------------
     INSERT INTO `bq-hgt.dwh.cms_ai_refresh_log` (run_date, step, status, message, started_at, finished_at)
     SELECT run_date, 'scout_marts', 'ok',
            CONCAT('templates=', CAST((SELECT COUNT(*) FROM `bq-hgt.dwh.cms_ai_scout_templates`) AS STRING),
@@ -479,7 +558,8 @@ BEGIN
                   '; drafts=', CAST((SELECT COUNT(*) FROM `bq-hgt.dwh.cms_ai_scout_draft_outcomes`) AS STRING),
                   '; matched=', CAST((SELECT COUNTIF(matched) FROM `bq-hgt.dwh.cms_ai_scout_draft_outcomes`) AS STRING),
                   '; jobs=', CAST((SELECT COUNT(*) FROM `bq-hgt.dwh.cms_ai_jobs`) AS STRING),
-                  '; members=', CAST((SELECT COUNT(*) FROM `bq-hgt.dwh.cms_ai_member_profiles`) AS STRING)),
+                  '; members=', CAST((SELECT COUNT(*) FROM `bq-hgt.dwh.cms_ai_member_profiles`) AS STRING),
+                  '; resumes=', CAST((SELECT COUNT(*) FROM `bq-hgt.dwh_restricted.cms_ai_member_resumes`) AS STRING)),
            t0, CURRENT_TIMESTAMP();
   EXCEPTION WHEN ERROR THEN
     INSERT INTO `bq-hgt.dwh.cms_ai_refresh_log` (run_date, step, status, message, started_at, finished_at)

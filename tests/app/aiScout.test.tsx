@@ -2,11 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { clearResourceCache } from '../../src/app/lib/useResource';
 import ScoutPage from '../../src/app/features/ai/scout/ScoutPage';
-import { chosenDraft, CONDITIONS_SOURCE, emptyScoutForm, filterChips, parseScoutId, readScoutResult, scoutFormFromInput, scoutPii, scoutThresholdText, toggleFilter, toScoutInput, validateScout, withLocalChoice, withLocalUsage, withScoutDraft } from '../../src/app/features/ai/scout/scoutModel';
+import { chosenDraft, CONDITIONS_SOURCE, emptyScoutForm, filterChips, parseScoutId, readScoutResult, resumeLine, scoutFormFromInput, scoutPii, scoutThresholdText, toggleFilter, toScoutInput, validateScout, withLocalChoice, withLocalUsage, withScoutDraft } from '../../src/app/features/ai/scout/scoutModel';
 import { AI_KIND_LABEL, type AiJobDetail } from '../../src/shared/ai/common';
 import { AI_TEXT, SCOUT_TEXT } from '../../src/shared/ai/options';
 import { EMPTY_SCOUT_FILTERS, SCOUT_BASES, SCOUT_BASIS_DESCRIPTION, SCOUT_BASIS_LABEL, SCOUT_FILTER_MAX, ScoutChoiceInputSchema, ScoutInputSchema, ScoutJobSummarySchema, ScoutMemberSummarySchema, ScoutModelsResponseSchema, ScoutOptionsResponseSchema, ScoutResultSchema, ScoutTuneResponseSchema, ScoutUsageInputSchema, type ScoutBasisKind, type ScoutResult } from '../../src/shared/ai/scout';
 import { makeJob, mockAiApi, SCOUT_INPUT, SCOUT_JOB_ENDED, SCOUT_JOB_INPUT, SCOUT_JOB_MEMBER_INPUT, SCOUT_JOB_MEMBER_RESULT, SCOUT_JOB_RESULT, SCOUT_JOB_SUMMARY, SCOUT_MEMBER_SUMMARY, SCOUT_MODELS, SCOUT_MODELS_VIEWER, SCOUT_OPTIONS, SCOUT_RESULT, SCOUT_REVIEW_RESULT, SCOUT_TUNE, type AiMock } from './aiFixtures';
+import { SCOUT_MEMBER_NO_RESUME } from './aiScoutFixtures';
 
 const ID1 = 'scout00000000001';
 const ID2 = 'scout00000000002';
@@ -501,9 +502,47 @@ describe('② スカウト文面の AI 作成: 求人 ID・会員 ID から作�
     expect(ScoutInputSchema.safeParse(input).success).toBe(true);
     const target = await screen.findByRole('group', { name: SCOUT_TEXT.targetLabel });
     expect(target.textContent).toContain(SCOUT_BASIS_LABEL.member);
-    expect(target.textContent).toContain('候補者: 会員 ID 70001・営業・日本語 ビジネス会話・英語 ネイティヴ');
+    expect(target.textContent).toContain('候補者: 会員 ID 70001・営業・日本語 ビジネス会話・英語 ネイティヴ・職務経歴・自己PR あり');
+    // 結果の「何をもとに作ったか」の候補者のカードにも、職務経歴・自己PR の要約（件数・文字数・直近の役職名）と注意が出る
+    const targetResume = within(target).getByRole('group', { name: SCOUT_TEXT.resumeLabel });
+    for (const t of ['職務経歴 3 社（計 1,240 字）・自己PR 380 字（日本語）。直近の役職: 営業マネージャー', SCOUT_TEXT.resumeUse, SCOUT_TEXT.resumeCaution]) expect(targetResume.textContent).toContain(t);
     // 候補者の要約は畳んである
     expect((target.querySelector('details') as HTMLDetailsElement).open).toBe(false);
+  });
+
+  it('候補者のカード: 職務経歴・自己PR の登録あり = 件数・文字数・直近の役職名と「具体的に触れた文面を作ります」。登録なし = 属性だけで作る旨。本文は出ない', async () => {
+    expect(ScoutMemberSummarySchema.safeParse(SCOUT_MEMBER_NO_RESUME).success).toBe(true);
+    expect(resumeLine(SCOUT_MEMBER_SUMMARY.resume!)).toBe('職務経歴 3 社（計 1,240 字）・自己PR 380 字（日本語）。直近の役職: 営業マネージャー。マネジメント経験 3 年');
+    expect(resumeLine({ lang: 'en', workCount: 0, workChars: 0, appealChars: 95, latestTitle: null, managementYears: null })).toBe('職務経歴 なし・自己PR 95 字（英語）');
+    const m = mockAiApi({ create: create({ ...SCOUT_RESULT, target: { basis: 'member', job: null, member: SCOUT_MEMBER_NO_RESUME } }, '作成: 法人営業（会員 70002）') });
+    m.scoutMembers['70002'] = SCOUT_MEMBER_NO_RESUME;
+    open('?company=101&basis=member');
+    await ready();
+    // 登録あり
+    type(field('会員 ID'), '70001');
+    fireEvent.click(screen.getByRole('button', { name: SCOUT_TEXT.checkMember }));
+    let cardEl = await screen.findByRole('region', { name: '候補者の情報' });
+    let resume = within(cardEl).getByRole('group', { name: SCOUT_TEXT.resumeLabel });
+    expect(resume.getAttribute('data-resume')).toBe('yes');
+    for (const t of ['職務経歴 3 社（計 1,240 字）・自己PR 380 字（日本語）', '直近の役職: 営業マネージャー', SCOUT_TEXT.resumeUse, SCOUT_TEXT.resumeCaution]) expect(resume.textContent).toContain(t);
+    expect(resume.textContent).not.toContain(SCOUT_TEXT.resumeNone);
+    expect(cardEl.textContent).toContain(SCOUT_TEXT.memberPrivacy);
+    // 登録なし
+    type(field('会員 ID'), '70002');
+    fireEvent.click(screen.getByRole('button', { name: SCOUT_TEXT.checkMember }));
+    await waitFor(() => expect(memberCard()?.getAttribute('data-member')).toBe('70002'));
+    cardEl = memberCard()!;
+    resume = within(cardEl).getByRole('group', { name: SCOUT_TEXT.resumeLabel });
+    expect(resume.getAttribute('data-resume')).toBe('no');
+    expect(resume.textContent).toBe(`${SCOUT_TEXT.resumeLabel}${SCOUT_TEXT.resumeNone}`);
+    expect(SCOUT_TEXT.resumeNone).toBe('職務経歴・自己PR の登録がありません（ターゲット人材でない、または未入力）。経験職種・語学力などの属性だけで作ります');
+    // 結果の「何をもとに作ったか」にも、同じ要約が出る（登録なし）
+    type(field('ポジション名'), '法人営業');
+    fireEvent.click(runButton());
+    await waitFor(() => expect(posts(m)).toHaveLength(1));
+    const target = await screen.findByRole('group', { name: SCOUT_TEXT.targetLabel });
+    expect(target.textContent).toContain('候補者: 会員 ID 70002・営業・日本語 ビジネス会話・英語 ネイティヴ・職務経歴・自己PR なし（属性だけで作成）');
+    expect(within(target).getByRole('group', { name: SCOUT_TEXT.resumeLabel }).textContent).toContain(SCOUT_TEXT.resumeNone);
   });
 
   it('求人 ID + 会員 ID から作る: 両方を確かめるまで実行できない。ポジション名の欄も、送る相手の条件の欄も出さない。添削とも組み合わせられる', async () => {

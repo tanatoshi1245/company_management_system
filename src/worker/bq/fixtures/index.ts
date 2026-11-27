@@ -2,7 +2,7 @@ import type { BuiltQuery } from '../params';
 import type { Row } from '../parseRows';
 import { todayJst } from '../../../shared/calendar/periods';
 import { mockCompanyLogin, mockCompanyMaster, mockCompanyMonthly, mockIndustryBenchmark } from './board';
-import { mockAiScoutBenchmark, mockAiScoutJob, mockAiScoutMember, mockAiScoutOptions, mockAiScoutOutcomes } from './aiScout';
+import { mockAiScoutBenchmark, mockAiScoutJob, mockAiScoutMember, mockAiScoutMemberResume, mockAiScoutOptions, mockAiScoutOutcomes } from './aiScout';
 import { JOB_OCCUPATIONS, mockApplicationCohort, mockBenchSeries, mockCompanyAccountMonthlyOne, mockCompanyJobMonthlyOne, mockCompanyJobs, mockCompanyLoginOne, mockCompanyMasterOne, mockCompanyMonthlyOne, mockDailyUsage, mockMemberAttributes, mockScoutCohort } from './company';
 
 export function paramValue(q: BuiltQuery, name: string): string | null {
@@ -66,6 +66,8 @@ export function mockRows(q: BuiltQuery): Row[] {
       return mockAiScoutJob(q);
     case 'ai_scout_member':
       return mockAiScoutMember(q);
+    case 'ai_scout_member_resume':
+      return mockAiScoutMemberResume(q);
     default:
       return [];
   }

@@ -1,4 +1,4 @@
-import type { ScoutBenchmark, ScoutDataSource, ScoutDraftExport, ScoutDraftOutcome, ScoutJobInfo, ScoutMemberInfo } from '../../src/worker/ai/scout/dataSource';
+import type { ScoutBenchmark, ScoutDataSource, ScoutDraftExport, ScoutDraftOutcome, ScoutJobInfo, ScoutMemberInfo, ScoutMemberResume } from '../../src/worker/ai/scout/dataSource';
 import type { ScoutOptionsResponse } from '../../src/shared/ai/scout';
 
 /** ② スカウトのテスト用: BigQuery のマートの代わり（bqDataSource.ts を vi.mock で差し替えて、これを返す） */
@@ -39,6 +39,22 @@ export const sampleJob = (over: Partial<ScoutJobInfo> = {}): ScoutJobInfo => ({
   ...over,
 });
 
+/** 作り物の職務経歴・自己PR（実在しない内容。社名・人名なし）。sampleMember({ resume: null }) で外せる */
+export const sampleResume = (over: Partial<ScoutMemberResume> = {}): ScoutMemberResume => ({
+  lang: 'ja',
+  appeal: 'Web アプリケーションの開発に 8 年ほど携わり、直近の 3 年はプロジェクトマネージャーとして、日本と海外拠点の開発チームの橋渡しを担当してきました。英語と日本語の両方で会議の進行と資料の作成ができます。',
+  appealChars: 104,
+  work: [
+    { title: 'プロジェクトマネージャー', from: '2022-04', to: null, notes: '受託開発のプロジェクトで、進行管理と顧客との調整を担当。\n・メンバー 8 名（うち海外拠点 4 名）のチームの進行管理\n・要件の整理と、見積りの作成' },
+    { title: 'Web エンジニア', from: '2017-04', to: '2022-03', notes: '業務システムと EC サイトの開発を担当。\n・サーバーサイドの設計と実装\n・コードレビューと、新しいメンバーの育成' },
+  ],
+  workCount: 2,
+  workChars: 131,
+  managementYears: null,
+  jobChanges: 1,
+  ...over,
+});
+
 export const sampleMember = (over: Partial<ScoutMemberInfo> = {}): ScoutMemberInfo => ({
   memberId: '20001',
   ageGroup: '25-34歳',
@@ -53,6 +69,7 @@ export const sampleMember = (over: Partial<ScoutMemberInfo> = {}): ScoutMemberIn
   desiredOccupations: ['IT関連（オープン・WEB系）'],
   incomeRange: '501万円〜800万円',
   desiredIncomeRange: '801万円以上',
+  resume: sampleResume(),
   ...over,
 });
 

@@ -17,6 +17,7 @@ import {
   type ScoutDraftFeedback,
   type ScoutInput,
   type ScoutJobSummary,
+  type ScoutLang,
   type ScoutMemberSummary,
   type ScoutModel,
   type ScoutModelId,
@@ -93,9 +94,10 @@ async function loadJob(ds: ScoutDataSource, companyId: string, jobId: string, na
   return job ? maskJob(job, names) : null;
 }
 
-async function loadMember(ds: ScoutDataSource, memberId: string): Promise<ScoutMemberInfo | null> {
+/** 候補者の属性と、職務経歴・自己PR（lang = 文面の言語に合う本文を優先）。本文は、ログに出さない */
+async function loadMember(ds: ScoutDataSource, memberId: string, lang?: ScoutLang): Promise<ScoutMemberInfo | null> {
   try {
-    return await ds.member(memberId);
+    return await ds.member(memberId, lang);
   } catch (e) {
     console.error(`[ai/scout] member: ${e instanceof Error ? e.message.slice(0, 300) : ''}`);
     throw new AppError('bq', 502, DATA_ERROR_MESSAGE);
@@ -121,10 +123,13 @@ export async function scoutJobSummary(d: ScoutLookupDeps, companyId: string, job
   return jobSummaryOf(job);
 }
 
-/** GET /api/ai/scout/members/:memberId … 候補者の属性を確かめる（誰が・どの会員 ID を引いたかを、ログに残す） */
+/**
+ * GET /api/ai/scout/members/:memberId … 候補者の属性を確かめる（誰が・どの会員 ID を引いたかを、ログに残す）。
+ * 職務経歴・自己PR は、登録の有無（件数・文字数・直近の役職名）だけを返す。本文は返さない（文面の言語は未定なので、既定の日本語を優先して引く）
+ */
 export async function scoutMemberSummary(d: Omit<ScoutLookupDeps, 'client' | 'ctx'>, memberId: string): Promise<ScoutMemberSummary> {
   const member = await loadMember(d.ds, memberId);
-  logEvent('ai.scout.lookup', { reqId: d.requestId, actor: d.actor, target: 'member', memberId, found: Boolean(member) });
+  logEvent('ai.scout.lookup', { reqId: d.requestId, actor: d.actor, target: 'member', memberId, found: Boolean(member), resume: Boolean(member?.resume) });
   if (!member) throw new AppError('notFound', 404, MEMBER_NOT_FOUND_MESSAGE);
   return memberSummaryOf(member);
 }
@@ -148,9 +153,9 @@ export async function createScoutJob(d: ScoutDeps, companyId: string, rawInput: 
   const names = [brief.name, brief.internalName];
   const [job, member] = await Promise.all([
     scoutBasisUsesJob(asked.basis) && asked.jobId ? loadJob(d.ds, companyId, asked.jobId, names) : null,
-    scoutBasisUsesMember(asked.basis) && asked.memberId ? loadMember(d.ds, asked.memberId) : null,
+    scoutBasisUsesMember(asked.basis) && asked.memberId ? loadMember(d.ds, asked.memberId, asked.lang) : null,
   ]);
-  if (asked.memberId) logEvent('ai.scout.lookup', { reqId: d.requestId, actor, target: 'member', memberId: asked.memberId, found: Boolean(member), via: 'create' });
+  if (asked.memberId) logEvent('ai.scout.lookup', { reqId: d.requestId, actor, target: 'member', memberId: asked.memberId, found: Boolean(member), resume: Boolean(member?.resume), via: 'create' });
   const missing = [
     ...(scoutBasisUsesJob(asked.basis) && !job ? [{ path: 'input.jobId', message: 'この企業の求人ではありません' }] : []),
     ...(scoutBasisUsesMember(asked.basis) && !member ? [{ path: 'input.memberId', message: MEMBER_NOT_FOUND_MESSAGE }] : []),

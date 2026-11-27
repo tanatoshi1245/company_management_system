@@ -165,9 +165,15 @@ export class ScoutRepo {
     return (await this.db.prepare(`SELECT ${DRAFT_COLS} FROM ai_scout_drafts WHERE job_id = ?1 ORDER BY model_id`).bind(jobId).all<ScoutDraftRow>()).results;
   }
 
-  /** その企業で、前に選ばれた案（直近 1 件） */
+  /**
+   * その企業で、前に選ばれた案（直近 1 件）。**会員 ID をもとに作った案は除く**
+   * （候補者 1 人の経歴に合わせた文面を、別の候補者・別の依頼の参考として渡さないため）
+   */
   async lastChosen(companyId: string): Promise<Pick<ScoutDraftRow, 'subject' | 'body'> | null> {
-    return this.db.prepare('SELECT subject, body FROM ai_scout_drafts WHERE company_id = ?1 AND chosen = 1 ORDER BY chosen_at DESC LIMIT 1').bind(Number(companyId)).first<Pick<ScoutDraftRow, 'subject' | 'body'>>();
+    return this.db
+      .prepare(`SELECT d.subject AS subject, d.body AS body FROM ai_scout_drafts d LEFT JOIN ai_jobs j ON j.id = d.job_id WHERE d.company_id = ?1 AND d.chosen = 1 AND IFNULL(json_extract(j.input_json, '$.basis'), 'conditions') NOT IN ('member', 'jobMember') ORDER BY d.chosen_at DESC LIMIT 1`)
+      .bind(Number(companyId))
+      .first<Pick<ScoutDraftRow, 'subject' | 'body'>>();
   }
 
   /**
@@ -200,11 +206,15 @@ export class ScoutRepo {
     return this.db.prepare('UPDATE ai_scout_drafts SET bq_synced_at = NULL WHERE job_id = ?1 AND chosen = 1').bind(jobId);
   }
 
-  /** 選ばれた案で、BigQuery にまだ写していないもの（直した版 = ai_jobs.edited_json も一緒に読む） */
+  /**
+   * 選ばれた案で、BigQuery にまだ写していないもの（直した版 = ai_jobs.edited_json も一緒に読む）。
+   * **会員 ID をもとに作った案は写さない**（候補者 1 人の経歴に合わせた文面を、閲覧制限の無い dwh の表へ出さないため。
+   * その分は送信実績との自動照合の対象外で、「企業が使ったか」は CS が画面で付ける）
+   */
   async pendingExport(limit: number): Promise<(ScoutDraftRow & { edited_json: string | null })[]> {
     return (
       await this.db
-        .prepare(`SELECT ${DRAFT_COLS.split(', ').map((c) => `d.${c} AS ${c}`).join(', ')}, j.edited_json AS edited_json FROM ai_scout_drafts d LEFT JOIN ai_jobs j ON j.id = d.job_id WHERE d.chosen = 1 AND d.bq_synced_at IS NULL ORDER BY d.chosen_at LIMIT ?1`)
+        .prepare(`SELECT ${DRAFT_COLS.split(', ').map((c) => `d.${c} AS ${c}`).join(', ')}, j.edited_json AS edited_json FROM ai_scout_drafts d LEFT JOIN ai_jobs j ON j.id = d.job_id WHERE d.chosen = 1 AND d.bq_synced_at IS NULL AND IFNULL(json_extract(j.input_json, '$.basis'), 'conditions') NOT IN ('member', 'jobMember') ORDER BY d.chosen_at LIMIT ?1`)
         .bind(limit)
         .all<ScoutDraftRow & { edited_json: string | null }>()
     ).results;

@@ -5,9 +5,9 @@ import { baseEnv } from '../helpers/env';
 import { EMPTY_SCOUT_FILTERS, SCOUT_FILTER_KEYS, SCOUT_MIN_SENDS, SCOUT_MIN_TEMPLATES, SCOUT_RATE_THRESHOLD, SCOUT_TOP_TEMPLATES, SCOUT_WINDOW_MONTHS, ScoutBasisSchema, ScoutOptionsResponseSchema, ScoutStatsSchema, type ScoutFilters } from '../../src/shared/ai/scout';
 import { INDUSTRY_GROUPS, industryGroupOf } from '../../src/shared/ai/industryGroups';
 import { DIGEST_BODY_CHARS, DIGEST_MAX, JOB_TEXT_CHARS } from '../../src/worker/ai/scout/dataSource';
-import { makeScoutDataSource, normalizeFilters, scopeLabelOf, scoutCacheKey, scoutDataSourceOf, toBenchmark, toJobInfo, toMemberInfo } from '../../src/worker/ai/scout/bqDataSource';
-import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutJobQuery, aiScoutMemberQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery, EXPORT_MAX_ROWS, OPTION_EXCLUDED, SCOUT_FEATURES } from '../../src/worker/sql/aiScout';
-import { fakeScoutDs, sampleJob, sampleMember } from '../helpers/scoutFake';
+import { makeScoutDataSource, normalizeFilters, scopeLabelOf, scoutCacheKey, scoutDataSourceOf, toBenchmark, toJobInfo, toMemberInfo, toMemberResume } from '../../src/worker/ai/scout/bqDataSource';
+import { aiScoutBenchmarkQuery, aiScoutDraftsMergeQuery, aiScoutJobQuery, aiScoutMemberQuery, aiScoutMemberResumeQuery, aiScoutOptionsQuery, aiScoutOutcomesQuery, EXPORT_MAX_ROWS, OPTION_EXCLUDED, SCOUT_FEATURES } from '../../src/worker/sql/aiScout';
+import { fakeScoutDs, sampleJob, sampleMember, sampleResume } from '../helpers/scoutFake';
 import type { BqClient } from '../../src/worker/bq/client';
 import type { BuiltQuery } from '../../src/worker/bq/params';
 import { BqError } from '../../src/worker/bq/client';
@@ -47,7 +47,7 @@ describe('AI スカウトのマートの SQL（src/worker/sql/aiScout.ts）', ()
   it('SQL の本文を文字列連結・差し込みで組み立てていない（入力が違っても本文は同じ）', () => {
     const src = readFileSync(join(process.cwd(), 'src/worker/sql/aiScout.ts'), 'utf8');
     const sqlBlocks = Array.from(src.matchAll(/sql: `([\s\S]*?)`,\n/g)).map((m) => m[1]);
-    expect(sqlBlocks.length).toBe(6);
+    expect(sqlBlocks.length).toBe(7);
     for (const b of sqlBlocks) expect(b).not.toContain('${');
     expect(src).not.toMatch(/sql:\s*[^`\s]/);
     expect(src).not.toMatch(/\.sql\s*\+=|sql\s*\+\s*/);
@@ -335,7 +335,7 @@ describe('求人 ID・会員 ID からの作成（cms_ai_jobs / cms_ai_member_pr
     expect(m!.experiencedOccupations).toEqual(['IT関連（オープン・WEB系）', 'IT関連（その他）', 'コンサルティング']);
     const m2 = await ds.member('20002');
     expect(m2).toMatchObject({ careerLevel: null, incomeRange: null, desiredOccupations: [] });
-    expect(Object.keys(m!).sort()).toEqual(['ageGroup', 'careerLevel', 'desiredIncomeRange', 'desiredOccupations', 'englishLevel', 'experiencedOccupations', 'incomeRange', 'japaneseLevel', 'lastIndustry', 'memberId', 'nationality', 'occupation', 'residence'].sort());
+    expect(Object.keys(m!).sort()).toEqual(['ageGroup', 'careerLevel', 'desiredIncomeRange', 'desiredOccupations', 'englishLevel', 'experiencedOccupations', 'incomeRange', 'japaneseLevel', 'lastIndustry', 'memberId', 'nationality', 'occupation', 'residence', 'resume'].sort());
     expect(await ds.member('99999')).toBeNull();
     expect(await ds.member('')).toBeNull();
     expect(await ds.member('20001; --')).toBeNull();
@@ -367,10 +367,11 @@ describe('求人 ID・会員 ID からの作成（cms_ai_jobs / cms_ai_member_pr
     const d = scoutDataSourceOf(failing);
     expect(await d.job('1001', '1001')).toBeNull();
     expect(await d.member('20001')).toBeNull();
-    expect(calls).toBe(2);
+    // member は、属性とレジュメの 2 つを照会する
+    expect(calls).toBe(3);
     expect(await d.job('1001', 'x')).toBeNull();
     expect(await d.member('x')).toBeNull();
-    expect(calls).toBe(2);
+    expect(calls).toBe(3);
     const noKey = makeScoutDataSource({ ...baseEnv, BQ_MOCK: undefined });
     expect(await noKey.job('1001', '1001')).toBeNull();
     expect(await noKey.member('20001')).toBeNull();
