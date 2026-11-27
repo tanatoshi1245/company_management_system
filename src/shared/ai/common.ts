@@ -90,8 +90,11 @@ export type AiJobListResponse = z.infer<typeof AiJobListResponseSchema>;
 /** POST /api/companies/:id/ai/jobs の応答 */
 export const AiCreateResponseSchema = z.object({
   job: AiJobDetailSchema,
-  /** sent = セッションを立ち上げた / sample = 見本を返した（サンプルデータのとき） / failed = 発火に失敗・発火の設定なし（ジョブは queued で残る） */
-  fire: z.enum(['sent', 'sample', 'failed']),
+  /**
+   * done = 作成できた（② スカウト。Vertex AI でその場で作る）/ sample = 見本を返した（サンプルデータのとき）/ failed = 作れなかった（理由は fireMessage。ジョブは failed で残る）。
+   * sent は、以前のセッション方式の名残（いまは返さない）
+   */
+  fire: z.enum(['done', 'sent', 'sample', 'failed']),
   fireMessage: z.string().nullable(),
 });
 export type AiCreateResponse = z.infer<typeof AiCreateResponseSchema>;
